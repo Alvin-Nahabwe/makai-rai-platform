@@ -6,10 +6,10 @@ import { loadResources } from '@/lib/content/resources';
 import {
   controlSuggestionsOn, controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup,
 } from '@/lib/content/suggestions';
+import { GATE_DERIVED_NA, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, wordsThenCode } from '@/lib/documents/copy';
 import {
-  GATE_DERIVED_NA, NOT_RECORDED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, docTextErasedLine, findingOnQuestion, findingOnRemovedQuestion, wordsThenCode,
-} from '@/lib/documents/copy';
-import { STATUS_WORD, notApplicableLine, type SealedDecision, type SealedFinding } from '@/lib/documents/resolve';
+  STATUS_WORD, findingTitle, notApplicableLine, textOf, type DocumentSnapshot, type SealedDecision, type SealedFinding,
+} from '@/lib/documents/resolve';
 
 /**
  * Page 1 of the working report, "Where this project stands" (path to outputs, Task 7; design G1 and §7). A pure function of a draft
@@ -37,8 +37,6 @@ export type WorkingReportSummary = {
   inPlace: Array<{ stage: Stage; questionId: string; questionText: string }>;
   doesNotApply: Array<{ stage: Stage; questionId: string; questionText: string; why: string }>;
 };
-
-type Where = { areaId: string | null; alsoAreaIds: string[]; question: LoadedQuestion | null };
 
 const unique = (xs: readonly string[]): string[] => [...new Set(xs)];
 
@@ -70,20 +68,16 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
       notebookHref: resources.notebooks.find((n) => n.controlId === control.id && n.released && n.review.outcome === 'passed')?.file ?? null,
     }));
 
-  const questionTextOf = (f: SealedFinding['finding'], decision: SealedDecision | undefined): string | null => {
-    if (f.questionId === null) return null;
-    const own = decision === undefined ? undefined : r.contents.get(decision.row.contentVersionId)?.questions.get(f.questionId)?.text;
-    return content.questions.get(f.questionId)?.text ?? own ?? r.recordedQuestionWords.get(f.id) ?? null;
-  };
-  const titleOf = (f: SealedFinding['finding'], words: string | null): string => {
-    if (f.title !== null) return f.title;
-    if (f.source === 'shortfall' && f.questionId !== null) return words === null ? findingOnRemovedQuestion(f.questionId) : findingOnQuestion(words, f.questionId);
-    const erased = r.erasures.findings.get(f.id)?.get('title');
-    if (erased === undefined) throw new Error(`workingReport: finding ${f.id} has no title and no erasure`);
-    return docTextErasedLine(erased);
-  };
+  /** The snapshot the draft mitigation plan of a stage reads, so a title and a reason come from the very functions MP-03 and MP-0x use. */
+  const snapOf = (st: Stage): DocumentSnapshot => ({
+    provenance: { kind: 'draft', takenAt: r.takenAt, omittedAnswers: r.omittedAnswers, recordedQuestionWords: r.recordedQuestionWords },
+    documentType: 'mitigation_plan', reviewStage: st, chosen: r.stages[st], stages: r.stages, contents: r.contents, project: r.project,
+    organisationName: r.organisationName, today: r.today, erasures: r.erasures,
+  });
+  const questionTextOf = (f: SealedFinding['finding']): string | null =>
+    f.questionId === null ? null : content.questions.get(f.questionId)?.text ?? r.recordedQuestionWords.get(f.id) ?? null;
 
-  type Placed = { item: OpenItem; where: Where; order: [number, number, string, string] };
+  type Placed = { item: OpenItem; areaId: string | null; order: [number, number, string, string] };
   const open: Placed[] = [];
   const accepted: Array<{ order: [number, number, string, string]; row: WorkingReportSummary['riskAccepted'][number] }> = [];
 
@@ -98,14 +92,14 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
       const q = known ? whereOfQuestion(content, f.questionId as string, ticked) : { heading: null, others: [] };
       const areaId = f.riskArea ?? q.heading;
       const alsoAreaIds = f.riskArea !== null ? [] : q.others;
-      const words = questionTextOf(f, decision);
-      const title = titleOf(f, words);
+      const words = questionTextOf(f);
+      const title = findingTitle(f, stage, snapOf(st));
       const questionOrder = known ? (content.questions.get(f.questionId as string) as LoadedQuestion).order : Number.MAX_SAFE_INTEGER;
       const order: [number, number, string, string] = [si, questionOrder, f.raisedAt, f.id];
       if (f.state === 'closed_accepted_risk') {
         const risk = sf.acceptedRisk;
-        const erased = r.erasures.accepted_risks.get(risk?.id ?? '')?.get('reason');
-        const reason = risk?.reason ?? (erased === undefined ? NOT_RECORDED : docTextErasedLine(erased));
+        if (risk === null) throw new Error(`workingReport: finding ${f.id} is closed by an accepted risk but has no accepted risk row`);
+        const reason = textOf(snapOf(st), 'accepted_risks', risk.id, 'reason', risk.reason);
         accepted.push({ order, row: { findingId: f.id, title, reason, areaName: areaId === null ? null : areaWords(areaId) } });
         continue;
       }
@@ -122,7 +116,7 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
         findingId: f.id, stage: st, questionId: f.questionId, questionText: words,
         answer: answerStatus === null ? null : STATUS_WORD[answerStatus] ?? null, title, alsoAreas: alsoAreaIds.map(areaWords), controls,
       };
-      open.push({ item, where: { areaId, alsoAreaIds, question: null }, order });
+      open.push({ item, areaId, order });
     }
   }
   const byOrder = (a: { order: [number, number, string, string] }, b: { order: [number, number, string, string] }): number =>
@@ -132,12 +126,12 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
 
   // Groups: one per heading area, plus two with no area (a team finding with none; a finding on a question the framework no longer has).
   const groups = new Map<string, AreaGroup>();
-  for (const { item, where } of open) {
-    const removed = where.areaId === null && item.questionId !== null;
-    const key = where.areaId ?? (removed ? '\0removed' : '\0none');
+  for (const { item, areaId } of open) {
+    const removed = areaId === null && item.questionId !== null;
+    const key = areaId ?? (removed ? '\0removed' : '\0none');
     let g = groups.get(key);
     if (g === undefined) {
-      g = { areaId: where.areaId, areaName: where.areaId !== null ? areaWords(where.areaId) : removed ? REMOVED_QUESTION_GROUP : NO_RISK_AREA_GROUP, items: [] };
+      g = { areaId, areaName: areaId !== null ? areaWords(areaId) : removed ? REMOVED_QUESTION_GROUP : NO_RISK_AREA_GROUP, items: [] };
       groups.set(key, g);
     }
     g.items.push(item);

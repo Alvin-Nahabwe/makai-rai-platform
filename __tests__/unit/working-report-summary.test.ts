@@ -8,7 +8,7 @@ import type { DraftRecord } from '@/lib/data/documents';
 import { loadContent } from '@/lib/content/loader';
 import { controlsForArea, questionAreaIds } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { GATE_DERIVED_NA, NO_RISK_AREA_GROUP, findingOnQuestion, findingOnRemovedQuestion, wordsThenCode } from '@/lib/documents/copy';
+import { GATE_DERIVED_NA, NO_RISK_AREA_GROUP, findingOnQuestion, docTextErasedLine, findingOnRemovedQuestion, wordsThenCode } from '@/lib/documents/copy';
 import { resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SnapshotStage } from '@/lib/documents/resolve';
 import { buildWorkingReportSummary, type AreaGroup, type OpenItem } from '@/lib/documents/workingReport';
 import { contentWith } from '../helpers/contentWith';
@@ -81,6 +81,12 @@ function record(specs: Partial<Record<Stage, StageSpec>>, over: Partial<DraftRec
   };
 }
 
+/** The snapshot a stage's draft mitigation plan reads. */
+const planSnap = (r: DraftRecord, st: Stage): DocumentSnapshot => ({
+  provenance: { kind: 'draft', takenAt: TAKEN, omittedAnswers: 0, recordedQuestionWords: r.recordedQuestionWords }, documentType: 'mitigation_plan', reviewStage: st,
+  chosen: r.stages[st], stages: r.stages, contents: r.contents, project: r.project, organisationName: r.organisationName, today: r.today, erasures: r.erasures,
+});
+
 const CHECKLIST = 'Q-PP-16';
 const optionsOf = (qid: string): string[] => [...(plain.questions.get(qid)?.options ?? [])];
 const allBut = (qid: string, ...unticked: string[]): string[] => optionsOf(qid).filter((o) => !unticked.includes(o));
@@ -113,21 +119,19 @@ describe('buildWorkingReportSummary (Task 7)', () => {
   it('page 1 lists the same open items as the draft mitigation plans of the stages with answers', () => {
     const r = typical();
     const s = buildWorkingReportSummary(r, plain);
-    const fromPlans = r.stagesWithAnswers.flatMap((st) => {
-      const snap: DocumentSnapshot = {
-        provenance: { kind: 'draft', takenAt: TAKEN, omittedAnswers: 0, recordedQuestionWords: new Map() }, documentType: 'mitigation_plan', reviewStage: st,
-        chosen: r.stages[st], stages: r.stages, contents: r.contents, project: r.project, organisationName: r.organisationName, today: r.today, erasures: r.erasures,
-      };
-      const mp3 = resolveFields(loadFieldMap('mitigation_plan'), snap, {}).fields.find((f) => f.fieldId === 'MP-03')?.text ?? '';
-      // The field lists each open finding twice (as a finding, then with its mitigations); the second block of each is the plan's open item.
-      const lines = mp3.split('\n');
+    const mp3Only = { ...loadFieldMap('mitigation_plan'), fields: loadFieldMap('mitigation_plan').fields.filter((f) => f.fieldId === 'MP-03') };
+    const fromPlans = r.stagesWithAnswers.map((st) => resolveFields(mp3Only, planSnap(r, st), {}));
+    // Both halves come from the resolver: the titles from MP-03's text, the ids from the finding rows MP-03 names as its sources.
+    const titles = fromPlans.flatMap((res) => {
+      const lines = (res.fields[0].text ?? '').split('\n');
       return lines.flatMap((l, k) => (/^\d+\. /.test(l) && /^Mitigation/.test(lines[k + 1] ?? '') ? [l.replace(/^\d+\. /, '')] : []));
     });
+    const planIds = fromPlans.flatMap((res) => res.sources.filter((x) => x.sourceTable === 'findings').map((x) => x.sourceId));
     const onPage = items(s.nextSteps).filter((i) => r.stagesWithAnswers.includes(i.stage));
-    expect(fromPlans.length).toBeGreaterThan(0);
-    expect(onPage.map((i) => i.title).sort()).toEqual([...fromPlans].sort());
-    const openIds = r.stagesWithAnswers.flatMap((st) => r.stages[st].findings.filter((f) => f.finding.state === 'open').map((f) => f.finding.id));
-    expect(onPage.map((i) => i.findingId).sort()).toEqual(openIds.sort());
+    expect(titles.length).toBeGreaterThan(0);
+    expect(onPage.map((i) => i.title).sort()).toEqual([...titles].sort());
+    expect(planIds.length).toBeGreaterThan(0);
+    expect(onPage.map((i) => i.findingId).sort()).toEqual([...new Set(planIds)].sort());
   });
 
   it('a team finding open in a stage with no answers is on page 1 and in no draft plan', () => {
@@ -274,5 +278,29 @@ describe('buildWorkingReportSummary (Task 7)', () => {
     const c03 = controls.find((c) => c.id === 'C-03');
     expect(c03?.notebookHref).toMatch(/^\/notebooks\/C-03_.*\.ipynb$/);
     expect(controls.some((c) => c.notebookHref === null)).toBe(true);
+  });
+
+  it('an accepted risk with no reason and no tombstone fails page 1 exactly as the draft plan does (parity, not a chosen behaviour)', () => {
+    const r = record({ 'pre-processing': { decisions: [decision('Q-PP-10', 'partly')], findings: [
+      finding({ id: 'f-bad', stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-10', state: 'closed_accepted_risk' }),
+    ] } });
+    const plan = (): unknown => resolveFields(loadFieldMap('mitigation_plan'), planSnap(r, 'pre-processing'), {});
+    expect(plan).toThrow(/accepted_risks ar-f-bad has no reason and no tombstone/);
+    expect(() => buildWorkingReportSummary(r, plain)).toThrow(/accepted_risks ar-f-bad has no reason and no tombstone/);
+  });
+
+  it('an erased reason and an erased title print on page 1 as the draft plan prints them', () => {
+    const r = record({ 'pre-processing': { decisions: [decision('Q-PP-10', 'partly')], findings: [
+      finding({ id: 'f-er', stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-10', state: 'closed_accepted_risk' }),
+      finding({ id: 'f-t', stage: 'pre-processing', title: null }),
+    ] } }, { erasures: {
+      evidence: new Map(), findings: new Map([['f-t', new Map([['title', '2026-11-01']])]]), mitigation_versions: new Map(),
+      accepted_risks: new Map([['ar-f-er', new Map([['reason', '2026-11-02']])]]), stage_reviews: new Map(),
+    } });
+    const s = buildWorkingReportSummary(r, plain);
+    const text = (resolveFields(loadFieldMap('mitigation_plan'), planSnap(r, 'pre-processing'), {}).fields.find((f) => f.fieldId === 'MP-06')?.text) ?? '';
+    expect(s.riskAccepted[0].reason).toBe(docTextErasedLine('2026-11-02'));
+    expect(text).toContain(`Reason: ${s.riskAccepted[0].reason}`);
+    expect(items(s.nextSteps).find((i) => i.findingId === 'f-t')?.title).toBe(docTextErasedLine('2026-11-01'));
   });
 });

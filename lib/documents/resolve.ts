@@ -142,7 +142,7 @@ function erasedAt(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasure
  * A text the row holds, else the SRS 7.5.6 line for erased text, else a thrown error: a null with no tombstone is a broken row, and
  * "erased" is never printed for a text that was not (silent-failure review H1, M8).
  */
-function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'], id: string, field: string, value: string | null): string {
+export function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'], id: string, field: string, value: string | null): string {
   if (value !== null) return value;
   const on = erasedAt(snap, table, id, field);
   if (on === null) throw new Error(`documents: ${table} ${id} has no ${field} and no tombstone for it`);
@@ -443,7 +443,7 @@ function sealedQuestionWords(sealed: SnapshotStage, snap: DocumentSnapshot, ques
  * A finding's title: a shortfall finding is raised with none, so it is named by its question's words and code (lane 6 rows C1, C2); a null on
  * any other is an erasure. `sealed` is the stage whose seal lists the finding.
  */
-function findingTitle(f: FindingView, sealed: SnapshotStage, snap: DocumentSnapshot): string {
+export function findingTitle(f: FindingView, sealed: SnapshotStage, snap: DocumentSnapshot): string {
   if (f.title !== null) return f.title;
   if (f.source === 'shortfall' && f.questionId !== null) {
     switch (snap.provenance.kind) {
