@@ -34,7 +34,7 @@ export {
   STATEMENT, SEALED_NOTE, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE, formatUtcDay, utcSecond,
 } from './copy';
 import {
-  NOT_RECORDED, NOT_RECORDED_AT_ISSUE, NOT_RECORDED_YET, NOT_SEALED, PROJECT_MARK, TYPED_AT_ISSUE, TYPED_MARK, NO_EVIDENCE,
+  DRAFT_PROJECT_MARK, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, NOT_RECORDED_YET, NOT_SEALED, PROJECT_MARK, TYPED_AT_ISSUE, TYPED_MARK, NO_EVIDENCE,
 } from './copy';
 
 /** One decision version of a seal's manifest with the people, evidence and erasure marks of its row (contract G068, exact text). */
@@ -185,6 +185,14 @@ function isDraft(snap: DocumentSnapshot): boolean {
   switch (snap.provenance.kind) {
     case 'sealed': return false;
     case 'draft': return true;
+  }
+}
+
+/** The line under a project value: the issued document's PROJECT_MARK, or in a draft one that never calls it a sealed record (anti-goal 1). */
+function projectMark(snap: DocumentSnapshot): string {
+  switch (snap.provenance.kind) {
+    case 'sealed': return PROJECT_MARK;
+    case 'draft': return DRAFT_PROJECT_MARK;
   }
 }
 
@@ -815,7 +823,7 @@ export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> }
   record_option: (s, snap, _typed, entry, seen) => recordPart(s.questionId, new Set<PartName>(['reason', 'options']), s.option, snap, entry, seen),
   project: (s, snap) => {
     const v = projectValue(snap, s.field);
-    return v === null || v.trim() === '' ? part() : part({ text: `${v}\n${PROJECT_MARK}` });
+    return v === null || v.trim() === '' ? part() : part({ text: `${v}\n${projectMark(snap)}` });
   },
   typed: (s, _snap, typed, entry) => typedPart(entry, s.structured, typed),
   findings: (s, snap) => resolveFindings(s, snap),

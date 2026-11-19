@@ -27,6 +27,8 @@ export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when 
 export const NOT_RECORDED_YET = 'Not recorded yet';
 /** A typed field in a draft, with no value beside it: typed fields are written when the document is issued. */
 export const TYPED_AT_ISSUE = 'Added when the document is issued';
+/** A project value in a draft, in place of PROJECT_MARK: a draft never calls itself a sealed record (anti-goal 1; controller's wording). */
+export const DRAFT_PROJECT_MARK = 'Made from the answers as they were at the time shown. This is a draft, not a sealed record.';
 /** The seals field of a draft (MP-10, DC-33, MC-31). */
 export const NOT_SEALED = 'Not sealed';
 /** MP-04 in a draft while the running content's risk-area mapping is not approved (anti-goal 3; controller's call on open item 2). */

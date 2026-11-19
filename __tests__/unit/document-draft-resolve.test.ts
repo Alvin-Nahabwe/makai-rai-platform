@@ -8,7 +8,7 @@ import { loadContent } from '@/lib/content/loader';
 import { controlsForArea } from '@/lib/content/suggestions';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import {
-  CONTROLS_AFTER_APPROVAL, NOT_RECORDED_AT_ISSUE, NOT_RECORDED_YET, NOT_SEALED, TYPED_AT_ISSUE, draftReviewLine,
+  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_AT_ISSUE, NOT_RECORDED_YET, NOT_SEALED, PROJECT_MARK, TYPED_AT_ISSUE, draftReviewLine,
 } from '@/lib/documents/copy';
 import {
   resolveFields, type DocumentSnapshot, type SealedDecision, type SealedFinding, type SnapshotStage,
@@ -119,6 +119,8 @@ const text = (r: Resolved, id: string): string | null => {
   if (f === undefined) throw new Error(`no field ${id}`);
   return f.text;
 };
+/** An issued field's text as a draft prints it: the same, with the draft's project mark in place of the issued one (anti-goal 1). */
+const asDraft = (t: string | null): string | null => (t === null ? null : t.split(PROJECT_MARK).join(DRAFT_PROJECT_MARK));
 
 describe('a draft document resolves through the sealed resolver (path to outputs, Task 5)', () => {
   it('D3 amended: in a draft, a record field of a stage with no answers reads Not recorded yet, once, and is listed in notRecordedFields', () => {
@@ -150,7 +152,7 @@ describe('a draft document resolves through the sealed resolver (path to outputs
     expect(r.notRecordedFields).toEqual(expect.arrayContaining(['DC-08', 'DC-13', 'DC-15']));
     // DC-02: typed beside the project's institution, which holds a value: the value alone, as the sealed field with nothing typed.
     const issued = resolveFields(MAPS.data_card, sealed('data_card', 'pre-processing', answered, { institution: 'Makerere' }), {});
-    expect(text(r, 'DC-02')).toBe(text(issued, 'DC-02'));
+    expect(text(r, 'DC-02')).toBe(asDraft(text(issued, 'DC-02')));
     expect(text(r, 'DC-02')).toContain('Makerere');
     expect(text(r, 'DC-02')).not.toContain(TYPED_AT_ISSUE);
     // DC-13 answered: the decision alone.
@@ -167,6 +169,23 @@ describe('a draft document resolves through the sealed resolver (path to outputs
     expect(text(mcAnswered, 'MC-04')).not.toContain(TYPED_AT_ISSUE);
   });
 
+  it('anti-goal 1: a project value in a draft carries the draft mark, never the issued mark that calls it part of a sealed record', () => {
+    const metadata = { institution: 'Makerere', fundingSource: 'A national fund', aiSystemType: 'other', aiSystemTypeOther: 'Rules engine' };
+    const st = { 'pre-processing': { decisions: [decision('Q-PP-08')] }, 'in-processing': { decisions: [decision('Q-IP-01')] } };
+    const composed = (['data_card', 'model_card'] as const).flatMap((type) => {
+      const r = resolveFields(MAPS[type], draft(type, type === 'data_card' ? 'pre-processing' : 'in-processing', st, metadata), {});
+      return r.fields.map((f) => f.text ?? '');
+    }).join('\n');
+    expect(composed).toContain('Makerere');
+    expect(composed).toContain(DRAFT_PROJECT_MARK);
+    expect(composed).not.toContain(PROJECT_MARK);
+    expect(composed).not.toMatch(/on the day of issue|part of the sealed record/);
+    // The issued path is unchanged: the same project value carries today's mark.
+    const issued = resolveFields(MAPS.data_card, sealed('data_card', 'pre-processing', st, metadata), {});
+    expect(text(issued, 'DC-03')).toBe(`A national fund\n${PROJECT_MARK}`);
+    expect(issued.fields.map((f) => f.text ?? '').join('\n')).not.toContain(DRAFT_PROJECT_MARK);
+  });
+
   it('a typed-addition field in a draft resolves exactly as the sealed field with no typed values, answered and unanswered', () => {
     const typed = { 'DC-03': 'Typed funder', 'DC-09': 'Typed note', 'MC-03': 'Typed type' };
     const answeredProject: Record<string, string | null> = { fundingSource: 'A national fund', aiSystemType: 'other', aiSystemTypeOther: 'Rules engine' };
@@ -175,10 +194,10 @@ describe('a draft document resolves through the sealed resolver (path to outputs
         const st = { 'pre-processing': { decisions }, 'in-processing': { decisions: [decision('Q-IP-01')] } };
         const dc = resolveFields(MAPS.data_card, draft('data_card', 'pre-processing', st, metadata), typed);
         const dcIssued = resolveFields(MAPS.data_card, sealed('data_card', 'pre-processing', st, metadata), {});
-        for (const id of ['DC-03', 'DC-09']) expect(text(dc, id)).toBe(text(dcIssued, id));
+        for (const id of ['DC-03', 'DC-09']) expect(text(dc, id)).toBe(asDraft(text(dcIssued, id)));
         const mc = resolveFields(MAPS.model_card, draft('model_card', 'in-processing', st, metadata), typed);
         const mcIssued = resolveFields(MAPS.model_card, sealed('model_card', 'in-processing', st, metadata), {});
-        expect(text(mc, 'MC-03')).toBe(text(mcIssued, 'MC-03'));
+        expect(text(mc, 'MC-03')).toBe(asDraft(text(mcIssued, 'MC-03')));
         expect([text(dc, 'DC-03'), text(dc, 'DC-09'), text(mc, 'MC-03')].join('\n')).not.toContain(TYPED_AT_ISSUE);
       }
     }

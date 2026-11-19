@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTROLS_AFTER_APPROVAL, NOT_RECORDED_YET, NOT_SEALED, TYPED_AT_ISSUE, draftLine, draftReviewLine,
+  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, TYPED_AT_ISSUE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
@@ -16,7 +16,7 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
 
   it('the draft document copy holds no claim (Task 5)', () => {
     assertNoClaims('documents draft copy', {
-      NOT_RECORDED_YET, TYPED_AT_ISSUE, NOT_SEALED, CONTROLS_AFTER_APPROVAL,
+      NOT_RECORDED_YET, TYPED_AT_ISSUE, NOT_SEALED, CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK,
       none: draftReviewLine('Pre-processing', null, null),
       open: draftReviewLine('Pre-processing', 'Pre-processing review 1', null),
       lastSealed: draftReviewLine('Pre-processing', null, 'Pre-processing review 1'),
