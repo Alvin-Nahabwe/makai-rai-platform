@@ -777,12 +777,6 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
 }
 
 /**
- * MP-04: the controls the framework suggests for the risk areas of each open finding, read from the content the seal was made on
- * (SRS 10.3.4), or in a draft from the running content once its mapping is approved. A finding with a risk area lists that area's controls. One without, but on a question (every finding raised from a
- * decision, FR-FND-01), lists its question's risk areas and the controls they reach: the set its question page suggests, every
- * control once (FR-SUG-01; workshop walk 2, N3). A finding with neither is not listed.
- */
-/**
  * The content MP-04 reads its controls from, or null when it may suggest none. An issued plan reads the content its seal was made on,
  * as it always has. A draft reads the running content, and only once experts have approved its mapping (anti-goal 3; Task 3's switch).
  */
@@ -796,6 +790,12 @@ function controlsContent(snap: DocumentSnapshot): LoadedContent | null {
   }
 }
 
+/**
+ * MP-04: the controls the framework suggests for the risk areas of each open finding, read from the content the seal was made on
+ * (SRS 10.3.4), or in a draft from the running content once its mapping is approved. A finding with a risk area lists that area's controls. One without, but on a question (every finding raised from a
+ * decision, FR-FND-01), lists its question's risk areas and the controls they reach: the set its question page suggests, every
+ * control once (FR-SUG-01; workshop walk 2, N3). A finding with neither is not listed.
+ */
 function mappedControls(snap: DocumentSnapshot): ResolvedPart {
   const s = snap.chosen;
   const c = controlsContent(snap);

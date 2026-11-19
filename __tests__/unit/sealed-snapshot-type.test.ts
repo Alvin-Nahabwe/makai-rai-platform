@@ -9,7 +9,10 @@ import type { DocumentSnapshot, SealedSnapshot } from '@/lib/documents/resolve';
  */
 describe('SealedSnapshot', () => {
   it('a draft snapshot is not a SealedSnapshot (anti-goal 5, type level)', () => {
-    const draft = { provenance: { kind: 'draft', takenAt: '2026-11-19T14:05:09.000Z' } } as unknown as DocumentSnapshot & { provenance: { kind: 'draft' } };
+    // Sealed in every part but its provenance, so the refusal below can only come from `SealedSnapshot`'s provenance narrowing (review M0:
+    // a fixture whose stages are drafts is also refused on `chosen`, and would keep the directive used without the narrowing).
+    const sealed = {} as SealedSnapshot;
+    const draft = { ...sealed, provenance: { kind: 'draft' as const, takenAt: '2026-11-19T14:05:09.000Z' } } satisfies DocumentSnapshot;
     // @ts-expect-error a draft cannot reach the issue path
     const issued: SealedSnapshot = draft;
     expect(issued.provenance.kind).toBe('draft');

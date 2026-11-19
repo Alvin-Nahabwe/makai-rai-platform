@@ -1,6 +1,6 @@
 # ADR-0023: A draft provenance for the document snapshot
 
-**Status:** Accepted · **Date:** 2026-11-19 · **Deciders:** owner (path-to-outputs design, approved 19 Nov 2026 17:05 EAT: approach 1, "a live snapshot through the existing pipeline"); the snapshot's shape is the builder's call (design §7)
+**Status:** Accepted · **Date:** 2026-11-19 · **Deciders:** owner (path-to-outputs design, approved 19 Nov 2026 17:05 EAT: approach 1, "a live snapshot through the existing pipeline"); the snapshot's shape is the controller's call, with the names left to the builder (design §7: "my call on the shape; builder to choose names")
 
 ## Context
 
@@ -17,12 +17,18 @@ meant "never sealed" (D3).
 - Each stage's `seal` is `StageSeal` (`kind: 'sealed'`, today's fields) or `StageDraft` (`kind: 'draft'`,
   `key: 'draft:<stage>'`, `takenAt`, and the stage's reviews by name and state, never their seals).
 - `SealedSnapshot` narrows the snapshot to sealed provenance and sealed stages. `readDocumentSnapshot`
-  returns it, and the issue path (`build`, `issueDocument`, `previewDocument`) takes it, so tsc refuses a draft there.
-  `__tests__/unit/sealed-snapshot-type.test.ts` holds that refusal as a `@ts-expect-error`; its real check is `tsc --noEmit`.
+  returns it, and the issue path (`build`, `issueDocument`, `previewDocument`) takes it, so tsc refuses a draft there unless
+  it is cast. `__tests__/unit/sealed-snapshot-type.test.ts` holds that refusal as a `@ts-expect-error` on a snapshot that
+  differs from a sealed one only in its provenance; its real check is `tsc --noEmit`.
+- A cast gets past a type, so `build` also refuses a draft-provenance snapshot at run time: it throws `DraftSnapshotRefused`
+  before resolving, rendering or writing anything, so a draft never reaches `issued_documents` (anti-goal 5).
+  `__tests__/integration/documents-draft-refused.test.ts` passes a draft through `issueDocument` and finds no row.
 - Every branch on `provenance.kind` or `seal.kind` names both arms, with no default arm. When a third
   kind is added, tsc then lists every place that has to decide what it means.
-- `resolveFields` refuses a snapshot whose stages disagree with its provenance, so a draft never reads a
-  seal's rows and a sealed document never prints a draft stage.
+- `resolveFields` refuses a snapshot in which a stage's `seal.kind` differs from `provenance.kind`
+  (`assertOneProvenance`). That check compares the kind tags only, so it keeps a sealed document from printing a stage
+  tagged draft. It does not look at what a stage holds: a draft stage built from a seal's manifest or sealed answers would
+  pass it. That a draft reads no seal's rows rests on the draft builder (Task 6), which never reads them.
 - The draft rules, applied by the same resolver:
   - A stage with no answers: a draft holds every stage. One with no current decision, gate-derived entry or finding
     reads "Not recorded yet", where a never-sealed stage of an issued document reads "Not recorded: this stage had no seal
@@ -30,6 +36,8 @@ meant "never sealed" (D3).
   - Typed fields: a draft never reads typed values. A field with a typed source and no value beside it reads "Added when
     the document is issued". A typed addition resolves as the issued field does with nothing typed.
   - The seals fields (MP-10, DC-33, MC-31) read "Not sealed".
+  - Project values carry the draft mark, "Made from the answers as they were at the time shown. This is a draft, not a
+    sealed record.", in place of the issued mark, which speaks of the day of issue and the sealed record (`projectMark`).
   - MP-01 names the stage's review state: none, open, or the last one sealed.
   - MP-04 reads the running content and lists suggested controls only when its risk-area mapping is approved. Until
     then it prints a placeholder (anti-goal 3).
@@ -53,6 +61,13 @@ meant "never sealed" (D3).
   or `sealId` to decide what a draft prints, and a missing seal already means "never sealed" (D3).
 - **Provenance on the snapshot only, with no per-stage kind.** Rejected: the seal facts are per stage, and the stage key and
   MP-01 need a per-stage arm. The two are kept consistent by the check at the top of `resolveFields`.
+- **A union of whole snapshots**, `{ provenance: sealed; chosen: SealedStage; stages: …SealedStage | null }` or
+  `{ provenance: draft; chosen: DraftStage; stages: …DraftStage }`, read by the same resolver. It keeps the per-stage facts
+  and makes a mixed snapshot impossible to build, so neither the run-time `assertOneProvenance` nor a type test that has to
+  isolate the provenance would be needed. It was not taken because of its cost: a spread such as `narrowed`'s
+  `{ ...snap, stages }` loses the link between the provenance and the stage types, so each such rebuild would need a cast
+  or one copy per arm. This alternative was added after review (Task 5 review, ADR attack); the decision was not weighed
+  against it at the time, and the run-time check stays as the cheaper guard.
 
 ## References
 

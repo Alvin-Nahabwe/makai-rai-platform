@@ -30,7 +30,7 @@ import {
   DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_DOCUMENT_CHECK_FAILED, MSG_OTHER_SEAL_CHECK_FAILED, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay,
 } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
-import type { SealedDecision, SealedFinding, SealedSnapshot, SealedStage } from '@/lib/documents/resolve';
+import type { SealedDecision, SealedFinding, SealedSnapshot, SealedStage, SnapshotProvenance } from '@/lib/documents/resolve';
 
 // ─── The snapshot (NFR-INT-10) ───────────────────────────────────────────────────────────────────
 
@@ -545,8 +545,28 @@ const sealsOf = (snap: SealedSnapshot, ids: readonly string[]): RenderInput['sea
   return { sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint };
 });
 
+/** A draft snapshot reached the issue path, past the `SealedSnapshot` type through a cast (anti-goal 5: a draft is never issued). */
+class DraftSnapshotRefused extends Error {
+  override readonly name = 'DraftSnapshotRefused';
+  constructor() {
+    super('documents: a draft snapshot reached the issue path; a draft is never issued (ADR 0023)');
+  }
+}
+
+/**
+ * Anti-goal 5 at run time. The type keeps a draft off this path, but a cast gets past a type, and a draft cast to `SealedSnapshot`
+ * would resolve ("Not sealed", no seal ids) and be stored in `issued_documents`. So `build` refuses it before resolving anything.
+ */
+function assertSealedProvenance(provenance: SnapshotProvenance): void {
+  switch (provenance.kind) {
+    case 'sealed': return;
+    case 'draft': throw new DraftSnapshotRefused();
+  }
+}
+
 /** Resolves and renders outside every transaction (NFR-PERF-04: CPU in the one Node process). */
 async function build(type: DocumentType, renderer: Renderer, snap: SealedSnapshot, typed: Record<string, string>, issuedAt: Date) {
+  assertSealedProvenance(snap.provenance);
   const map = loadFieldMap(type);
   const resolved = resolveFields(map, snap, typed);
   const input: RenderInput = {
