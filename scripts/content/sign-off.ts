@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { loadContent, questionsInStage } from '@/lib/content/loader';
 import { readContentIndex } from '@/lib/content/root';
-import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
+import { CONDITIONAL_SIGN_OFF_BATCHES, SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, SignOffRecord, SignOffsFile } from '@/types/content';
 import { STAGES, type Stage } from '@/types/record';
 
@@ -38,10 +38,10 @@ function checkSigner(s: Signer): void {
   if (!ZONED.test(s.at) || Number.isNaN(Date.parse(s.at))) throw new Error(`sign-off: at ${JSON.stringify(s.at)} is not an ISO instant with a zone`);
 }
 
-/** A record for one of the seven batches, from the loaded content. */
+/** A record for one of the seven batches, or for `risk-mapping`, from the loaded content. */
 export function buildRecord(c: LoadedContent, batch: SignOffBatch, s: Signer): SignOffRecord {
   checkSigner(s);
-  if (!SIGN_OFF_BATCHES.includes(batch)) throw new Error(`sign-off: unknown batch ${JSON.stringify(batch)}`);
+  if (!SIGN_OFF_BATCHES.includes(batch) && !CONDITIONAL_SIGN_OFF_BATCHES.includes(batch)) throw new Error(`sign-off: unknown batch ${JSON.stringify(batch)}`);
   const payload = signOffPayload(c, batch);
   return { batch, approver: s.approver, at: s.at, sha256: signOffHash(payload), items: signOffItems(payload) };
 }

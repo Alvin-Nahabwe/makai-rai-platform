@@ -5,7 +5,7 @@ import { principleSlugMap } from '@/data/constants';
 import { buildLoadedContent } from '@/lib/content/loader';
 import { riskAreaIdsOf } from '@/lib/content/riskAreas';
 import { SEMVER_RE } from '@/lib/content/semver';
-import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
+import { CONDITIONAL_SIGN_OFF_BATCHES, SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
 import { STAGES } from '@/types/record';
 
@@ -579,7 +579,7 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const where = `signoffs.json records[${i}]`;
     if (!isRecord(r)) return say(`${where} is not an object`);
     const batch = r.batch;
-    if (typeof batch !== 'string' || !(SIGN_OFF_BATCHES as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches`);
+    if (typeof batch !== 'string' || !([...SIGN_OFF_BATCHES, ...CONDITIONAL_SIGN_OFF_BATCHES] as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches or risk-mapping`);
     const label = `${where} (${batch})`;
     let ok = true;
     if (typeof r.approver !== 'string' || r.approver.trim() === '') { say(`${label}: approver is empty`); ok = false; }
@@ -591,7 +591,9 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const prev = latest.get(batch as SignOffBatch);
     if (prev === undefined || at >= prev.at) latest.set(batch as SignOffBatch, { at, record: r, index: i });
   });
-  for (const batch of SIGN_OFF_BATCHES) {
+  // A version that turns suggested controls on also needs the experts' risk-mapping approval (G6), so content alone cannot switch them on.
+  const required = c.controlSuggestionsApproved ? [...SIGN_OFF_BATCHES, ...CONDITIONAL_SIGN_OFF_BATCHES] : SIGN_OFF_BATCHES;
+  for (const batch of required) {
     const l = latest.get(batch);
     if (l === undefined) {
       say(`sign-off ${batch}: no record`);
