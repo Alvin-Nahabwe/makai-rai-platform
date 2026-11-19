@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ReportRailLink } from '@/components/layout/ReportRailLink';
 import { ShellProjectPlace } from '@/components/layout/ShellPlace';
 import { SHELL_PROJECT_COPY, stageStateLine } from '@/lib/shell/project/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
@@ -68,8 +69,7 @@ export function RailProjectBlock({ project, orgSlug, currentStage }: Props) {
           );
         })}
       </ul>
-      {/* Not prefetched: the report reads every stage's answers, and a prefetch from every page of the project would do that unseen. */}
-      <Link href={reportHref(orgSlug, project.id)} prefetch={false} className="shell-project__report">{PROJECT_COPY.workingReport.railLink}</Link>
+      <ReportRailLink href={reportHref(orgSlug, project.id)}>{PROJECT_COPY.workingReport.railLink}</ReportRailLink>
     </div>
   );
 }

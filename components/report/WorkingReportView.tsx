@@ -24,7 +24,21 @@ function partOf(ref: ReportPageRef): WorkingReportPart {
   if (ref.kind === 'summary') return 'summary';
   return ref.documentType === 'mitigation_plan' ? `mitigation_plan:${ref.reviewStage}` : ref.documentType;
 }
-const sectionId = (ref: ReportPageRef): string => (ref.kind === 'summary' ? 'report-summary' : `report-${ref.documentType}${ref.documentType === 'mitigation_plan' ? `-${ref.reviewStage}` : ''}`);
+/** A document's name for an address: the type, and for a mitigation plan its stage too (one plan per stage). */
+const docKey = (ref: Extract<ReportPageRef, { kind: 'document' }>): string => (ref.documentType === 'mitigation_plan' ? `${ref.documentType}-${ref.reviewStage}` : ref.documentType);
+const sectionId = (ref: ReportPageRef): string => (ref.kind === 'summary' ? 'report-summary' : `report-${docKey(ref)}`);
+
+/** Consecutive rows that share a key, in order, as [key, rows] runs. */
+function groupRuns<T, K>(rows: readonly T[], keyOf: (row: T) => K): Array<[K, T[]]> {
+  const out: Array<[K, T[]]> = [];
+  for (const r of rows) {
+    const key = keyOf(r);
+    const last = out[out.length - 1];
+    if (last !== undefined && last[0] === key) last[1].push(r);
+    else out.push([key, [r]]);
+  }
+  return out;
+}
 const titleOf = (ref: ReportPageRef): string => {
   if (ref.kind === 'summary') return W.title;
   const name = DOCUMENT_TITLES[ref.documentType];
@@ -57,15 +71,7 @@ function Item({ item }: { item: OpenItem }): ReactElement {
 
 /** Page 1 on screen: the same blocks, in the same order, as the PDF's page 1 (lib/documents/render/summaryPage.tsx). */
 function Summary({ summary: s, headingId }: { summary: WorkingReportSummary; headingId: string }): ReactElement {
-  const byStage = <T extends { stage: Stage }>(rows: readonly T[]): Array<[Stage, T[]]> => {
-    const out: Array<[Stage, T[]]> = [];
-    for (const r of rows) {
-      const last = out[out.length - 1];
-      if (last !== undefined && last[0] === r.stage) last[1].push(r);
-      else out.push([r.stage, [r]]);
-    }
-    return out;
-  };
+  const byStage = <T extends { stage: Stage }>(rows: readonly T[]) => groupRuns(rows, (r) => r.stage);
   return (
     <section id="report-summary" className="report-section" aria-labelledby={headingId}>
       <h2 id={headingId}>{W.title}</h2>
@@ -129,13 +135,8 @@ function Summary({ summary: s, headingId }: { summary: WorkingReportSummary; hea
 function DraftDocument({ record, ref_, headingId }: { record: DraftRecord; ref_: Extract<ReportPageRef, { kind: 'document' }>; headingId: string }): ReactElement {
   const map = loadFieldMap(ref_.documentType);
   const { fields } = resolveFields(map, draftSnapshot(record, ref_.documentType, ref_.reviewStage), {});
-  const idOf = (fieldId: string): string => `field-${ref_.documentType}${ref_.documentType === 'mitigation_plan' ? `-${ref_.reviewStage}` : ''}-${fieldId}`;
-  const groups: Array<{ section: string; rows: typeof fields }> = [];
-  for (const f of fields) {
-    const last = groups[groups.length - 1];
-    if (last !== undefined && last.section === f.section) last.rows.push(f);
-    else groups.push({ section: f.section, rows: [f] });
-  }
+  const idOf = (fieldId: string): string => `field-${docKey(ref_)}-${fieldId}`;
+  const groups = groupRuns(fields, (f) => f.section).map(([section, rows]) => ({ section, rows }));
   return (
     <section id={sectionId(ref_)} className="report-section" aria-labelledby={headingId}>
       <h2 id={headingId}>{titleOf(ref_)}</h2>

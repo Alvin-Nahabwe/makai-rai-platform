@@ -99,6 +99,22 @@ test('anti-goal 1: a browser printout of the report carries the draft line on ev
     expect(pages.length, `the ${colorScheme} printout runs over several pages`).toBeGreaterThan(1);
     const squash = (s: string) => s.replace(/\s+/g, '');
     pages.forEach((text, i) => expect(squash(text), `${colorScheme} printed page ${i + 1} carries the draft line`).toContain(squash(line)));
+    // Print is black on white whatever the theme (DESIGN.md): the computed colour of every heading level and of all the text is the print ink.
+    for (const level of ['h1', 'h2', 'h3', 'h4']) {
+      const colours = await page.locator(`.report ${level}`).evaluateAll((els) => els.map((e) => getComputedStyle(e).color));
+      expect(colours.length, `the report has ${level} headings`).toBeGreaterThan(0);
+      expect(new Set(colours), `${colorScheme} print ${level} colour`).toEqual(new Set(['rgb(0, 0, 0)']));
+    }
+    const textColours = await page.locator('.report').evaluate((root) => {
+      const found = new Set<string>();
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+        const el = n.parentElement;
+        if (el !== null && (n.textContent ?? '').trim() !== '' && getComputedStyle(el).display !== 'none') found.add(getComputedStyle(el).color);
+      }
+      return Array.from(found);
+    });
+    expect(textColours, `${colorScheme} print text colours`).toEqual(['rgb(0, 0, 0)']);
   }
 });
 
@@ -154,6 +170,11 @@ test('the rail shows Working report inside a project and nowhere else', async ({
     await expect(inRail, inside).toHaveCount(1);
   }
   await expect(inRail).toHaveAttribute('href', project.address);
+  // The link to the page you are on says so; on the project's other pages it does not.
+  await page.goto(project.address);
+  await expect(inRail).toHaveAttribute('aria-current', 'page');
+  await page.goto(`/orgs/${org.slug}/projects/${project.id}`);
+  await expect(inRail).not.toHaveAttribute('aria-current', /.*/);
   for (const outside of [`/orgs/${org.slug}/dashboard`, `/orgs/${org.slug}/projects`, '/account']) {
     await page.goto(outside);
     await expect(page.getByRole('link', { name: W.railLink, exact: true }), outside).toHaveCount(0);
