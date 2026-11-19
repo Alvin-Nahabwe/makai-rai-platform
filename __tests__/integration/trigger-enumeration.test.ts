@@ -463,12 +463,14 @@ describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', (
     }
   });
 
-  it('FR-PRJ-03 RF-4: only the project routes and the member service write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
+  it('FR-PRJ-03 RF-4: only the project routes, the member service and the seal request write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
     // A receipt-mode call is not counted against the gate (it creates or changes a project or a membership). A file that
     // joins the list must be added here on purpose: if it writes a record of a project it has to call the gate instead.
     const RECEIPT_MODE = [
       'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
       'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts', 'app/api/v1/orgs/[slug]/projects/route.ts', 'lib/data/members.ts',
+      // Design G2 (path to outputs): requestSeal may open a stage review, a record of a project, so it calls the gate itself.
+      'lib/data/reviews.ts',
     ];
     expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0 && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
   });

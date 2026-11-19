@@ -56,7 +56,7 @@ test('G2: an Assessor asks on the stage page; the step reads Review opened · wa
   await page.goto(stagePage(p.id));
   const ask = page.getByRole('button', { name: C.ask });
   await expect(ask).toBeVisible();
-  await expectNoSeriousA11yViolations(page);
+  await expectNoSeriousA11yViolations(page, 'S-11 seal step, assessor before asking');
   // By keyboard: focus the button and press Enter.
   await ask.focus();
   await page.keyboard.press('Enter');

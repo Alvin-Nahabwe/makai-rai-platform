@@ -43,8 +43,8 @@ export function sealStep(role: OrgRole, stageReviews: readonly StageReviewView[]
     if (canOpen && canSeal) return { kind: 'open_and_seal' };
     return canOpen ? { kind: 'ask' } : { kind: 'hidden' };
   }
-  // `== null`: a view that carries no seal field reads as unsealed, never as a crash. The protected
-  // __tests__/integration/decision-pages.test.ts mocks listStageReviews with views that name only id, number and name.
+  // A view that carries no seal field (`== null` in keyReview, `?? null` here) reads as unsealed, never as a crash: the
+  // protected __tests__/integration/decision-pages.test.ts mocks listStageReviews with views of id, number and name only.
   const seal = key.latestSeal ?? null;
   const intact = seal !== null && seal.bytesMatch && !key.latestSealUnreadable;
   if (intact && !key.changedSinceLatestSeal) return { kind: 'sealed' };
