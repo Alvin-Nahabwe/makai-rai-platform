@@ -116,7 +116,7 @@ export type SourceResolver<K extends FieldSource['kind']> = (
 
 const part = (p: Partial<ResolvedPart> = {}): ResolvedPart => ({ text: null, provenance: '', sources: [], stageKeys: [], decisionIds: [], ...p });
 
-const STATUS_WORD: Readonly<Record<string, string>> = { done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' };
+export const STATUS_WORD: Readonly<Record<string, string>> = { done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' };
 const SCOPE_WORD: Readonly<Record<ScopeAnswer, string>> = { yes: 'Yes', no: 'No', not_sure: 'Not sure' };
 /** FR-DEC-01's outside roles (SRS line 737), first letter capitalised. */
 export const ROLE_LABEL: Readonly<Record<OutsideRole, string>> = {
@@ -283,7 +283,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 }
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
-function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
+export function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
   const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);

@@ -481,6 +481,23 @@ describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', (
     ]));
   });
 
+  it('anti-goal 3: every file under lib/documents/, components/report/ and components/question/StageEnd.tsx that calls controlsForQuestion, controlsForArea or renders SuggestedControls or FindingSuggestions also calls controlSuggestionsOn; controlSuggestionsOn has a production caller', () => {
+    // The roots are varied (m4): a root that does not exist yet (components/report) holds no file, and a new file under it is found.
+    const underRoot = (root: string): string[] => {
+      try { return root.endsWith('.tsx') ? [root] : walk(root); } catch { return []; }
+    };
+    const files = [...underRoot('lib/documents'), ...underRoot('components/report'), ...underRoot('components/question/StageEnd.tsx')].filter((f) => {
+      try { return code(f).length > 0; } catch { return false; }
+    });
+    const SUGGESTS = /\b(controlsForQuestion|controlsForArea)\(|<(SuggestedControls|FindingSuggestions)\b/;
+    const suggesting = files.filter((f) => SUGGESTS.test(code(f)));
+    expect(suggesting).toContain('lib/documents/resolve.ts');
+    expect(suggesting).toContain('lib/documents/workingReport.ts');
+    for (const f of suggesting) expect({ f, gated: /\bcontrolSuggestionsOn\(/.test(code(f)) }).toEqual({ f, gated: true });
+    const callers = allFiles().filter((f) => f !== 'lib/content/suggestions.ts' && /\bcontrolSuggestionsOn\(/.test(code(f)));
+    expect(callers).toEqual(expect.arrayContaining(['lib/documents/resolve.ts', 'lib/documents/workingReport.ts']));
+  });
+
   it('FR-PRJ-03 RF-4 (lint self-test): a writer file with an unguarded record write is found', () => {
     const probe = "await idempotentWrite<View>(ctx, { table: 'findings' });";
     expect((probe.match(WRITE_CALL) ?? []).length).toBe(1);

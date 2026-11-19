@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, TYPED_AT_ISSUE, draftLine, draftReviewLine,
+  CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
@@ -22,6 +22,10 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
       lastSealed: draftReviewLine('Pre-processing', null, 'Pre-processing review 1'),
       draftLine: draftLine('2026-11-19T14:05:09.000Z'),
     });
+  });
+
+  it('the page 1 group headings hold no claim (Task 7)', () => {
+    assertNoClaims('working report page 1 headings', { NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP });
   });
 
   it('the draft line prints the platform zone, as the design fixes it', () => {

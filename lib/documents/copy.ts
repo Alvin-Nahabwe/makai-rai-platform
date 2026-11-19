@@ -119,6 +119,10 @@ export const questionSource = (questionId: string, version?: number): string =>
 export const findingOnQuestion = (words: string, questionId: string): string => `Finding on the question: ${words} (${questionId})`;
 /** A draft's title-less shortfall finding whose question no content version this deployment lists still holds (Task 6 fix I1). */
 export const findingOnRemovedQuestion = (questionId: string): string => `${questionId} · question no longer in the framework`;
+/** Page 1 of the working report: the heading of open items that have no risk area (the controller's call 7). */
+export const NO_RISK_AREA_GROUP = 'Raised by the team, no risk area';
+/** Page 1: the heading of open items whose question a release has since removed, so no area can be named for them. */
+export const REMOVED_QUESTION_GROUP = 'On questions no longer in the framework';
 /** A named item with a code, words first and the code after (voice rule 8): "Techno-solutionist Bias (PP-01)" (lane 6 row C12). */
 export const wordsThenCode = (words: string, code: string): string => `${words} (${code})`;
 /** A gate decision's answer (FR-DOC-02 B38). */
