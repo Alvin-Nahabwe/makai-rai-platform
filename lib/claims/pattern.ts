@@ -6,8 +6,8 @@
  * `CLAIMS_CORE` is FR-PUB-01's own pattern (SRS line 1103) with `\bscored\b` and `\breadiness report\b` added
  * (owner question B26: the SRS pattern misses one of the strings its own *Why* cites). `CLAIMS` adds the rest of
  * the list with its forms. A word the SRS bans in one sense only ("approved" as something the platform gives,
- * "level" as a grade, "progress" or "complete" about a stage or project) is matched in the forms that carry that
- * sense; "complete the form" is not banned. `NEVER_LIST` holds one sentence per word or form that `CLAIMS` must
+ * "level" as a grade, "complete" about a stage or project) is matched in the forms that carry that
+ * sense (the word "progress" is allowed since 19 Nov 2026, owner: "Allow progress display"); "complete the form" is not banned. `NEVER_LIST` holds one sentence per word or form that `CLAIMS` must
  * flag, and `MAY_APPEAR` ordinary strings it must not.
  */
 
@@ -74,8 +74,8 @@ export const CLAIMS = new RegExp(`${CLAIMS_CORE.source}|${NEVER_WORDS.join('|')}
 
 // SRS 7.5.3 (line 2472): "these words and their forms never appear" in the interface, documents and emails.
 // One synthetic page per entry holds one sentence with the word; the pattern must flag it. The qualified words
-// ("approved" as something the platform gives, "level" as a grade, "progress" or "complete" about a stage or
-// project) are flagged in the forms that carry the qualifier; their bare uses ("complete the form") are not banned.
+// ("approved" as something the platform gives, "level" as a grade, "complete" about a stage or
+// project; "progress" is no longer banned, owner 19 Nov 2026) are flagged in the forms that carry the qualifier; their bare uses ("complete the form") are not banned.
 export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['compliance', 'Our compliance guide'], ['compliant', 'This record is compliant'],
   ['audit', 'Open the audit log'], ['audits', 'Teams run audits'], ['audited', 'Every record is audited'],

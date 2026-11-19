@@ -17,7 +17,7 @@ import type { Stage } from '../../types/record';
  *   - an upload's own `<progress>` carries `data-upload-progress` itself or sits directly in an element that does, and
  *     is one of two progress elements allowed (never inside a route row); the other is a per-stage bar: a `<progress>`
  *     or a proportional fill inside an element carrying `data-stage-bar`, on the project page only
- *     (`/orgs/<slug>/projects/<id>`; owner, 19 Nov 2026: "Allow progress display"), whose count is in words beside
+ *     (`/orgs/<slug>/projects/<id>`, an id and not "new"; owner, 19 Nov 2026: "Allow progress display"), whose count is in words beside
  *     it ("N of M questions recorded"). A percentage inside it is still a finding. A route row's proportional fill is any element
  *     in `.ui-route-row` with an inline style value in per cent (a custom property too) or a `width` attribute in per
  *     cent, and is a progress element too (spec 7.2).
@@ -66,8 +66,8 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
     if (mains.length === 0) return null;
     const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
-    // The per-stage bar is allowed on the project page only: /orgs/<slug>/projects/<id>.
-    const onProjectPage = /^\/orgs\/[^/]+\/projects\/[^/]+\/?$/.test(window.location.pathname);
+    // The per-stage bar is allowed on the project page only: /orgs/<slug>/projects/<id> (an id, not "new").
+    const onProjectPage = /^\/orgs\/[^/]+\/projects\/(?!new\/?$)[^/]+\/?$/.test(window.location.pathname);
     const inStageBar = (el: Element) => onProjectPage && el.closest('[data-stage-bar]') !== null;
     const texts: string[] = [];
     const percentTexts: string[] = [];

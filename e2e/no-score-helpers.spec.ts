@@ -117,6 +117,9 @@ test('FR-RM-01 FR-RM-04 (amended 2026-11): a data-stage-bar progress element on 
   await serve('/orgs/fixture-org/dashboard', `<main>${bar}</main>`);
   await expect(expectNoScoreShapes(page, 'another page')).rejects.toThrow(/<progress>/);
 
+  await serve('/orgs/fixture-org/projects/new', `<main>${bar}</main>`);
+  await expect(expectNoScoreShapes(page, 'new-project page')).rejects.toThrow(/<progress>/);
+
   await serve('/orgs/fixture-org/projects/prj-2', '<main><span data-stage-bar><progress value="3" max="12"></progress> 25% of questions</span></main>');
   await expect(expectNoScoreShapes(page, 'percentage in the bar')).rejects.toThrow(/%/);
 });

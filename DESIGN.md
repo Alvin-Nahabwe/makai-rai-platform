@@ -361,7 +361,7 @@ What is built and stays: counts are words and numerals for one stage, with no pe
 
 ## Voice and vocabulary
 
-- **The words are the vocabulary's.** `data/vocabulary.json` is generated from `records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md` section 2 by `scripts/vocabulary/generate.mjs`; it holds 115 concepts, each with a term, a definition of at most 20 words and the terms to retire, and its lint rules are in `scripts/vocabulary/lint-rules.json`. The typed form is `lib/vocabulary/terms.ts`. `__tests__/lint/vocabulary.test.ts` fails when a retired term appears in copy.
+- **The words are the vocabulary's.** `data/vocabulary.json` is generated from `records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md` section 2 by `scripts/vocabulary/generate.mjs`; it holds 116 concepts, each with a term, a definition of at most 20 words and the terms to retire, and its lint rules are in `scripts/vocabulary/lint-rules.json`. The typed form is `lib/vocabulary/terms.ts`. `__tests__/lint/vocabulary.test.ts` fails when a retired term appears in copy.
 - **A term is defined where it is first met**, in the same sentence every time: `<Term>` marks the use and `<Definition>` or `<TermTip>` gives the sentence.
 - **Copy lives in modules.** Each area keeps its strings in `lib/<area>/copy.ts` (for example `lib/ui/copy.ts`, `lib/shell/copy.ts`, `lib/project/copy.ts`, `lib/errors/copy.ts`); components and tests read the same constants. `__tests__/lint/copy-modules.test.ts` and `no-inline-copy.test.ts` hold this.
 - **Voice rules** are the twelve rules of `CONSOLIDATED.md` section 3. Not restated here.
