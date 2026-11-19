@@ -108,22 +108,31 @@ test('R5 at 1280 px: the three lines side by side, each stop on the same row acr
   await expectNoHorizontalScroll(page);
 });
 
-/** The page's one primary action, by role: what assistive technology and a person can reach. */
-const PRIMARY = new RegExp(`^(${PROJECT_COPY.continue}|${PROJECT_COPY.start})$`);
-
+/**
+ * The page's one primary action: "Open the working report" (G5, owner-approved 19 Nov 2026), which supersedes ruling C3 of
+ * 15 Nov ("the primary carries the next question"). Each stage's own link, "Next: Question N · Continue", is a plain link.
+ */
 for (const [width, height] of [[1280, 800], [1440, 900], [375, 812]] as const) {
-  test(`C3 (owner's ruling): at ${width} px exactly one primary action is in the accessibility tree, inside the first view, with the next question`, async ({ browser }) => {
+  test(`G5 (supersedes C3): at ${width} px exactly one primary action, Open the working report, is in the accessibility tree and inside the first view, under the what-you-get line`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members.owner);
     await page.setViewportSize({ width, height });
     await page.goto(projectPath(project.id));
-    const primary = page.getByRole('link', { name: PRIMARY });
+    const primary = page.getByRole('link', { name: PROJECT_COPY.overview.openReport, exact: true });
     await expect(primary).toHaveCount(1);
     await expect(primary).toBeVisible();
-    // Side by side it sits in the target line's head stop; stacked, in the block above the lines.
-    await expect(primary.locator(width >= 1280 ? 'xpath=ancestor::div[contains(@class,"stage-line__stop--head")]' : 'xpath=ancestor::div[contains(@class,"next-step-block--stacked")]')).toHaveCount(1);
+    await expect(primary).toHaveAttribute('href', `${projectPath(project.id)}/report`);
+    await expect(page.locator('main .ui-button--primary')).toHaveCount(1);
     const box = await primary.boundingBox();
     expect(box!.y + box!.height, `the button's foot (${Math.round(box!.y + box!.height)} px) is inside the ${height} px first view`).toBeLessThanOrEqual(height);
-    await expect(page.getByText(PROJECT_COPY.nextLabel, { exact: true }).filter({ visible: true })).toHaveCount(1);
+    const line = await page.getByText(PROJECT_COPY.overview.whatYouGet, { exact: true }).boundingBox();
+    expect(line!.y).toBeLessThan(box!.y);
+    // G4: every stage has its bar, named in words, and a plain link to its next question.
+    for (const s of STAGES) {
+      const bar = page.locator(`#${s} [data-stage-bar] progress`);
+      await expect(bar).toHaveCount(1);
+      await expect(bar).toHaveAttribute('aria-label', /^\d+ of \d+ questions recorded$/);
+      await expect(page.locator(`#${s}`).getByRole('link', { name: /^Next: Question \d+ · Continue$/ })).toHaveCount(1);
+    }
   });
 }
 
@@ -297,7 +306,8 @@ test('NFR-A11Y-02 FR-PRJ-03: by keyboard from the last line, Archive in the "Thi
   await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
   await expect(page.locator('.archive-control')).toBeFocused();
   await expect(page.getByRole('status').filter({ hasText: PROJECT_WRITE_COPY.archive.archived })).toBeVisible();
-  await expect(page.locator('main .ui-button--primary')).toHaveCount(0);
+  // The one primary is the working report (G5), which an archived project keeps: reading it writes nothing.
+  await expect(page.locator('main .ui-button--primary')).toHaveText(PROJECT_COPY.overview.openReport);
 });
 
 test('FR-RM-01 spec 7.2: no score shapes, and every status mark and label in ink', async ({ browser }) => {

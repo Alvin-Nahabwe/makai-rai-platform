@@ -14,6 +14,7 @@ export function FirstTimeHome({ data }: { data: Extract<HomeData, { variant: 'fi
   return (
     <div className="home-first">
       <p className="home-first__lead">{HOME_COPY.firstTimeLead}</p>
+      <p className="home-first__gets">{HOME_COPY.whatYouGet}</p>
       {base.archivedCount > 0 ? (
         <p>{HOME_COPY.noActiveProjects} <ListLink href={`/orgs/${base.orgSlug}/projects`}>{HOME_COPY.allProjects}</ListLink></p>
       ) : null}

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { FollowUpItem, SealView, StageCounts, StageReviewView } from '@/types/api';
 import { STAGES, type Stage } from '@/types/record';
 import type { StatusMarkKind } from '@/components/ui/types';
-import { projectActions } from '@/lib/projects/can';
+import { projectActions, projectCanRecord } from '@/lib/projects/can';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { UI_COPY } from '@/lib/ui/copy';
@@ -74,6 +74,7 @@ function data(o: Over = {}): ProjectOverviewData {
     followUp: Object.fromEntries(STAGES.map((s) => [s, o.followUp?.[s] ?? { items: [], cannotAct: [] }])) as ProjectOverviewData['followUp'],
     reviews: Object.fromEntries(STAGES.map((s) => [s, o.reviews?.[s] ?? []])) as ProjectOverviewData['reviews'],
     can: projectActions(o.role ?? 'owner', archived),
+    canRecord: projectCanRecord(o.role ?? 'owner', archived),
   };
 }
 const routesOf = (d: ProjectOverviewData): ProjectRoutes => Object.fromEntries(STAGES.map((s) => [s, routeFor(s, d.counts[s])])) as ProjectRoutes;
@@ -313,98 +314,87 @@ describe('S-10 as three lines of stops (Route R5)', () => {
 
   /** Markup without lane 1's TermTips (the (i) and its popover's sentence), for reading the words around them. */
   const noTip = (markup: string) => markup.replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/g, '');
-  /** The next-step block shown above the stacked lines (owner's ruling on C3), from its opening tag to the jump links. */
-  const stacked = (html: string) => {
-    const at = html.indexOf('<div class="next-step-block next-step-block--stacked">');
-    return at === -1 ? '' : html.slice(at, html.indexOf('<nav class="stage-list__jump"', at));
-  };
 
-  it('C11 C3: the one primary action and "Next question" sit in the head stop of the line of the stage last saved in; every last stop says what is left', () => {
-    // in-processing-q16 has no decision (routeFor: 14 decided, then the no-decision stops).
-    const html = render({}, { stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' });
-    const l = lines(html);
-    const head = stop(l['in-processing'], 'head');
-    const button = `<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/in-processing/questions/in-processing-q16">${P.continue}</a>`;
-    expect(head).toContain('<div class="next-step-block next-step-block--line">');
-    expect(head).toContain(button);
-    expect(head).toContain(`<span class="stage-line__next-words"><b class="stage-line__next-label">${P.nextLabel}</b> <span class="stage-line__next-text">Question 16 of in-processing</span></span>`);
-    expect(text(head)).toContain(`${P.nextLabel} Question 16 of in-processing ${UI_COPY.position(16, 24)}`);
-    // The block comes after the stage's definition, under the name.
-    expect(head.indexOf('data-definition="stage-2"')).toBeLessThan(head.indexOf('next-step-block'));
-    // Every line's last stop, the target's included, keeps its sentence and the stage's questions, and no button.
+  it('G4: each stage shows "N of M", a progress element in data-stage-bar named "N of M questions recorded", and Next: Question N · Continue as a link', () => {
+    // COUNTS: 24 questions, 9 with no decision, none removed by the gate: 15 of 24. The first open question of routeFor is the 15th (14 decided before it).
+    const l = lines(render());
     for (const s of STAGES) {
-      const last = stop(l[s], 'last');
-      expect(last).not.toContain('ui-button');
-      expect(last).not.toContain(P.nextLabel);
-      expect(text(last)).toContain(P.noDecisionYet(9));
-      if (s !== 'in-processing') expect(stop(l[s], 'head')).not.toContain('next-step-block');
-    }
-    // The same block once above the stacked lines. The markup holds two copies; ProjectPage.css shows one at every width
-    // (display: none on the other), and e2e/project-page.spec.ts finds exactly one by role at 1280, 1440 and 375.
-    expect(stacked(html)).toContain(button);
-    expect(stacked(html)).toContain(P.nextLabel);
-    expect(html.match(/ui-button--primary/g)).toHaveLength(2);
-    // Above the stacked lines the block sits outside its stage's line, so it names the stage; inside the line it does not.
-    expect(text(noTip(stacked(html)))).toContain(`${P.stageNames['in-processing']} · Question`);
-    expect(text(head)).not.toContain(`${P.stageNames['in-processing']} · Question`);
-  });
-
-  it('N1: below 52rem the stacked block names the stage first, so there the name is marked as the term with its (i) beside it in the same p', () => {
-    for (const [target, term] of [
-      [{ stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' }, TERM_STAGE_2],
-      [{ stage: 'post-processing', questionId: null, label: 'continue' }, TERM_STAGE_3],
-    ] as const) {
-      const html = render({}, target);
-      const block = stacked(html);
-      // In the block's one p: the name as the term, then lane 1's TermTip named by whatMeans, holding the vocabulary's sentence.
-      expect(block, term.id).toMatch(new RegExp(`<p class="stage-line__next">(?:(?!</p>).)*<span data-term="${term.id}">${term.term}</span><span class="ui-term-tip">`));
-      expect(block, term.id).toContain(`aria-label="${P.whatMeans(term.term).replace(/"/g, '&quot;')}"`);
-      expect(block, term.id).toContain(`data-definition="${term.id}">${term.definition}</span>`);
-      // What a reader sees, per width. Wide: the stacked block is display:none (ProjectPage.css), so outside it each stage
-      // term is marked once, its definition once, under its heading. Narrow: the block comes first and holds the
-      // continued stage's term with its sentence in the (i)'s closed popover; the head stop keeps its Definition.
-      const outside = html.replace(block, '');
-      for (const t of [TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3]) {
-        expect(outside.split(`data-definition="${t.id}"`), `${term.id} wide: ${t.id}`).toHaveLength(2);
-        expect(outside.split(`data-term="${t.id}"`), `${term.id} wide: ${t.id}`).toHaveLength(2);
-      }
-      expect(block.split('data-term=').length - 1, `${term.id} narrow: one term in the block`).toBe(1);
-      expect(block.split('data-definition=').length - 1, `${term.id} narrow: one definition in the block, in the tip`).toBe(1);
-      expect(block.indexOf('data-definition=')).toBeGreaterThan(block.indexOf('<span class="ui-term-tip">'));
-    }
-    // On the line, the head stop has no (i): its Definition stays.
-    const head = stop(lines(render({}, { stage: 'in-processing', questionId: 'in-processing-q16', label: 'continue' }))['in-processing'], 'head');
-    expect(head).not.toContain('ui-term-tip');
-  });
-
-  it('C11: "Start recording" for a first save; a null question links to the stage, with the sentence and no label; all decided says so', () => {
-    const start = stop(lines(render({}, { stage: 'pre-processing', questionId: 'pre-processing-q16', label: 'start' }))['pre-processing'], 'head');
-    expect(start).toContain(`href="/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q16">${P.start}</a>`);
-    const done = render({ counts: { 'post-processing': ALL_DECIDED } }, { stage: 'post-processing', questionId: null, label: 'continue' });
-    const head = stop(lines(done)['post-processing'], 'head');
-    expect(head).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing">${P.continue}</a>`);
-    expect(head).not.toContain(P.nextLabel);
-    expect(text(head)).toContain(P.allDecided);
-    expect(text(stop(lines(done)['post-processing'], 'last'))).toContain(P.allDecided);
-  });
-
-  it('C11 "last-saved": on a fully decided stage the target question is already decided, so the head stop says all are decided, not "Next question"; the button still goes to it', () => {
-    const html = render({ counts: { 'post-processing': ALL_DECIDED } }, { stage: 'post-processing', questionId: 'post-processing-q5', label: 'continue' });
-    for (const block of [stop(lines(html)['post-processing'], 'head'), stacked(html)]) {
-      expect(block).not.toContain(P.nextLabel);
-      expect(text(block)).toContain(P.allDecided);
-      expect(block).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/stages/post-processing/questions/post-processing-q5">${P.continue}</a>`);
+      const head = stop(l[s], 'head');
+      expect(head, s).toContain('<div class="stage-line__progress" data-stage-bar="">');
+      expect(text(head), s).toContain('15 of 24');
+      expect(head, s).toMatch(/<progress [^>]*max="24"[^>]*value="15"|<progress [^>]*value="15"[^>]*max="24"/);
+      expect(head, s).toContain('aria-valuetext="15 of 24 questions recorded"');
+      expect(head, s).toContain('aria-label="15 of 24 questions recorded"');
+      expect((head.match(/data-stage-bar/g) ?? []).length, `${s}: one bar`).toBe(1);
+      expect(head, s).toMatch(new RegExp(`<a (?=[^>]*class="stage-line__next-link")(?=[^>]*href="/orgs/o/projects/p1/stages/${s}/questions/${s}-q15")[^>]*>Next: Question 15 · Continue</a>`));
+      // The bar is in the head stop alone: no other stop, no percentage anywhere on the line.
+      expect(l[s].split('<progress').length - 1, s).toBe(1);
+      expect(l[s], s).not.toContain('%');
     }
   });
 
-  it('C11: no target (a Reviewer, a Viewer, an archived project) renders no primary action anywhere', () => {
-    for (const html of [render({ role: 'reviewer' }), render({ role: 'viewer' }), render({ archived: true })]) {
-      expect(html).not.toContain('ui-button--primary');
-      expect(html).not.toContain('next-step-block');
+  it('G4 (Task 11 ruling): N and M come from stageProgress, not byStatus: an answered gate counts as recorded, and a gate-removed question leaves M', () => {
+    // 24 questions, 2 removed by the gate, 5 with no decision: M = 22, N = 17, whatever byStatus holds.
+    const c: StageCounts = { ...COUNTS, noDecision: 5, notApplicableByGate: 2, byStatus: { done: 1, partly: 0, not_yet: 0, not_applicable: 0 } };
+    const head = stop(lines(render({ counts: { 'pre-processing': c } }))['pre-processing'], 'head');
+    expect(text(head)).toContain('17 of 22');
+    expect(head).toContain('aria-valuetext="17 of 22 questions recorded"');
+    // A finished stage reads M of M and has no next link.
+    const done = stop(lines(render({ counts: { 'post-processing': ALL_DECIDED } }))['post-processing'], 'head');
+    expect(text(done)).toContain('24 of 24');
+    expect(done).not.toContain('stage-line__next-link');
+  });
+
+  it('G4 O1: a role that cannot record (Viewer, Reviewer, or any role on an archived project) sees the same link as "Next: Question N · View"; no role sees a link it cannot use', () => {
+    for (const o of [{ role: 'viewer' as const }, { role: 'reviewer' as const }, { archived: true }]) {
+      const html = render(o);
+      expect(html, JSON.stringify(o)).toContain('Next: Question 15 · View</a>');
+      expect(html, JSON.stringify(o)).not.toContain('· Continue');
+      expect(html, JSON.stringify(o)).toContain('href="/orgs/o/projects/p1/stages/pre-processing/questions/pre-processing-q15"');
+    }
+    for (const role of ['owner', 'admin', 'assessor'] as const) {
+      const html = render({ role });
+      expect(html, role).toContain('Next: Question 15 · Continue</a>');
+      expect(html, role).not.toContain('· View');
+    }
+  });
+
+  it('G5: the page has exactly one primary button, Open the working report, and the G5 line is above the stages', () => {
+    for (const o of [{}, { role: 'viewer' as const }, { role: 'reviewer' as const }, { archived: true }]) {
+      const html = render(o);
+      expect(html.match(/ui-button--primary/g), JSON.stringify(o)).toHaveLength(1);
+      expect(html, JSON.stringify(o)).toContain(`<a class="ui-button ui-button--primary" href="/orgs/o/projects/p1/report">${P.overview.openReport}</a>`);
+      const line = html.indexOf(P.overview.whatYouGet);
+      expect(line, JSON.stringify(o)).toBeGreaterThan(-1);
+      expect(line).toBeLessThan(html.indexOf('<section class="stage-line"'));
+      // The primary and the line are in the page body, not the header, which has no actions wrapper (prj-components).
+      expect(html.indexOf(P.overview.openReport)).toBeGreaterThan(html.indexOf('</header>') === -1 ? html.indexOf('ui-page-header') : html.indexOf('</header>'));
+      expect(html).not.toContain('ui-page-header__actions');
+      // Neither start nor continue is a button any more.
       expect(html).not.toContain(P.continue);
       expect(html).not.toContain(P.start);
     }
+    expect(P.overview.whatYouGet).toBe('Answer the questions that apply. At any point you can open a working report: next steps by risk area, plus draft data card, model card and mitigation plan. About 5 minutes a question.');
+    expect(P.overview.openReport).toBe('Open the working report');
   });
+
+  it('G7 display: a stage with applies false reads "Doesn\'t apply to this project yet" and still links to the stage', () => {
+    const d = { ...data(), applies: { 'pre-processing': true, 'in-processing': false, 'post-processing': true } };
+    const html = renderToStaticMarkup(<ProjectPage data={d} routes={routesOf(d)} continueTo={null} />);
+    const l = lines(html);
+    expect(l['in-processing']).toContain('Doesn&#x27;t apply to this project yet');
+    expect(l['in-processing']).toContain('href="/orgs/o/projects/p1/stages/in-processing"');
+    expect(text(l['pre-processing'])).not.toContain('apply to this project yet');
+    expect(text(l['post-processing'])).not.toContain('apply to this project yet');
+    // No answers recorded for it: the empty bar is not shown for a stage that does not apply.
+    const gone = renderToStaticMarkup(<ProjectPage data={{ ...d, counts: { ...d.counts, 'in-processing': ZERO } }} routes={routesOf({ ...d, counts: { ...d.counts, 'in-processing': ZERO } })} continueTo={null} />);
+    expect(lines(gone)['in-processing']).not.toContain('<progress');
+    // Answers already given are never hidden: with some recorded, the bar shows too.
+    expect(l['in-processing']).toContain('<progress');
+    // Absent applies means every stage applies.
+    expect(text(render())).not.toContain('apply to this project yet');
+  });
+
 
   it('All questions in this stage, on every line, links to the stage page and is described by the stage\'s heading', () => {
     const html = render();
@@ -543,10 +533,10 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(vrow).not.toMatch(/Download records|Edit project details|Archive project/);
   });
 
-  it('archived: the banner, no primary, no Archive trigger (its slot stays), no Edit, no Open a stage review; the lines still read', () => {
+  it('archived: the banner, no Archive trigger (its slot stays), no Edit, no Open a stage review; the lines still read', () => {
     const html = render({ archived: true }, null);
     expect(text(html)).toContain(P.archivedBanner);
-    expect(html).not.toMatch(/Archive project|Edit project details|ui-button--primary/);
+    expect(html).not.toMatch(/Archive project|Edit project details/);
     expect(html).toContain('<div class="project-actions__archive"></div>');
     expect(html).not.toContain(REVIEW_COPY.mounted.openReview);
     expect(html.match(/<section class="stage-line"/g)).toHaveLength(3);

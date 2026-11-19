@@ -35,6 +35,9 @@ async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' 
 
 const projectPage = (id: string) => `/orgs/${fx.org.slug}/projects/${id}`;
 const primary = (page: Page, name: string) => page.getByRole('link', { name, exact: true });
+/** A stage's own link to its first question with no decision (G4): "Next: Question N · Continue", or "· View" for a role that cannot record. */
+const nextLink = (page: Page, stage: string, label: 'Continue' | 'View') => page.locator(`#${stage}`).getByRole('link', { name: new RegExp(`^Next: Question \\d+ · ${label}$`) });
+const REPORT = PROJECT_COPY.overview.openReport;
 const PP_FIRST = questionsInStage(runningContent(), 'pre-processing')[0].id;
 const IP = questionsInStage(runningContent(), 'in-processing').map((q) => q.id);
 
@@ -50,17 +53,19 @@ test.afterAll(async () => {
   await Promise.all(contexts.map((c) => c.close()));
 });
 
-test('C11: an assessor on a fresh project sees Start recording, which opens the first question of Pre-processing', async ({ browser }) => {
+test('C11 G5: an assessor on a fresh project sees the stage link Next: Question 1 · Continue, which opens the first question of Pre-processing', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(projectPage(project.id));
-  await expect(primary(page, PROJECT_COPY.continue)).toHaveCount(0);
-  await primary(page, PROJECT_COPY.start).click();
+  // G5 (supersedes C3): the one primary is the working report; recording starts from the stage's own link.
+  await expect(page.locator('main .ui-button--primary')).toHaveText(REPORT);
+  await expect(page.getByText(PROJECT_COPY.start)).toHaveCount(0);
+  await nextLink(page, 'pre-processing', 'Continue').click();
   await page.waitForURL(`**/stages/pre-processing/questions/${PP_FIRST}`);
   // The question page's heading is the question in words; its code is the line under it (the frame of slice 1).
   await expect(page.locator('.question-frame__code')).toContainText(PP_FIRST);
 });
 
-test('C11: after a saved decision, Continue recording opens the next question with no decision, the one Home names', async ({ browser }) => {
+test('C11 G5: after a saved decision, the in-processing stage link opens its first question with no decision', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   const res = await page.context().request.post(`/api/v1/orgs/${fx.org.slug}/projects/${project.id}/decisions`, {
     headers: { origin: new URL(page.url()).origin },
@@ -71,40 +76,45 @@ test('C11: after a saved decision, Continue recording opens the next question wi
     },
   });
   if (!res.ok()) throw new Error(`seeding ${IP[1]} answered ${res.status()}: ${await res.text()}`);
-  await page.goto(`/orgs/${fx.org.slug}/dashboard`);
-  const homeCode = (await page.locator('.home-next__code').textContent())?.trim() ?? '';
-  expect(homeCode).toBe(IP[2]);
+  // G5 supersedes C3: the stage's link goes to its FIRST question with no decision (the first of the stage, here), where Home's card
+  // still names the one after the last save; the two are different questions on purpose, and Home's card is unchanged.
   await page.goto(projectPage(project.id));
-  await expect(primary(page, PROJECT_COPY.start)).toHaveCount(0);
-  await primary(page, PROJECT_COPY.continue).click();
-  await page.waitForURL(`**/stages/in-processing/questions/${homeCode}`);
-  await expect(page.locator('.question-frame__code')).toContainText(homeCode);
+  await expect(page.locator('main .ui-button--primary')).toHaveText(REPORT);
+  await expect(nextLink(page, 'in-processing', 'Continue')).toHaveText('Next: Question 1 · Continue');
+  await nextLink(page, 'in-processing', 'Continue').click();
+  await page.waitForURL(`**/stages/in-processing/questions/${IP[0]}`);
+  await expect(page.locator('.question-frame__code')).toContainText(IP[0]);
 });
 
 for (const role of ['reviewer', 'viewer'] as const) {
-  test(`C11: a ${role} sees neither Start recording nor Continue recording`, async ({ browser }) => {
+  test(`C11 O1: a ${role} sees the stage links as Next: Question N · View, never Continue, and the report as the one primary`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members[role]);
     await page.goto(projectPage(project.id));
     await expect(page.locator('nav.project-actions').getByRole('link', { name: PROJECT_COPY.findings, exact: true })).toBeVisible();   // the page rendered, the role's own row
     await expect(page.getByText(PROJECT_COPY.start)).toHaveCount(0);
     await expect(page.getByText(PROJECT_COPY.continue)).toHaveCount(0);
+    await expect(page.getByText(/· Continue$/)).toHaveCount(0);
+    await expect(nextLink(page, 'pre-processing', 'View')).toHaveCount(1);
+    await expect(page.locator('main .ui-button--primary')).toHaveText(REPORT);
   });
 }
 
-test('C11: an archived project shows neither label, to its owner', async ({ browser }) => {
+test('C11 O1: an archived project shows View links and no Continue, to its owner', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.owner);
   await page.goto(projectPage(archived.id));
   await expect(page.getByText(PROJECT_COPY.archivedBanner)).toBeVisible();
   await expect(page.getByText(PROJECT_COPY.start)).toHaveCount(0);
   await expect(page.getByText(PROJECT_COPY.continue)).toHaveCount(0);
+  await expect(page.getByText(/· Continue$/)).toHaveCount(0);
+  await expect(nextLink(page, 'pre-processing', 'View')).toHaveCount(1);
 });
 
 for (const width of [1280, 375, 320]) {
-  test(`NFR-A11Y-05 UX-32: the project page with the primary action at ${width}px: no serious violation, no horizontal scroll`, async ({ browser }) => {
+  test(`NFR-A11Y-05 UX-32: the project page with the report primary and the stage bars at ${width}px: no serious violation, no horizontal scroll`, async ({ browser }) => {
     const page = await signedIn(browser, fx.members.owner);
     await page.setViewportSize({ width, height: 900 });
     await page.goto(projectPage(project.id));
-    await expect(primary(page, PROJECT_COPY.start)).toBeVisible();
+    await expect(primary(page, REPORT)).toBeVisible();
     await expectNoSeriousA11yViolations(page, `Project page primary ${width}`);
     await expectNoHorizontalScroll(page);
   });

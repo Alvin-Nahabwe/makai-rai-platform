@@ -133,7 +133,12 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
-  { name: PROJECT_COPY.start, action: 'decision:write', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.start, exact: true }) },
+  // G5 (supersedes C3): the one primary is the working report, which every role may open; recording starts from each stage's own link,
+  // "Next: Question N · Continue" for a role that may record and "· View" (same target, read only) for the rest (ruling O1). The fixture
+  // project is fresh, so each stage has a question with no decision and every role sees exactly one link of the pair per stage.
+  { name: PROJECT_COPY.overview.openReport, action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.openReport, exact: true }) },
+  { name: ' · Continue', action: 'decision:write', mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: /^Next: Question \d+ · Continue$/ }) },
+  { name: 'Next: Question', action: null, mode: 'presence', locator: (p) => p.locator('[data-stage="pre-processing"]').getByRole('link', { name: /^Next: Question \d+ · (Continue|View)$/ }) },
   { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
   { name: PROJECT_COPY.overview.downloadRecords, action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: PROJECT_COPY.overview.downloadRecords }) },
   { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },

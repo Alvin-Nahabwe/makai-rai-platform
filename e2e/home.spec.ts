@@ -135,11 +135,14 @@ test('spec 9.1, M13: a new organisation shows the first visit: Create a project 
   const owner = await signedIn(browser, fresh.members.owner);
   await owner.goto(homeOf(fresh));
   await expect(owner.getByText(HOME_COPY.firstTimeLead)).toBeVisible();
+  // G5: what a person gets, said before they have a project.
+  await expect(owner.getByText(HOME_COPY.whatYouGet, { exact: true })).toBeVisible();
   await owner.getByRole('link', { name: HOME_COPY.firstTimeCreate }).click();
   await owner.waitForURL(`**/orgs/${fresh.org.slug}/projects/new`);
   const viewer = await signedIn(browser, fresh.members.viewer);
   await viewer.goto(homeOf(fresh));
   await expect(viewer.getByText(HOME_COPY.firstTimeAsk)).toBeVisible();
+  await expect(viewer.getByText(HOME_COPY.whatYouGet, { exact: true })).toBeVisible();
   await expect(viewer.getByRole('link', { name: HOME_COPY.firstTimeCreate })).toHaveCount(0);
 });
 

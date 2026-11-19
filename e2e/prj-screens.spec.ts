@@ -744,6 +744,19 @@ test('FR-RM-04 UX-06 UX-07: each stage count on S-10 and S-08 is a whole number 
     await expectCountsAsWholeNumbersPerStage(page, sentinels, own);
     await expectStatusMarksInk(page);
   }
+  // Re-expressed to the amended rule (owner, 19 Nov 2026: "Allow progress display"): S-10 may draw one bar per stage and only inside
+  // an element carrying data-stage-bar, with its count in words ("N of M questions recorded"); no percentage, and no bar or total
+  // across the three stages. Home still draws none.
+  await page.goto(s10);
+  expect(await page.locator('main progress').count(), 'three bars, one per stage').toBe(3);
+  expect(await page.locator('main progress:not([data-stage-bar] progress)').count(), 'every bar is inside data-stage-bar').toBe(0);
+  expect(await page.locator('main [data-stage-bar]').count()).toBe(3);
+  for (const stage of ['pre-processing', 'in-processing', 'post-processing']) {
+    await expect(page.locator(`#${stage} [data-stage-bar] progress`)).toHaveAttribute('aria-valuetext', /^\d+ of \d+ questions recorded$/);
+  }
+  expect(await page.locator('main').first().innerText(), 'no percentage in S-10').not.toMatch(/\d\s?%/);
+  await page.goto(`/orgs/${sentinelOrg.org.slug}/dashboard`);
+  expect(await page.locator('main progress, main [data-stage-bar]').count(), 'Home draws no bar').toBe(0);
   // Only the name is left out: the three counts added up and written into S-10 beside it are still found. Hydration can
   // land after load and drop an element React did not render, so the element is written again until the check has read it.
   await page.goto(s10);

@@ -320,55 +320,81 @@
   margin-block-start: var(--space-1);
 }
 
-/* The next step (owner's ruling on C3): "Next question" in orange bold and the question in words (at most two lines, R7),
-   its place in the stage under them, then the primary action. It sits in the target line's head stop when the lines are
-   side by side, and once above them when they are stacked; the other copy is display: none, so exactly one primary is in
-   the accessibility tree at any width. */
-.next-step-block--line {
-  display: none;
-  order: 5;
+/* G4: each stage's count in words with its bar under it, then the link to its next question, in the head stop after the
+   definition. The bar is a native <progress> in the page's own tokens (a track in the container border, the fill in the
+   route's ink: orange stays on the one primary action); forced colours keep a system track and fill. */
+.stage-line__progress,
+.stage-line__not-applicable,
+.stage-line__next-row {
+  order: 4;
   flex-basis: 100%;
   margin-block-start: var(--space-2);
 }
 
-.next-step-block--stacked {
-  margin-block-end: var(--space-5);
-}
-.stage-line__next {
-  line-height: 1.45;
-}
-
-.stage-line__next-words {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-
-.stage-line__next-label {
-  margin-inline-end: var(--space-1);
-  color: var(--color-action-text);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-}
-
-.stage-line__position {
-  display: block;
+.stage-line__not-applicable {
   font-size: var(--font-size-small);
   color: var(--color-ink-muted);
 }
 
-/* The stage name's (i) in the stacked next step sits on the text's middle, not 4.5 px above it (design review N1). */
-.next-step-block--stacked .ui-term-tip {
-  vertical-align: middle;
+.stage-line__progress-words {
+  font-size: var(--font-size-small);
+  color: var(--color-ink);
 }
 
-.stage-line__primary {
-  margin-block-start: var(--space-2);
+.stage-line__bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 0.5rem;
+  margin-block-start: var(--space-1);
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background-color: var(--color-border-container);
+  accent-color: var(--color-mark);
 }
 
-.stage-line__primary .ui-button--primary {
+.stage-line__bar::-webkit-progress-bar {
+  background-color: var(--color-border-container);
+}
+
+.stage-line__bar::-webkit-progress-value {
+  background-color: var(--color-mark);
+}
+
+.stage-line__bar::-moz-progress-bar {
+  background-color: var(--color-mark);
+}
+
+@media (forced-colors: active) {
+  .stage-line__bar {
+    appearance: auto;
+  }
+}
+
+.stage-line__next-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+/* G5: the line that says what a person gets, then the one primary action, above the stages. */
+.project-page__gets {
+  margin-block: 0 var(--space-5);
+  max-inline-size: 48rem;
+}
+
+.project-page__gets-line {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.project-page__primary {
+  margin: var(--space-3) 0 0;
+}
+
+.project-page__primary .ui-button--primary {
   min-block-size: 48px;
   padding-inline: var(--space-6);
 }
@@ -401,13 +427,8 @@
     grid-template-rows: subgrid;
   }
 
-  .stage-list__jump,
-  .next-step-block--stacked {
+  .stage-list__jump {
     display: none;
-  }
-
-  .next-step-block--line {
-    display: block;
   }
 }
 

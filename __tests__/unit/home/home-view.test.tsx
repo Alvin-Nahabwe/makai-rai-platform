@@ -320,6 +320,15 @@ describe('reviewer, viewer, first visit (spec 9.1, review M13, T9.5)', () => {
     expect(textOf(home(firstTime('owner', true)))).not.toMatch(/Assigned to you|Since your last|Still open/);
   });
 
+  it('G5: the first visit says what you get, for a role that can create and for one that cannot; the line is the project page\'s', () => {
+    for (const [role, canCreate] of [['owner', true], ['viewer', false]] as const) {
+      const html = textOf(home(firstTime(role, canCreate)));
+      expect(html).toContain(HOME_COPY.whatYouGet);
+      expect(html.indexOf(HOME_COPY.whatYouGet)).toBeGreaterThan(html.indexOf(TERM_PRODUCT.definition));
+    }
+    expect(HOME_COPY.whatYouGet).toBe('Answer the questions that apply. At any point you can open a working report: next steps by risk area, plus draft data card, model card and mitigation plan. About 5 minutes a question.');
+  });
+
   it('an organisation with only archived projects is told where they are, not that it has none (B#31)', () => {
     const h = home(firstTime('owner', true, { archivedCount: 2 }));
     expect(textOf(h)).toContain(HOME_COPY.noActiveProjects);

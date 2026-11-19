@@ -2,7 +2,7 @@ import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage, type StoredDecisionStatus } from '@/types/record';
 import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
 import { descriptiveLine } from '@/lib/projects/metadataValues';
-import { projectActions, type ProjectActions } from '@/lib/projects/can';
+import { projectActions, projectCanRecord, type ProjectActions } from '@/lib/projects/can';
 import { listStageReviews } from '@/lib/data/reviews';
 import { ConflictError } from '@/lib/http/errors';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
@@ -198,6 +198,8 @@ export type ProjectOverviewData = {
   counts: Record<Stage, StageCounts>;
   /** Which stages apply at the project's development stage (G7). Absent means every stage applies; answers in a stage that does not apply still count. */
   applies?: Record<Stage, boolean>;
+  /** Whether the person may record decisions here (decision:write, project not archived): the next link in each stage reads Continue, or View. Absent means they may. */
+  canRecord?: boolean;
   followUp: StageFollowUps;
   reviews: Record<Stage, StageReviewView[]>;
   can: ProjectActions;
@@ -241,7 +243,7 @@ export async function loadProjectOverview(
   const reach = stagesThatApply(opts.content ?? runningContent(), found.project.metadata?.developmentStage ?? null);
   const applies = Object.fromEntries(STAGES.map((s) => [s, reach.has(s)])) as Record<Stage, boolean>;
   return {
-    orgSlug: opts.orgSlug, orgName: found.org.name, applies,
+    orgSlug: opts.orgSlug, orgName: found.org.name, applies, canRecord: projectCanRecord(ctx.role, archived),
     project: { id: found.project.id, name: found.project.name, descriptiveLine: descriptiveLine(found.project.metadata), archived },
     counts, followUp, reviews: reviewsByStage, can: projectActions(ctx.role, archived),
   };

@@ -44,6 +44,14 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
     });
   });
 
+  it('the project page progress, the report link and the what-you-get line hold no claim (Task 12)', () => {
+    const O = PROJECT_COPY.overview;
+    assertNoClaims('project page progress copy', {
+      whatYouGet: O.whatYouGet, openReport: O.openReport, progressName: O.progressName(15, 24),
+      nextContinue: O.nextQuestion(16, true), nextView: O.nextQuestion(16, false), doesNotApply: O.doesNotApply,
+    });
+  });
+
   it('the draft line prints the platform zone, as the design fixes it', () => {
     expect(draftLine('2026-11-19T14:05:09.000Z')).toBe('Draft · from answers as of 19 Nov 2026, 17:05 EAT');
   });

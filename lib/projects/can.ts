@@ -4,6 +4,11 @@ import { can } from '@/lib/authz/policy';
 /** What a member may do on S-10 for one project, by role and archived state (FR-PRJ-03, UX-29, UX-31). */
 export type ProjectActions = { update: boolean; archive: boolean; archiveControl: boolean; export: boolean; openReview: boolean };
 
+/** Whether the role may record decisions in this project (G4's "Continue" against "View"): `decision:write`, and not on an archived project. */
+export function projectCanRecord(role: OrgRole, archived: boolean): boolean {
+  return can(role, 'decision:write') && !archived;
+}
+
 /**
  * `archiveControl` is the role alone: the control stays mounted after an archive, so its status line survives the
  * refresh that follows; the control itself hides its button once the project is archived. Everything else is off for an

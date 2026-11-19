@@ -117,6 +117,16 @@ export const PROJECT_COPY = Object.freeze({
     anyOrder: 'You can work on the stages in any order.',
     downloadRecords: 'Download records',
     jumpTo: 'Jump to a stage',
+    /** G5 (owner-approved 19 Nov 2026; wording to be checked with the content approver): said at the top of the project page and on Home. */
+    whatYouGet: 'Answer the questions that apply. At any point you can open a working report: next steps by risk area, plus draft data card, model card and mitigation plan. About 5 minutes a question.',
+    /** G5: the project page's one primary action. */
+    openReport: 'Open the working report',
+    /** G4: "N of M questions recorded", the words beside each stage's bar and the bar's accessible name and value text. */
+    progressName: (n: number, m: number): string => `${n} of ${m} questions recorded`,
+    /** G4: the link to the stage's first question with no decision; "View" for a role that cannot record (the same target, read only). */
+    nextQuestion: (n: number, canRecord: boolean): string => `Next: Question ${n} · ${canRecord ? 'Continue' : 'View'}`,
+    /** G7: a stage the project's development stage leaves out. It stays openable. */
+    doesNotApply: "Doesn't apply to this project yet",
     shareLine: 'To share your record outside the team, seal a stage review and create a document from it.',
   }),
   /** Every page of an archived project (coordinator Q5 (a): no link, the banner's props stay as they are). */
