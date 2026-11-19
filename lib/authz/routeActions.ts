@@ -56,6 +56,7 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': { POST: 'document:generate' },
   'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts': { GET: 'record:read' },
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts': { GET: 'record:read' },
+  'app/api/v1/orgs/[slug]/projects/[id]/working-report/route.ts': { GET: 'record:read' },
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': { POST: 'document:withdraw' },
   'app/api/v1/orgs/[slug]/export/route.ts': { GET: 'team:export' },
   'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { POST: 'project:archive' },

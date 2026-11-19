@@ -289,6 +289,7 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   } satisfies Omit<IssueDocumentRequest, 'requestId'>) } },
   [`${ORG}documents/[documentId]/pdf/route.ts`]: { GET: {} },
   [`${ORG}documents/[documentId]/text/route.ts`]: { GET: {} },
+  [`${P}working-report/route.ts`]: { GET: {} },
   [`${ORG}documents/[documentId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.' } satisfies Omit<WithdrawDocumentRequest, 'requestId'>) } },
   [`${ORG}export/route.ts`]: { GET: {} },
   // Rows 21 to 29 (owner answer A1: keyed once MEM or PRJ moves the method to RETRY_KEYED_WRITES).
