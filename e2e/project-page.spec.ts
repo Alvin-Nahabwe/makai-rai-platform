@@ -130,7 +130,9 @@ for (const [width, height] of [[1280, 800], [1440, 900], [375, 812]] as const) {
     for (const s of STAGES) {
       const bar = page.locator(`#${s} [data-stage-bar] progress`);
       await expect(bar).toHaveCount(1);
-      await expect(bar).toHaveAttribute('aria-label', /^\d+ of \d+ questions recorded$/);
+      // M4: named by the visible words (aria-labelledby), so the sentence is announced once, not twice.
+      await expect(bar).toHaveAccessibleName(/^\d+ of \d+ questions recorded$/);
+      await expect(bar).not.toHaveAttribute('aria-label');
       await expect(page.locator(`#${s}`).getByRole('link', { name: /^Next: Question \d+ · Continue$/ })).toHaveCount(1);
     }
   });

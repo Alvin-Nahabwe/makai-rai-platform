@@ -9,6 +9,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { UI_COPY } from '@/lib/ui/copy';
 import { tallyOf } from '@/lib/ui/marks';
+import { continueTarget } from '@/lib/home/nextStep';
 import {
   TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_DONE, TERM_FINDING, TERM_MITIGATION, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY,
   TERM_SEAL, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3, TERM_STAGE_REVIEW,
@@ -324,12 +325,38 @@ describe('S-10 as three lines of stops (Route R5)', () => {
       expect(text(head), s).toContain('15 of 24');
       expect(head, s).toMatch(/<progress [^>]*max="24"[^>]*value="15"|<progress [^>]*value="15"[^>]*max="24"/);
       expect(head, s).toContain('aria-valuetext="15 of 24 questions recorded"');
-      expect(head, s).toContain('aria-label="15 of 24 questions recorded"');
+      // M4: one announcement. The visible words name the bar (aria-labelledby), so the sentence is not repeated in an aria-label.
+      expect(head, s).not.toContain('aria-label="15 of 24');
+      const words = /<p class="stage-line__progress-words" id="([^"]+)">15 of 24 questions recorded<\/p>/.exec(head);
+      expect(words, `${s}: the visible words carry an id`).not.toBeNull();
+      expect(head, s).toContain(`aria-labelledby="${words?.[1]}"`);
       expect((head.match(/data-stage-bar/g) ?? []).length, `${s}: one bar`).toBe(1);
       expect(head, s).toMatch(new RegExp(`<a (?=[^>]*class="stage-line__next-link")(?=[^>]*href="/orgs/o/projects/p1/stages/${s}/questions/${s}-q15")[^>]*>Next: Question 15 · Continue</a>`));
       // The bar is in the head stop alone: no other stop, no percentage anywhere on the line.
       expect(l[s].split('<progress').length - 1, s).toBe(1);
       expect(l[s], s).not.toContain('%');
+    }
+  });
+
+  it('G4 I1 (controller ruling): in the stage holding Home\'s continue target, the link names that question, numbered by its place in the stage; every other stage keeps its first open question', () => {
+    // The last save is question 19 of in-processing; q15..q24 are open, so Home's rule (continueTarget, the one Home reads) names q20, not the first open q15.
+    const d = data();
+    const routes = routesOf(d);
+    const stages = Object.fromEntries(STAGES.map((s) => [s, {
+      questions: routes[s].stops.map((st) => ({ id: st.id, text: st.title })), open: new Set(routes[s].noDecision.map((q) => q.id)),
+    }])) as unknown as Parameters<typeof continueTarget>[0];
+    const home = continueTarget(stages, { stage: 'in-processing', questionId: 'in-processing-q19' });
+    expect(home).toEqual({ stage: 'in-processing', questionId: 'in-processing-q20', label: 'continue' });
+    const l = lines(render({}, home));
+    const ip = stop(l['in-processing'], 'head');
+    expect(ip).toMatch(/<a (?=[^>]*class="stage-line__next-link")(?=[^>]*href="\/orgs\/o\/projects\/p1\/stages\/in-processing\/questions\/in-processing-q20")[^>]*>Next: Question 20 · Continue<\/a>/);
+    for (const s of ['pre-processing', 'post-processing'] as const) {
+      expect(stop(l[s], 'head'), s).toContain(`${s}-q15"`);
+      expect(stop(l[s], 'head'), s).toContain('Next: Question 15 · Continue');
+    }
+    // A target that is not an open question of its stage, or with no question, leaves the first open question.
+    for (const t of [{ stage: 'in-processing' as const, questionId: null, label: 'continue' as const }, { stage: 'in-processing' as const, questionId: 'in-processing-q3', label: 'continue' as const }]) {
+      expect(stop(lines(render({}, t))['in-processing'], 'head'), JSON.stringify(t)).toContain('Next: Question 15 · Continue');
     }
   });
 

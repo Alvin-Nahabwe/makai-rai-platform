@@ -27,10 +27,14 @@ const P = PROJECT_COPY;
  * next question; each stage's own "Next: Question N" link does). A synchronous view of loaded data (the page file loads it), so it renders the same on the server
  * and in a test; ArchiveProjectControl is its only client island of its own.
  */
-export function ProjectPage({ data, routes, children }: {
+export function ProjectPage({ data, routes, continueTo, children }: {
   data: ProjectOverviewData;
   routes: ProjectRoutes;
-  /** No longer read: G5 replaced the continue primary with the working report's. Optional so existing callers compile. */
+  /**
+   * Home's continue target for this person (`loadContinueTarget`; null or absent: none). In the stage it names, that stage's
+   * "Next: Question N" link points at the target's question, so the page and Home name the same question (I1); other stages
+   * keep their first open question. No primary action reads it (G5).
+   */
   continueTo?: ContinueTarget | null;
   children?: ReactNode;
 }): ReactElement {
@@ -70,6 +74,7 @@ export function ProjectPage({ data, routes, children }: {
             <StageLine
               key={s} stage={s} base={base} counts={data.counts[s]} route={routes[s]} followUp={data.followUp[s]} reviews={data.reviews[s]}
               canOpenReview={can.openReview} uses={uses} applies={data.applies?.[s] ?? true} canRecord={data.canRecord ?? true}
+              continueId={continueTo?.stage === s ? continueTo.questionId : null}
             />
           ))}
         </div>

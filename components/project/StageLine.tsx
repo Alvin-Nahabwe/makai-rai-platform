@@ -51,14 +51,16 @@ export type StageLineProps = {
   applies: boolean;
   /** Whether the person may record here: the next link reads "Continue", else "View" (same target, read only). */
   canRecord: boolean;
+  /** I1: the question Home names as the next step (loadContinueTarget), when it is in this stage; the next link points at it instead of the first open question. */
+  continueId?: string | null;
 };
 
 /**
  * One stage of S-10 as a vertical line of stops (Route R5; spec 9.2; the sketch `surfaces/project.png`): exactly five
- * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage (with the next step and the
- * page's primary action on the line the page continues), what is still open, what is recorded so far, its reviews, and the
+ * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage (with its progress bar and
+ * the link to its next question), what is still open, what is recorded so far, its reviews, and the
  * last stop with what is left and the link to the stage's questions. Counts are
- * words and numerals of this stage alone; no percentage, bar or total across stages (FR-RM-04).
+ * words and numerals of this stage alone; one bar per stage in words ("N of M"), never a percentage or a total across stages (FR-RM-04).
  *
  * Where a defined term is first used is decided by components/project/firstUse.ts, which mirrors the order and the words
  * of these stops: when a stop's words change here, update firstUse.ts with them.
@@ -274,17 +276,20 @@ function BeforeSealing({ counts: c, base, stage }: { counts: StageCounts; base: 
 function Progress(p: StageLineProps): ReactElement | null {
   const { recorded, recordable } = stageProgress(p.counts);
   const hidden = !p.applies && recorded === 0;
-  const first = p.route.noDecision[0];
+  // The first open question, unless Home's continue target is an open question of this stage: then that one, so the page and Home name one question.
+  const open = p.route.noDecision;
+  const first = open.find((q) => q.id === p.continueId) ?? open[0];
   const at = first === undefined ? -1 : p.route.stops.findIndex((s) => s.id === first.id);
+  const wordsId = `${p.stage}-progress`;
   const name = P.overview.progressName(recorded, recordable);
   return (
     <>
       {p.applies ? null : <p className="stage-line__not-applicable">{P.overview.doesNotApply}</p>}
       {hidden ? null : (
         <div className="stage-line__progress" data-stage-bar="">
-          <p className="stage-line__progress-words">{name}</p>
+          <p className="stage-line__progress-words" id={wordsId}>{name}</p>
           {/* max is at least 1 (a stage with no question left to record has nothing to fill). */}
-          <progress className="stage-line__bar" max={Math.max(recordable, 1)} value={recorded} aria-label={name} aria-valuetext={name} />
+          <progress className="stage-line__bar" max={Math.max(recordable, 1)} value={recorded} aria-labelledby={wordsId} aria-valuetext={name} />
         </div>
       )}
       {first !== undefined && p.applies ? (

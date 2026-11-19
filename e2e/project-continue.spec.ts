@@ -65,7 +65,7 @@ test('C11 G5: an assessor on a fresh project sees the stage link Next: Question 
   await expect(page.locator('.question-frame__code')).toContainText(PP_FIRST);
 });
 
-test('C11 G5: after a saved decision, the in-processing stage link opens its first question with no decision', async ({ browser }) => {
+test('C11 G5 I1: after a saved decision, the in-processing stage link opens the question Home names', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   const res = await page.context().request.post(`/api/v1/orgs/${fx.org.slug}/projects/${project.id}/decisions`, {
     headers: { origin: new URL(page.url()).origin },
@@ -76,14 +76,18 @@ test('C11 G5: after a saved decision, the in-processing stage link opens its fir
     },
   });
   if (!res.ok()) throw new Error(`seeding ${IP[1]} answered ${res.status()}: ${await res.text()}`);
-  // G5 supersedes C3: the stage's link goes to its FIRST question with no decision (the first of the stage, here), where Home's card
-  // still names the one after the last save; the two are different questions on purpose, and Home's card is unchanged.
+  // I1 (controller ruling): in the stage that holds Home's continue target, the stage link names that question, the one Home names.
+  await page.goto(`/orgs/${fx.org.slug}/dashboard`);
+  const homeCode = (await page.locator('.home-next__code').textContent())?.trim() ?? '';
+  expect(homeCode).toBe(IP[2]);
   await page.goto(projectPage(project.id));
   await expect(page.locator('main .ui-button--primary')).toHaveText(REPORT);
-  await expect(nextLink(page, 'in-processing', 'Continue')).toHaveText('Next: Question 1 · Continue');
+  await expect(nextLink(page, 'in-processing', 'Continue')).toHaveText(`Next: Question ${IP.indexOf(homeCode) + 1} · Continue`);
+  // Another stage keeps its first open question.
+  await expect(nextLink(page, 'pre-processing', 'Continue')).toHaveAttribute('href', new RegExp(`/questions/${PP_FIRST}$`));
   await nextLink(page, 'in-processing', 'Continue').click();
-  await page.waitForURL(`**/stages/in-processing/questions/${IP[0]}`);
-  await expect(page.locator('.question-frame__code')).toContainText(IP[0]);
+  await page.waitForURL(`**/stages/in-processing/questions/${homeCode}`);
+  await expect(page.locator('.question-frame__code')).toContainText(homeCode);
 });
 
 for (const role of ['reviewer', 'viewer'] as const) {

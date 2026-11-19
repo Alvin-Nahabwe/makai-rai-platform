@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { loadProjectOverview } from '@/lib/data/projects';
+import { loadContinueTarget } from '@/lib/home/load';
 import { eatDate } from '@/lib/followup/overdue';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { orNotFound } from '@/lib/auth/titleGate';
@@ -26,9 +27,13 @@ const load = cache(async (slug: string, id: string) => {
   const data = await loadProjectOverview(ctx, { orgSlug: slug, projectId: id, today: eatDate(new Date()) });
   if (data === null) notFound();
   // Only after the project is known visible, under the same `ctx`: each stage's marks and questions with no decision (one
-  // tenant-scoped read per stage). The page's one primary action is the working report's (G5), so no continue target is read.
-  const routes = await loadProjectRoutes(ctx, { orgSlug: slug, projectId: data.project.id });
-  return { data, routes, userId: identity.userId };
+  // tenant-scoped read per stage), and Home's continue target for the signed-in person, so the stage holding it links to the
+  // question Home names (I1). The page's one primary action is the working report's (G5), not the continue target.
+  const [continueTo, routes] = await Promise.all([
+    loadContinueTarget(ctx, identity.userId, { id: data.project.id, archived: data.project.archived }),
+    loadProjectRoutes(ctx, { orgSlug: slug, projectId: data.project.id }),
+  ]);
+  return { data, continueTo, routes, userId: identity.userId };
 });
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -43,9 +48,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { slug, id } = await params;
-  const { data, routes, userId } = await load(slug, id);
+  const { data, continueTo, routes, userId } = await load(slug, id);
   return (
-    <ProjectPage data={data} routes={routes}>
+    <ProjectPage data={data} routes={routes} continueTo={continueTo}>
       <RememberProject userId={userId} orgSlug={slug} projectId={data.project.id} />
     </ProjectPage>
   );
