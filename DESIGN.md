@@ -83,7 +83,7 @@ The platform records decisions a team makes about one AI system. The design has 
 
 - **Operate mode.** Almost every screen is a task: record a decision, read a finding, open a review. Scanning, consistency and plain words come before expression.
 - **The Route.** A project has three stages. A stage is a line of questions, each a mark. The person's position is "You are here". The words stay plain: the interface says "question" and "stage", not "stop" or "line" (spec principle 4; `route-target-decisions.md`, R1).
-- **No score.** There is no percentage, bar, fill or total across stages. Status is a shape and a word, in ink. Tallies are written in words beside the marks.
+- **No score.** There is no score, percentage or total across stages. The one bar allowed is a per-stage bar of "N of M questions recorded" on S-10, marked `data-stage-bar`, with the count in words beside it (owner, 19 November 2026: "Allow progress display"). Status is a shape and a word, in ink. Tallies are written in words beside the marks.
 - **One orange.** The action orange fills the one primary button of a view. Orange text appears on white and on the page ground as `--color-action-text`, and once on navy as the peach `--color-on-shell-accent` (ADR 0022).
 - **Both themes.** Light is the default. Dark is applied by the operating system's preference or by the theme switch, and the two dark blocks in `app/globals.css` hold identical values (`__tests__/unit/design-tokens.test.ts` checks it).
 
@@ -351,11 +351,13 @@ S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (
 
 **Owner ruling of 15 November 2026, 20:50** (`progress.md`, line "20:50 OWNER RULED"): S-10 has no row of marks. Its tally is in words with marks, as sketched. Its mitigations are the overdue ones as plates, plus one line "{n} other open mitigations" linking to Findings. This departs from SRS FR-FUP-01 and FR-FUP-05.
 
+**Owner ruling of 19 November 2026** ("Allow progress display", design section 5 of `Claude outputs/2026-11-19-path-to-outputs-design.md`; it reverses the no-progress rule of this section): S-10 may show one bar per stage, "N of M questions recorded", with the count in words beside it. The bar is a `<progress>` or a proportional fill inside an element carrying `data-stage-bar`, on the project page only. There is still no score, no percentage, and no total or bar across stages; the claims lint now allows the word "progress", and `e2e/helpers/noScore.ts` allows the bar only there, and still fails a `%` inside it. "Outputs without sealing" (same section): the working report is a draft from current answers, not a sealed record.
+
 **Built** (owner rulings of 19:25, 20:50 and 21:32). "Still open in this stage" shows a count. Overdue mitigations are `<ItemPlate>`s, followed by one line "{n} other open mitigations" linking to Findings. "Recorded so far" is `<RouteTally>`: the tally in words with a mark beside each count and no row of marks. First-use definitions are (i) `<TermTip>`s. Each review is one line, "Review n · sealed <date> · k changed since". A busy project still runs about 1,098 px tall at 1440 by 900 (known, deferred).
 
 Home has one "New project" for an Owner, an Admin and an Assessor.
 
-What is built and stays: counts are words and numerals for one stage, with no percentage, bar or total across stages; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
+What is built and stays: counts are words and numerals for one stage, with no percentage and no total or bar across stages, and at most one `data-stage-bar` bar per stage on S-10; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
 
 ## Voice and vocabulary
 
@@ -380,7 +382,7 @@ Inline SVG from the Lucide set (ISC licence, the licence text sits beside the re
 ## Do's and don'ts
 
 - Do use one primary button per view, in `--color-action`; do not use the action orange as text.
-- Do say a status in a shape and a word; do not colour-code a status, and do not add a percentage, bar or total.
+- Do say a status in a shape and a word; do not colour-code a status, and do not add a score, a percentage or a total. The only bar is the per-stage `data-stage-bar` on S-10, with its count in words.
 - Do keep green for the Done mark and the "Saved" confirmation, and red for an overdue date and the word "Overdue".
 - Do put a term's definition beside its first use; do not use a retired term.
 - Do read colours, sizes and spaces from the tokens; do not write a literal value in a component's sheet.

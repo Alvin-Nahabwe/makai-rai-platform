@@ -271,7 +271,7 @@ type Allow = { ids: ReadonlySet<string>; paths: readonly PathEntry[] };
 /**
  * A `{ path, text, reason }` entry whose `path` is a source file under app/ or components/ (no `#`): it exempts exactly
  * that JSX or string text in exactly that file, the exact string after whitespace is collapsed, for words that are
- * legitimate SRS vocabulary the pattern reads as a claim (the mitigation status "In progress", SRS 5.3 item 11). It is
+ * legitimate SRS vocabulary the pattern reads as a claim (a status word of SRS 5.3 that reads as a claim). It is
  * refused as stale when the file no longer holds that text as a claim. It stays under RELEASE_CANDIDATE=1: it is a
  * word the product uses, not a debt. Entries for the content files under data/ keep their `<file>.json#<path>` form.
  */
@@ -735,8 +735,8 @@ describe('no product claims', () => {
     const dir = mkdtempSync(join(tmpdir(), 'claims-source-'));
     try {
       mkdirSync(join(dir, 'app'));
-      writeFileSync(join(dir, 'app', 'a.tsx'), 'export const a = (<p>In  progress</p>);\nexport const b = (<p>Audit-ready</p>);\n');
-      writeFileSync(join(dir, 'app', 'b.tsx'), 'export const a = (<p>In progress</p>);\n');
+      writeFileSync(join(dir, 'app', 'a.tsx'), 'export const a = (<p>Readiness  check</p>);\nexport const b = (<p>Audit-ready</p>);\n');
+      writeFileSync(join(dir, 'app', 'b.tsx'), 'export const a = (<p>Readiness check</p>);\n');
       const rel = (f: string) => relative(process.cwd(), join(dir, 'app', f));
       const entry = (file: string, text: string): PathEntry => ({ path: rel(file), text, reason: 'the mitigation status word (SRS 5.3)' });
       const run = (entries: PathEntry[]) => sourceClaims([join(dir, 'app')], entries);
@@ -744,12 +744,12 @@ describe('no product claims', () => {
       // Without an entry both files are hit.
       expect(run([]).hits.map((h) => h.where.split(':')[0]).sort()).toEqual([rel('a.tsx'), rel('a.tsx'), rel('b.tsx')].sort());
       // The entry exempts that string (whitespace collapsed) in a.tsx only: b.tsx and the other string of a.tsx stay hits.
-      const one = run([entry('a.tsx', 'In progress')]);
-      expect(one.hits.map((h) => [h.where.split(':')[0], h.text]).sort()).toEqual([[rel('a.tsx'), 'Audit-ready'], [rel('b.tsx'), 'In progress']]);
+      const one = run([entry('a.tsx', 'Readiness check')]);
+      expect(one.hits.map((h) => [h.where.split(':')[0], h.text]).sort()).toEqual([[rel('a.tsx'), 'Audit-ready'], [rel('b.tsx'), 'Readiness check']]);
       expect(one.stale).toEqual([]);
       // Nothing broader: a longer or shorter text is not the string.
-      expect(run([entry('a.tsx', 'In')]).stale).toHaveLength(1);
-      expect(run([entry('a.tsx', 'In progress now')]).stale).toHaveLength(1);
+      expect(run([entry('a.tsx', 'Readiness')]).stale).toHaveLength(1);
+      expect(run([entry('a.tsx', 'Readiness check now')]).stale).toHaveLength(1);
       // A string that is not in the file is stale; so is one in another file, and one that is no longer a claim.
       expect(run([entry('b.tsx', 'Audit-ready')]).stale.join()).toMatch(/b\.tsx.*Audit-ready.*no longer/);
       expect(run([entry('a.tsx', 'Nothing here')]).stale).toHaveLength(1);
@@ -759,7 +759,7 @@ describe('no product claims', () => {
   });
 
   it('FR-PUB-01: a source path entry is valid under app/ or components/ and nowhere else, and the data-claims-allowed rule is unchanged', () => {
-    const ok = { path: 'components/followup/StageFollowUp.tsx', text: 'In progress', reason: 'r' };
+    const ok = { path: 'components/followup/StageFollowUp.tsx', text: 'Readiness check', reason: 'r' };
     expect(allowlistProblems([ok])).toEqual([]);
     expect(allowlistProblems([{ ...ok, path: 'app/(authenticated)/x/page.tsx' }])).toEqual([]);
     for (const bad of ['lib/followup/copy.ts', 'components/x.json', '../components/x.tsx', 'components/../x.tsx', 'app/a/../../lib/x.ts', 'components/x.tsx#a', 'components/']) {

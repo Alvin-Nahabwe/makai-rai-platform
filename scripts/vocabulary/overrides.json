@@ -72,6 +72,16 @@
       "retired": [],
       "defineOnFirstUse": false,
       "source": "stage-0-legal-two-texts-plan.md Part 1, decision 2"
+    },
+    {
+      "id": "working-report",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Working report",
+      "term": "working report",
+      "definition": "A summary of where the project stands, with draft documents, made from current answers. Not sealed.",
+      "retired": [],
+      "defineOnFirstUse": true,
+      "source": "2026-11-19-path-to-outputs-design.md, owner 19 Nov 2026: \"Approve as written\""
     }
   ],
   "historical": ["organisation-agreement", "organisation-agreement-record-of-signing", "data-protection-contact"],
@@ -79,6 +89,6 @@
     "finding", "mitigation", "accepted-risk", "stage-review", "seal", "control", "risk-area", "fingerprint",
     "version-of-a-decision", "stage-1", "stage-2", "stage-3", "done", "partly", "not-yet", "not-applicable",
     "does-not-apply", "personal-data-question-scope-question", "data-card", "model-card", "mitigation-plan",
-    "owner", "admin", "assessor", "reviewer", "viewer"
+    "working-report", "owner", "admin", "assessor", "reviewer", "viewer"
   ]
 }

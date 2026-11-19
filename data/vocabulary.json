@@ -1356,7 +1356,7 @@
         {
           "text": "report",
           "lint": "review",
-          "why": "\"Use this data card in your funder report\" is a correct sentence; only \"report\" as the name of a platform document is retired."
+          "why": "\"Use this data card in your funder report\" is a correct sentence; only \"report\" as the name of a platform document is retired. \"Working report\" is allowed as the name of the draft summary (owner, 19 Nov 2026: \"Approve as written\"; concept working-report)."
         }
       ]
     },
@@ -1858,7 +1858,7 @@
         {
           "text": "unlabelled zones",
           "lint": "review",
-          "why": "\"14:05\" with no zone is correct on screen, where times are in the reader's own zone (voice rule 10); a string cannot show where it is rendered."
+          "why": "\"14:05\" with no zone is correct on screen, where times are in the reader's own zone (voice rule 10); a string cannot show where it is rendered. Design-fixed exception for the working report: its draft line, \"Draft · from answers as of <date, time, EAT>\", is built by formatTime(t, PLATFORM_ZONE), so no source string holds a literal EAT (path-to-outputs design, approved 19 Nov 2026)."
         },
         {
           "text": "Show UTC",
@@ -1878,6 +1878,17 @@
       "defineOnFirstUse": false,
       "retired": [],
       "source": "stage-0-legal-two-texts-plan.md Part 1, decision 2"
+    },
+    {
+      "id": "working-report",
+      "group": "Stage reviews, seals and documents",
+      "concept": "Working report",
+      "term": "working report",
+      "definition": "A summary of where the project stands, with draft documents, made from current answers. Not sealed.",
+      "ownerDecision": false,
+      "defineOnFirstUse": true,
+      "retired": [],
+      "source": "2026-11-19-path-to-outputs-design.md, owner 19 Nov 2026: \"Approve as written\""
     }
   ],
   "properNames": [

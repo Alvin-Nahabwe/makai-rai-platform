@@ -116,6 +116,7 @@ export const VOCABULARY_IDS = [
   "emergency-access",
   "time-and-time-zone",
   "legal-name",
+  "working-report",
 ] as const;
 
 export type VocabularyId = (typeof VOCABULARY_IDS)[number];
