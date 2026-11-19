@@ -33,7 +33,7 @@ function asDraft(snap: DocumentSnapshot): DocumentSnapshot {
     ...s, seal: { ...s.seal, kind: 'draft', key: `draft:${s.stage}`, takenAt: TAKEN_AT, openReview: null, lastSealedReview: null },
   }) as S;
   const stages = Object.fromEntries(STAGES.map((st) => [st, draftStage(snap.stages[st])])) as DocumentSnapshot['stages'];
-  return { ...snap, provenance: { kind: 'draft', takenAt: TAKEN_AT }, chosen: stages[snap.reviewStage]!, stages };
+  return { ...snap, provenance: { kind: 'draft', takenAt: TAKEN_AT, omittedAnswers: 0 }, chosen: stages[snap.reviewStage]!, stages };
 }
 
 let fx: OrgFixture;

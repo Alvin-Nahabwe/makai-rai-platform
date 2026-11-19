@@ -93,7 +93,7 @@ function base(documentType: DocumentType, reviewStage: Stage, metadata: Record<s
 /** A draft: every stage present (a stage with no answers is an empty stage, never null). */
 function draft(documentType: DocumentType, reviewStage: Stage, stages: Partial<Record<Stage, StageSpec>> = {}, metadata: Record<string, string | null> = {}): DocumentSnapshot {
   const all = Object.fromEntries(STAGES.map((st) => [st, draftStage(st, stages[st])])) as Record<Stage, SnapshotStage>;
-  return { ...base(documentType, reviewStage, metadata), provenance: { kind: 'draft', takenAt: TAKEN }, chosen: all[reviewStage], stages: all };
+  return { ...base(documentType, reviewStage, metadata), provenance: { kind: 'draft', takenAt: TAKEN, omittedAnswers: 0 }, chosen: all[reviewStage], stages: all };
 }
 
 /** The same rows as a sealed snapshot: each listed stage sealed, the others never sealed (null). */

@@ -13,7 +13,9 @@ meant "never sealed" (D3).
 
 ## Decision
 
-- `DocumentSnapshot.provenance` is a discriminated union: `{ kind: 'sealed' }` or `{ kind: 'draft'; takenAt }`.
+- `DocumentSnapshot.provenance` is a discriminated union: `{ kind: 'sealed' }` or `{ kind: 'draft'; takenAt; omittedAnswers }`.
+  `omittedAnswers` counts the current answers a draft leaves out because the running content no longer holds their question
+  (Task 6, conflict 23); each is logged at warn as `DRAFT_ORPHAN_DECISION` with its id, and the working report prints a line for them.
 - Each stage's `seal` is `StageSeal` (`kind: 'sealed'`, today's fields) or `StageDraft` (`kind: 'draft'`,
   `key: 'draft:<stage>'`, `takenAt`, and the stage's reviews by name and state, never their seals).
 - `SealedSnapshot` narrows the snapshot to sealed provenance and sealed stages. `readDocumentSnapshot`
@@ -51,8 +53,10 @@ meant "never sealed" (D3).
   ones only, in the same order, which is what `issued_document_seals` stores.
 - Hand-built snapshots in tests carry the two discriminants. The protected `document-resolve.test.ts` changed only in its
   module fixture (ledger entry in `__tests__/lint/test-replacements.json`).
-- The draft builder (`lib/data/documents.ts`, Task 6) has to fill `StageDraft.openReview` and `lastSealedReview` from the
-  stage's reviews and never read a seal's manifest or sealed answers.
+- The draft builder (`readDraftRecord` in `lib/data/documents.ts`, Task 6) fills `StageDraft.openReview` (the stage's newest review
+  with no seal) and `lastSealedReview` (its newest review with one) through a relation filter on `stage_reviews` that selects no
+  seal column, and never reads a seal's row, manifest or sealed answers. `__tests__/integration/draft-record.test.ts` builds a
+  draft through a transaction that throws on any access to `seal` or `issuedDocument` or any raw query naming those tables.
 
 ## Alternatives rejected
 

@@ -68,8 +68,12 @@ export interface SnapshotStage {
   findings: readonly SealedFinding[];               // every finding of the manifest, its current mitigation versions and accepted risk
 }
 export type SealedStage = SnapshotStage & { seal: StageSeal };
-/** Where a snapshot's rows come from: seals (an issued document), or the current answers at `takenAt` (a draft; ADR 0023). */
-export type SnapshotProvenance = { kind: 'sealed' } | { kind: 'draft'; takenAt: UtcInstant };
+/**
+ * Where a snapshot's rows come from: seals (an issued document), or the current answers at `takenAt` (a draft; ADR 0023).
+ * `omittedAnswers` counts the current answers a draft left out because the running content no longer holds their question
+ * (conflict 23): the working report's page 1 prints a line for them, so nothing is dropped without a word.
+ */
+export type SnapshotProvenance = { kind: 'sealed' } | { kind: 'draft'; takenAt: UtcInstant; omittedAnswers: number };
 export interface DocumentSnapshot {
   provenance: SnapshotProvenance;
   documentType: DocumentType;
