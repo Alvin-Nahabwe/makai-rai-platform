@@ -4,9 +4,10 @@
  * re-exports them, so the tests and the renderers name them there.
  */
 
-import { formatDay } from '@/lib/format/dates';
+import { formatDay, formatTime } from '@/lib/format/dates';
+import { PLATFORM_ZONE } from '@/lib/format/zone';
 import { TERM_DATA_CARD, TERM_MITIGATION_PLAN, TERM_MODEL_CARD, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
-import type { DocumentType, Stage } from '@/types/record';
+import type { DocumentType, Stage, UtcInstant } from '@/types/record';
 
 /** The owner's decision (C8 #21, audit C#270) over FR-DOC-02's SRS line 1025. */
 export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.';
@@ -20,6 +21,28 @@ export const sealedNote = (count: number): string =>
   (count === 1 ? SEALED_NOTE : 'The platform keeps the seals this document is made from. No outside body has time-stamped them.');
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
+
+// A draft document (path to outputs; ADR 0023). The design (§7) and the controller's rulings fix these words.
+/** D3 in a draft: a stage with no answers yet. */
+export const NOT_RECORDED_YET = 'Not recorded yet';
+/** A typed field in a draft, with no value beside it: typed fields are written when the document is issued. */
+export const TYPED_AT_ISSUE = 'Added when the document is issued';
+/** The seals field of a draft (MP-10, DC-33, MC-31). */
+export const NOT_SEALED = 'Not sealed';
+/** MP-04 in a draft while the running content's risk-area mapping is not approved (anti-goal 3; controller's call on open item 2). */
+export const CONTROLS_AFTER_APPROVAL = 'Suggested controls appear here once experts approve the risk-area mapping.';
+/**
+ * MP-01 in a draft: the stage, then its review's state. An open review not yet sealed is named first; else the last sealed review;
+ * "no review yet" only when the stage has no review at all (rulings 8 and O2, conflict 15).
+ */
+export const draftReviewLine = (stageName: string, openReviewName: string | null, lastSealedReviewName: string | null): string => {
+  if (openReviewName !== null) return `${stageName} · draft, ${openReviewName} open, not sealed yet`;
+  if (lastSealedReviewName !== null) return `${stageName} · draft; last sealed review: ${lastSealedReviewName}`;
+  return `${stageName} · draft, no review yet`;
+};
+/** The line on every page of a draft: when its answers were read, in the platform's zone, which formatTime names. */
+export const draftLine = (takenAt: UtcInstant): string =>
+  `Draft · from answers as of ${formatDay(takenAt, PLATFORM_ZONE)}, ${formatTime(takenAt, PLATFORM_ZONE)}`;
 /** A question with no decision inside a field that has another value (the owner's decision of 14 November 2026, walk finding S1). */
 export const noDecisionLine = (questionId: string): string => `No decision is recorded for question ${questionId}.`;
 export const PROJECT_MARK = 'From the project details on the day of issue. Not part of the sealed record.'; // FR-DOC-02; C#274

@@ -3142,5 +3142,13 @@
     "property": "A sealed review's change since its seal is still shown on S-10 and still links to the review that lists it; decisions and findings are now one count in the review's one line (owner's ruling of 15 Nov 2026 21:32), no longer two sentences.",
     "proof": "The replacing case gives a review 2 changed decisions and 3 changed findings and requires the text \"Review 1 · sealed 11 Nov 2026 · 5 changed since\" with the count a link to /reviews/r1 and one review-list__meta p; with findings only it requires \"1 changed since\" and that the page's first use of \"finding\" stays in the first stage with an open finding; with nothing changed no \"changed since\" shows. It failed before the change and passes after.",
     "task": "lane 8 I4 round 5 (owner 21:32: each review is one line)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/document-resolve.test.ts::(module)",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-05: the seals a document used are the chosen seal first, then the other sealed stages it read in STAGES order",
+    "property": "The hand-built sealed snapshot is unchanged in content; only the provenance discriminants the type now requires are added.",
+    "proof": "Two module lines change and none is added: sealedStage's seal literal gains kind: 'sealed' before sealId, and snapshot's returned object gains provenance: { kind: 'sealed' } before documentType. Both are the discriminants that DocumentSnapshot's draft provenance (ADR 0023) makes required, and both name the sealed arm, so every resolver takes the path it took before. Every case body is byte-identical to 5a34457e; the cases still assert sealIds, NOT_RECORDED_AT_ISSUE and the fingerprint line as before, and pass.",
+    "task": "path to outputs, Task 5"
   }
 ]

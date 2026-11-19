@@ -1,4 +1,7 @@
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import {
+  CONTROLS_AFTER_APPROVAL, NOT_RECORDED_YET, NOT_SEALED, TYPED_AT_ISSUE, draftLine, draftReviewLine,
+} from '@/lib/documents/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 import { assertNoClaims } from '../helpers/copyClaims';
 
@@ -9,5 +12,19 @@ import { assertNoClaims } from '../helpers/copyClaims';
 describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
   it('the working-report term and its definition hold no claim', () => {
     assertNoClaims('TERM_WORKING_REPORT', { term: TERM_WORKING_REPORT.term, definition: TERM_WORKING_REPORT.definition });
+  });
+
+  it('the draft document copy holds no claim (Task 5)', () => {
+    assertNoClaims('documents draft copy', {
+      NOT_RECORDED_YET, TYPED_AT_ISSUE, NOT_SEALED, CONTROLS_AFTER_APPROVAL,
+      none: draftReviewLine('Pre-processing', null, null),
+      open: draftReviewLine('Pre-processing', 'Pre-processing review 1', null),
+      lastSealed: draftReviewLine('Pre-processing', null, 'Pre-processing review 1'),
+      draftLine: draftLine('2026-11-19T14:05:09.000Z'),
+    });
+  });
+
+  it('the draft line prints the platform zone, as the design fixes it', () => {
+    expect(draftLine('2026-11-19T14:05:09.000Z')).toBe('Draft · from answers as of 19 Nov 2026, 17:05 EAT');
   });
 });

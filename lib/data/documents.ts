@@ -30,7 +30,7 @@ import {
   DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_DOCUMENT_CHECK_FAILED, MSG_OTHER_SEAL_CHECK_FAILED, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay,
 } from '@/lib/documents/copy';
 import { readStageRows } from '@/lib/seal/manifest';
-import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
+import type { SealedDecision, SealedFinding, SealedSnapshot, SealedStage } from '@/lib/documents/resolve';
 
 // ─── The snapshot (NFR-INT-10) ───────────────────────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ async function erasureDates(tx: TenantTx, table: string, ids: readonly string[])
 export async function readDocumentSnapshot(
   tx: TenantTx, a: { projectId: string; reviewId: string; sealId: string; documentType: DocumentType },
   hooks?: { afterSeals?: (tx: TenantTx) => Promise<void> },
-): Promise<DocumentSnapshot> {
+): Promise<SealedSnapshot> {
   const review = await tx.stageReview.findFirst({ where: { id: a.reviewId, projectId: a.projectId }, select: { id: true, stage: true } });
   if (review === null) throw new NotFoundError();
   const chosenRow = await tx.seal.findFirst({ where: { id: a.sealId }, select: SEAL_SELECT });
@@ -291,7 +291,7 @@ export async function readDocumentSnapshot(
     stages[stage] = {
       stage,
       seal: {
-        sealId: r.seal.id, sealNumber: r.seal.sealNumber, reviewId: review.id, reviewName: stageReviewName(stage, review.numberInStage),
+        kind: 'sealed', sealId: r.seal.id, sealNumber: r.seal.sealNumber, reviewId: review.id, reviewName: stageReviewName(stage, review.numberInStage),
         fingerprint: r.seal.fingerprint, sealedAt: r.seal.sealedAt.toISOString(), sealedBy: person(r.seal.id, r.seal.sealedById),
         sealedByRole: r.seal.sealedByRole, enteredByPeople: new Set([...decisions.values()].map((d) => d.row.enteredById)).size,
       },
@@ -311,7 +311,7 @@ export async function readDocumentSnapshot(
   const organisationName = orgRows[0].name;
 
   return {
-    documentType: a.documentType, reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents, project: { ...project, metadata },
+    provenance: { kind: 'sealed' }, documentType: a.documentType, reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents, project: { ...project, metadata },
     organisationName, today,
     erasures: {
       evidence: erasedEvidence, findings: erasedFindings,
@@ -508,7 +508,7 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<Rea
     tombstoneIds: new Set(read.tombstones.map((t) => String((t as { id: unknown }).id))),
   };
 }
-interface ReadForDocument { snap: DocumentSnapshot; issuedAt: Date; tombstoneIds: ReadonlySet<string> }
+interface ReadForDocument { snap: SealedSnapshot; issuedAt: Date; tombstoneIds: ReadonlySet<string> }
 
 /**
  * M13 (FR-REV-06, FR-REV-08): before anything is rendered, every seal the document uses is compared with the rows it names, as "Check
@@ -517,7 +517,7 @@ interface ReadForDocument { snap: DocumentSnapshot; issuedAt: Date; tombstoneIds
  * check, and another stage's seal answers 500 `integrity_failure`.
  */
 function checkSealsAgainstRows(
-  snap: DocumentSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, stageRows: Partial<Record<Stage, SealSourceRows>>,
+  snap: SealedSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, stageRows: Partial<Record<Stage, SealSourceRows>>,
   sealRows: unknown[], tombstones: unknown[],
 ): void {
   for (const st of STAGES) {
@@ -539,14 +539,14 @@ function checkSealsAgainstRows(
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
 const READ_TIMEOUT_MS = 15_000;
 
-const sealsOf = (snap: DocumentSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.map((id) => {
+const sealsOf = (snap: SealedSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.map((id) => {
   const stage = STAGES.map((s) => snap.stages[s]).find((s) => s?.seal.sealId === id);
   if (stage === undefined || stage === null) throw new Error(`documents: the document used seal ${id}, which is not in its snapshot`);
   return { sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint };
 });
 
 /** Resolves and renders outside every transaction (NFR-PERF-04: CPU in the one Node process). */
-async function build(type: DocumentType, renderer: Renderer, snap: DocumentSnapshot, typed: Record<string, string>, issuedAt: Date) {
+async function build(type: DocumentType, renderer: Renderer, snap: SealedSnapshot, typed: Record<string, string>, issuedAt: Date) {
   const map = loadFieldMap(type);
   const resolved = resolveFields(map, snap, typed);
   const input: RenderInput = {

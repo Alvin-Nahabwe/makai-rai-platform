@@ -26,7 +26,7 @@ function sealedStage(stage: Stage, semver: string, findings: Array<{ id: string;
   return {
     stage,
     seal: {
-      sealId: `seal-${stage}`, sealNumber: 1, reviewId: `review-${stage}`, reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
+      kind: 'sealed', sealId: `seal-${stage}`, sealNumber: 1, reviewId: `review-${stage}`, reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
       sealedAt: '2026-11-14T19:00:00.000Z', sealedBy: user('Olive Owner'), sealedByRole: 'owner', enteredByPeople: 1,
     },
     preparedFor: null,
@@ -56,7 +56,7 @@ function resolveOf(type: 'mitigation_plan' | 'model_card', semver: string, findi
   const chosen = sealedStage(stage, semver, findings);
   const stages = Object.fromEntries(STAGES.map((s) => [s, s === stage ? chosen : null])) as DocumentSnapshot['stages'];
   const snap: DocumentSnapshot = {
-    documentType: type, reviewStage: stage, chosen, stages, contents: new Map(),
+    provenance: { kind: 'sealed' }, documentType: type, reviewStage: stage, chosen, stages, contents: new Map(),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: '2026-11-14',
     erasures: { evidence: new Map(), findings: new Map(), accepted_risks: new Map(), stage_reviews: new Map(), mitigation_versions: new Map() },
   };
