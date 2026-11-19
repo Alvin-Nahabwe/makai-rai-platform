@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { DocumentType, Stage } from '@/types/record';
 import { loadContent } from '@/lib/content/loader';
+import { publicOrigin } from '@/lib/publicOrigin';
+import { summaryPage } from '@/lib/documents/render/summaryPage';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { DOCUMENT_TITLES, SEALED_NOTE, STATEMENT, CONTROLS_AFTER_APPROVAL, draftLine, sealedNote, WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 import { resolveFields } from '@/lib/documents/resolve';
@@ -14,6 +16,7 @@ import { claimMatches } from '@/lib/claims/pattern';
 import { pdfPageRuns } from '../helpers/pdfText';
 import { REVIEWED_CLAIM_NAMES } from '../helpers/frameworkNames';
 import { allowListedQuestionTexts } from '../helpers/contentQuestions';
+import { contentWith } from '../helpers/contentWith';
 import { TAKEN, decisionOf, findingOf, fullRecord, recordOf } from '../helpers/draftRecord';
 
 /**
@@ -184,5 +187,44 @@ describe('page 1, "Where this project stands"', () => {
     const [p] = composeWorkingReport(r, running, 'summary').pages;
     expect(p.plainText).toContain(`${WORKING_REPORT_PAGE.question}: ${running.questions.get('Q-PP-09')!.text}`);
     expect(p.plainText).toContain(`${WORKING_REPORT_PAGE.answer}: Partly`);
+  });
+
+  it('with controls shown, page 1 prints each control under its item and links the notebook of those that have one; with the switch off it prints neither', async () => {
+    // The composer takes only the running content, which has the switch off; the page is built directly from content that has it on.
+    const approved = contentWith({ controlSuggestionsApproved: true });
+    const r = fullRecord(approved);
+    const meta = { organisationName: 'Org', projectName: 'Project' };
+    const on = buildWorkingReportSummary(r, approved);
+    const controls = on.nextSteps.flatMap((g) => g.items.flatMap((i) => i.controls));
+    const withBook = controls.filter((c) => c.notebookHref !== null);
+    const without = controls.filter((c) => c.notebookHref === null);
+    expect(withBook.length, 'the fixture has a control with a released notebook').toBeGreaterThan(0);
+    expect(without.length, 'and one without').toBeGreaterThan(0);
+
+    const shown = summaryPage(on, meta);
+    const pdf = (await renderWorkingReportPdf([shown], 'Working report')).pdf;
+    const printed = squash(pdfPageRuns(pdf).flat().join(' '));
+    const link = (href: string): string => new URL(href, publicOrigin()).toString();
+    for (const c of controls) {
+      expect(printed).toContain(`${c.name} (${c.id})`);
+      expect(shown.plainText).toContain(`${c.name} (${c.id})`);
+    }
+    expect(shown.plainText).toContain(`${WORKING_REPORT_PAGE.controls}:`);
+    expect(shown.plainText).not.toContain(CONTROLS_AFTER_APPROVAL);
+    const annotations = [...pdf.toString('latin1').matchAll(/\/URI \(([^)]*)\)/g)].map((m) => m[1]);
+    for (const c of withBook) {
+      expect(annotations, `${c.id} links its notebook`).toContain(link(c.notebookHref as string));
+      expect(shown.plainText).toContain(link(c.notebookHref as string));
+    }
+    // A control without a notebook has no address of its own.
+    expect(withBook.map((c) => c.id)).not.toContain(without[0].id);
+
+    const off = summaryPage(buildWorkingReportSummary(fullRecord(running), running), meta);
+    const offPdf = (await renderWorkingReportPdf([off], 'Working report')).pdf;
+    expect(off.plainText).toContain(CONTROLS_AFTER_APPROVAL);
+    expect(off.plainText).not.toContain(`${WORKING_REPORT_PAGE.controls}:`);
+    expect(offPdf.toString('latin1')).not.toMatch(/\/URI \(/);
+    const offPrinted = squash(pdfPageRuns(offPdf).flat().join(' '));
+    for (const c of controls) expect(offPrinted).not.toContain(`${c.name} (${c.id})`);
   });
 });

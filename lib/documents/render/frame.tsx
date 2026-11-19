@@ -68,19 +68,38 @@ export function framedPage(stamp: Stamp, title: string, content: ReactElement[])
   return { page, footer, header };
 }
 
+/** Prints text through the font's coverage, remembering whether anything was replaced (the page then says so). */
+export function newPrinter(): { print: (text: string) => string; replaced: () => boolean } {
+  let replaced = false;
+  return {
+    print: (text) => {
+      const p = printable(text);
+      replaced ||= p.replaced;
+      return p.text;
+    },
+    replaced: () => replaced,
+  };
+}
+
+/** The head every document shares: its title, the organisation and project, and the unprintable-characters note when `printer` replaced any. Call it after the body was printed. */
+export function pageHead(title: string, meta: { organisationName: string; projectName: string }, printer: ReturnType<typeof newPrinter>): ReactElement[] {
+  const organisation = printer.print(meta.organisationName);
+  const project = printer.print(meta.projectName);
+  return [
+    <Text key="title" style={styles.title}>{title}</Text>,
+    <Text key="org" style={styles.meta}>{`Organisation: ${organisation}`}</Text>,
+    <Text key="project" style={styles.meta}>{`Project: ${project}`}</Text>,
+    ...(printer.replaced() ? [<Text key="note" style={styles.note}>{UNPRINTABLE_NOTE}</Text>] : []),
+  ];
+}
+
 /** One field document as a page and its plain-text copy; the Document around it is made by the caller (`renderFieldDocument`, or the working report's). */
 export function fieldDocumentPage(input: RenderInput, title: string): { page: ReactElement; plainText: string } {
-  let replaced = false;
-  const print = (text: string): string => {
-    const p = printable(text);
-    replaced ||= p.replaced;
-    return p.text;
-  };
+  const printer = newPrinter();
+  const { print } = printer;
   const shown = input.fields.map((f): ResolvedField => ({
     ...f, label: print(f.label), text: f.text === null ? null : print(f.text), provenance: print(f.provenance),
   }));
-  const organisation = print(input.organisationName);
-  const project = print(input.projectName);
 
   const body: ReactElement[] = [];
   shown.forEach((f, i) => {
@@ -94,13 +113,7 @@ export function fieldDocumentPage(input: RenderInput, title: string): { page: Re
     );
   });
 
-  const { page, footer, header } = framedPage(input.stamp, title, [
-    <Text key="title" style={styles.title}>{title}</Text>,
-    <Text key="org" style={styles.meta}>{`Organisation: ${organisation}`}</Text>,
-    <Text key="project" style={styles.meta}>{`Project: ${project}`}</Text>,
-    ...(replaced ? [<Text key="note" style={styles.note}>{UNPRINTABLE_NOTE}</Text>] : []),
-    ...body,
-  ]);
+  const { page, header } = framedPage(input.stamp, title, [...pageHead(title, input, printer), ...body]);
 
   // The plain-text copy keeps every character as typed and holds the footer once, at the end; a draft's line also opens it.
   const lines: string[] = [...(header === null ? [] : [header]), title, `Organisation: ${input.organisationName}`, `Project: ${input.projectName}`];

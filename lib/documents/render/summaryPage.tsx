@@ -1,10 +1,11 @@
-import { StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Link, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
 import type { Stage } from '@/types/record';
+import { publicOrigin } from '@/lib/publicOrigin';
+import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 import { CONTROLS_AFTER_APPROVAL, STAGE_TERMS, WORKING_REPORT_PAGE as W, WORKING_REPORT_TITLE } from '../copy';
 import type { OpenItem, WorkingReportSummary } from '../workingReport';
-import { UNPRINTABLE_NOTE, printable } from './font';
-import { footerLinesOf, framedPage, styles } from './frame';
+import { footerLinesOf, framedPage, newPrinter, pageHead, styles } from './frame';
 
 /**
  * Page 1 of the working report, "Where this project stands" (path to outputs, Task 8; design G1). It is the same page the three documents
@@ -20,26 +21,36 @@ const local = StyleSheet.create({
   item: { marginBottom: 7 },
   fact: { fontSize: 10, marginTop: 1 },
   entry: { fontSize: 10, marginBottom: 3 },
+  control: { fontSize: 10, marginTop: 1, marginLeft: 10 },
 });
+
+/** A suggested control on page 1: its words, and the absolute address of its notebook when it has one (G1: "linking to the notebook"). */
+type ControlLine = { label: string; notebookUrl: string | null };
 
 type Block =
   | { kind: 'section' | 'group' | 'note' | 'line'; text: string }
-  | { kind: 'item'; label: string; facts: string[]; place: string }
+  | { kind: 'item'; label: string; facts: string[]; controls?: ControlLine[]; place: string }
   | { kind: 'entry'; text: string };
 
+const WORDS = SUGGESTIONS_COPY.card;
 const stageName = (st: Stage): string => STAGE_TERMS[st].term;
 const place = (st: Stage, questionId: string | null): string => (questionId === null ? stageName(st) : `${stageName(st)} · question ${questionId}`);
 
-function factsOf(i: OpenItem, controlsShown: boolean): string[] {
+function factsOf(i: OpenItem): string[] {
   const facts: string[] = [];
   // A shortfall's title already holds the question's words; the question is a line of its own only when the title says something else.
   if (i.questionText !== null && !i.title.includes(i.questionText)) facts.push(`${W.question}: ${i.questionText}`);
   if (i.answer !== null) facts.push(`${W.answer}: ${i.answer}`);
   if (i.alsoAreas.length > 0) facts.push(`${W.alsoTouches}: ${i.alsoAreas.join(', ')}`);
-  if (controlsShown && i.controls.length > 0) {
-    facts.push(`${W.controls}: ${i.controls.map((c) => `${c.name} (${c.id})${c.notebookHref === null ? '' : `, ${W.hasNotebook}`}`).join('; ')}`);
-  }
   return facts;
+}
+
+/**
+ * The notebook's address is the public origin plus the file's own path, the route the question page's control card links. `publicOrigin` refuses
+ * when no origin is configured, and that refusal is not caught here: a link built from a guess would print as a dead address.
+ */
+function controlLines(i: OpenItem): ControlLine[] {
+  return i.controls.map((c) => ({ label: `${c.name} (${c.id})`, notebookUrl: c.notebookHref === null ? null : new URL(c.notebookHref, publicOrigin()).toString() }));
 }
 
 function blocksOf(s: WorkingReportSummary): Block[] {
@@ -51,7 +62,7 @@ function blocksOf(s: WorkingReportSummary): Block[] {
   else if (!s.controlsShown) blocks.push({ kind: 'line', text: CONTROLS_AFTER_APPROVAL });
   for (const g of s.nextSteps) {
     blocks.push({ kind: 'group', text: g.areaName });
-    for (const i of g.items) blocks.push({ kind: 'item', label: i.title, facts: factsOf(i, s.controlsShown), place: place(i.stage, i.questionId) });
+    for (const i of g.items) blocks.push({ kind: 'item', label: i.title, facts: factsOf(i), controls: s.controlsShown ? controlLines(i) : [], place: place(i.stage, i.questionId) });
   }
 
   if (s.riskAccepted.length > 0) {
@@ -81,12 +92,8 @@ function blocksOf(s: WorkingReportSummary): Block[] {
 
 /** Page 1 as a page and its plain-text copy. Always a draft: its footer and header read the time its answers were read. */
 export function summaryPage(s: WorkingReportSummary, meta: { organisationName: string; projectName: string }): { page: ReactElement; plainText: string } {
-  let replaced = false;
-  const print = (text: string): string => {
-    const p = printable(text);
-    replaced ||= p.replaced;
-    return p.text;
-  };
+  const printer = newPrinter();
+  const { print } = printer;
   const blocks = blocksOf(s);
   const stamp = { kind: 'draft', takenAt: s.takenAt } as const;
 
@@ -101,27 +108,32 @@ export function summaryPage(s: WorkingReportSummary, meta: { organisationName: s
         <View key={n} style={local.item} wrap={false}>
           <Text style={styles.label}>{print(b.label)}</Text>
           {b.facts.map((f, k) => <Text key={k} style={local.fact}>{print(f)}</Text>)}
+          {b.controls === undefined || b.controls.length === 0 ? null : <Text style={local.fact}>{`${W.controls}:`}</Text>}
+          {(b.controls ?? []).map((c, k) => (
+            <Text key={`c${k}`} style={local.control}>
+              {print(c.label)}
+              {c.notebookUrl === null ? null : <>{', '}<Link src={c.notebookUrl}>{WORDS.downloadNotebook}</Link>{` (${c.notebookUrl})`}</>}
+            </Text>
+          ))}
           {b.place === '' ? null : <Text style={styles.provenance}>{print(b.place)}</Text>}
         </View>
       );
     }
   });
-  const organisation = print(meta.organisationName);
-  const project = print(meta.projectName);
-  const { page, header } = framedPage(stamp, WORKING_REPORT_TITLE, [
-    <Text key="title" style={styles.title}>{W.title}</Text>,
-    <Text key="org" style={styles.meta}>{`Organisation: ${organisation}`}</Text>,
-    <Text key="project" style={styles.meta}>{`Project: ${project}`}</Text>,
-    ...(replaced ? [<Text key="unprintable" style={styles.note}>{UNPRINTABLE_NOTE}</Text>] : []),
-    ...body,
-  ]);
+  const { page, header } = framedPage(stamp, WORKING_REPORT_TITLE, [...pageHead(W.title, meta, printer), ...body]);
 
-  const lines: string[] = [header ?? '', W.title, `Organisation: ${meta.organisationName}`, `Project: ${meta.projectName}`];
+  const lines: string[] = [header as string, W.title, `Organisation: ${meta.organisationName}`, `Project: ${meta.projectName}`];
   for (const b of blocks) {
     switch (b.kind) {
       case 'section': case 'group': lines.push('', b.text); break;
       case 'note': case 'line': case 'entry': lines.push(b.text); break;
-      case 'item': lines.push('', b.label, ...b.facts, ...(b.place === '' ? [] : [b.place])); break;
+      case 'item': lines.push('', b.label, ...b.facts);
+        if (b.controls !== undefined && b.controls.length > 0) {
+          lines.push(`${W.controls}:`);
+          for (const c of b.controls) lines.push(c.label, ...(c.notebookUrl === null ? [] : [`${WORDS.downloadNotebook}: ${c.notebookUrl}`]));
+        }
+        if (b.place !== '') lines.push(b.place);
+        break;
     }
   }
   lines.push('', ...footerLinesOf(stamp, WORKING_REPORT_TITLE));

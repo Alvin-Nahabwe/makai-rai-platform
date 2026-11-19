@@ -1,5 +1,5 @@
 import { Document, renderToBuffer } from '@react-pdf/renderer';
-import type { ReactElement } from 'react';
+import { cloneElement, type ReactElement } from 'react';
 import type { LoadedContent } from '@/types/content';
 import { runningContent } from '@/lib/content/loader';
 import { draftSnapshot, type DraftRecord } from '@/lib/data/documents';
@@ -22,7 +22,8 @@ export type ComposedPage = { page: ReactElement; plainText: string };
 
 /**
  * The pages of `part`, each with its plain text, and the title the PDF carries. `content` is the RUNNING content version, which the
- * resolvers read themselves: a recorded version here would show page 1's controls from one content and the plans' from another, so it is refused.
+ * resolvers read themselves. The parameter is kept so a caller that already loaded the content passes the one it means, and the guard is the check that it is
+ * the running one: a recorded version here would show page 1's controls from one content and the plans' from another, so it is refused.
  */
 export function composeWorkingReport(r: DraftRecord, content: LoadedContent, part: WorkingReportPart): { pages: ComposedPage[]; title: string } {
   const now = runningContent();
@@ -46,6 +47,6 @@ export function composeWorkingReport(r: DraftRecord, content: LoadedContent, par
 /** One PDF of `pages` in order, and their plain text joined with a blank line between. `title` is the document type alone (NFR-SEC-11). */
 export async function renderWorkingReportPdf(pages: ComposedPage[], title: string): Promise<{ pdf: Buffer; plainText: string }> {
   registerPdfFont();
-  const pdf = await renderToBuffer(<Document title={title} language="en">{pages.map((p, i) => ({ ...p.page, key: `page-${i}` }))}</Document>);
+  const pdf = await renderToBuffer(<Document title={title} language="en">{pages.map((p, i) => cloneElement(p.page, { key: `page-${i}` }))}</Document>);
   return { pdf, plainText: pages.map((p) => p.plainText).join('\n') };
 }
