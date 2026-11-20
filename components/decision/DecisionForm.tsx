@@ -208,15 +208,30 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
       : <Link className="decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
   }
   if (stageHref === undefined) return null;
-  // Review A I-1: on the stage's last question, All questions is held as Next is.
+  // Review A I-1: on the stage's last question, All questions is held as Next is. Design G3: so is the way to the stage's end screen.
   return (
     <p className="decision-next decision-next--last">
       {QUESTION_COPY.foot.last}{' '}
       {held
         ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.nav.allQuestions}</span>
         : <Link href={stageHref} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.nav.allQuestions}</Link>}
+      {' '}
+      {held
+        ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.end.link}</span>
+        : <Link href={endAddress(stageHref)} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.end.link}</Link>}
     </p>
   );
+}
+
+/** The end-of-stage screen of the stage whose question list is at `stageHref` (design G3). */
+const endAddress = (stageHref: string): string => `${stageHref}/end`;
+
+/**
+ * Design G3: where a save leaves the person. After the stage's last question is saved, the stage's end screen, where the working
+ * report leads; after any other question the card stays open with the new answer (R2). Null when the card was given no stage address.
+ */
+export function endHrefAfterSave(next: NextQuestion | null, stageHref: string | undefined): string | null {
+  return next === null && stageHref !== undefined ? endAddress(stageHref) : null;
 }
 
 /**
@@ -538,7 +553,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
       }
-      router.refresh();
+      // Design G3: the last question of a stage lands on that stage's end screen; the server renders it from what was just saved.
+      const end = endHrefAfterSave(nextQuestion, stageHref);
+      if (end === null) router.refresh(); else router.push(end);
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
@@ -585,7 +602,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       if (current !== null) setConflict(current);
     }
     setStatus(next);
-  }, [data, key, keep, router, leaveHeldLink]);
+  }, [data, key, keep, router, leaveHeldLink, nextQuestion, stageHref]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {

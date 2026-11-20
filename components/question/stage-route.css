@@ -226,3 +226,8 @@
   padding-inline-start: calc(42px + var(--space-3));
   font-size: var(--font-size-small);
 }
+
+/* The link to the stage's end screen (design G3), under the tally. */
+.stage-route__end {
+  margin-block: var(--space-3) 0;
+}

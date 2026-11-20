@@ -289,10 +289,18 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(bar.indexOf('>Save decision</button>')).toBeLessThan(bar.indexOf(F.card.next(NEXT.text)));
   });
 
+  it('design G3: a saved last question goes to the stage\'s end screen; any other saved question stays', () => {
+    expect(endHrefAfterSave(null, STAGE)).toBe(`${STAGE}/end`);
+    expect(endHrefAfterSave(NEXT, STAGE)).toBeNull();
+    expect(endHrefAfterSave(null, undefined)).toBeNull();
+  });
+
   it('on the stage\'s last question: the last-question line and All questions', () => {
     const h = card({}, { next: null });
     expect(h).toContain(QUESTION_COPY.foot.last);
     expect(h).toMatch(new RegExp(`<a[^>]*href="${esc(STAGE)}"[^>]*>${QUESTION_COPY.nav.allQuestions}</a>`));
+    // Design G3: the last question's way on also reaches the stage's end screen.
+    expect(h).toMatch(new RegExp(`<a[^>]*href="${esc(STAGE)}/end"[^>]*>${QUESTION_COPY.end.link}</a>`));
     expect(h).not.toContain('Next: ');
   });
 });
@@ -473,7 +481,7 @@ describe('T3a: the history list (routed items 7 and 9)', () => {
   });
 });
 
-const { saveControlIsRetry, WaitLines, NextWay } = await import('@/components/decision/DecisionForm');
+const { saveControlIsRetry, WaitLines, NextWay, endHrefAfterSave } = await import('@/components/decision/DecisionForm');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
 const { toSaveBody } = await import('@/lib/question/draft');
 const { requestIdFor } = await import('@/lib/client/retrySafeWrite');
@@ -561,7 +569,7 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
     const held = renderToStaticMarkup(<NextWay next={null} stageHref={STAGE} held />);
     expect(held).not.toMatch(/<a[\s>]/);
     expect(held).not.toContain('href=');
-    expect(words(held)).toBe(`${QUESTION_COPY.foot.last} ${QUESTION_COPY.nav.allQuestions}`);
+    expect(words(held)).toBe(`${QUESTION_COPY.foot.last} ${QUESTION_COPY.nav.allQuestions} ${QUESTION_COPY.end.link}`);
     expect(held).toContain('data-next-held');
     const live = renderToStaticMarkup(<NextWay next={null} stageHref={STAGE} held={false} />);
     expect(live).toMatch(new RegExp(`<a [^>]*href="${esc(STAGE)}"[^>]*>${QUESTION_COPY.nav.allQuestions}</a>`));

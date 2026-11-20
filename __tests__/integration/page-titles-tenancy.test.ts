@@ -13,12 +13,13 @@ import { REVIEW_COPY } from '../../lib/review/copy';
 import { DOCUMENTS_COPY } from '../../lib/documents/copy';
 import { DECISION_COPY } from '../../lib/decision/copy';
 import { STAGE_TITLE } from '../../lib/question/stageList';
+import { QUESTION_COPY } from '../../lib/question/copy';
 import { stageReviewName } from '../../lib/seal/reviewName';
 import { runningContent } from '../../lib/content/loader';
 import { useFixtureContent } from '../helpers/content';
 
 /**
- * Spec 7.5 with R10-2 (Task 10): each of the 19 signed-in pages whose browser-tab title names an organisation or a project
+ * Spec 7.5 with R10-2 (Task 10): each of the 20 signed-in pages whose browser-tab title names an organisation or a project
  * reads that name only after the page's own gates. Called as Next calls `generateMetadata`, with a mocked session: a member
  * of another organisation and an unknown organisation get Next's own 404 (so the not-found page's title shows, never no
  * title), a member with the right gets the full title, and a refusal by the page's own gate gets no name.
@@ -84,6 +85,7 @@ const PAGES = (): Array<[file: string, params: Record<string, string>, title: st
     [`${PRJ}/reviews/[reviewId]/seal`, { ...p, reviewId }, pageTitle(REVIEW_COPY.titles.seal(REVIEW, 1), PROJECT)],
     [`${PRJ}/reviews/[reviewId]/documents`, { ...p, reviewId }, pageTitle(DOCUMENTS_COPY.titles.documentsOf(REVIEW), PROJECT)],
     [`${PRJ}/stages/[stage]`, { ...p, stage: 'pre-processing' }, pageTitle(STAGE_TITLE['pre-processing'], PROJECT)],
+    [`${PRJ}/stages/[stage]/end`, { ...p, stage: 'pre-processing' }, pageTitle(QUESTION_COPY.end.title, PROJECT)],
     [`${PRJ}/stages/[stage]/questions/[questionId]`, { ...p, stage: 'pre-processing', questionId: q },
       pageTitle(DECISION_COPY.titles.question(q, runningContent().questions.get(q)?.moduleTitle ?? ''), PROJECT)],
     [`${PRJ}/stages/[stage]/questions/[questionId]/history`, { ...p, stage: 'pre-processing', questionId: q }, pageTitle(DECISION_COPY.titles.history(q), PROJECT)],
@@ -91,24 +93,24 @@ const PAGES = (): Array<[file: string, params: Record<string, string>, title: st
 };
 
 describe('page titles and tenancy (spec 7.5, R10-2)', () => {
-  it('1A R10-2: the 19 signed-in pages that name an organisation or a project are all covered', () => {
-    expect(PAGES()).toHaveLength(19);
+  it('1A R10-2: the 20 signed-in pages that name an organisation or a project are all covered', () => {
+    expect(PAGES()).toHaveLength(20);
   });
 
-  it('1A R10-2: a member with the right gets the full title on each of the 19 pages', async () => {
+  it('1A R10-2: a member with the right gets the full title on each of the 20 pages', async () => {
     for (const [file, params, title] of PAGES()) {
       expect({ file, title: await titleOf(file, { slug: fxA.org.slug, ...params }) }).toEqual({ file, title });
     }
   });
 
-  it('1A R10-2a: a member of another organisation gets Next\'s 404 from each of the 19 titles, never a raw error or a title', async () => {
+  it('1A R10-2a: a member of another organisation gets Next\'s 404 from each of the 20 titles, never a raw error or a title', async () => {
     sessionFor(fxB.members.owner.userId);
     for (const [file, params] of PAGES()) {
       await expect(titleOf(file, { slug: fxA.org.slug, ...params }), file).rejects.toMatchObject(NOT_FOUND);
     }
   });
 
-  it('1A R10-2a: an unknown organisation gets Next\'s 404 from each of the 19 titles, never a raw error or a title', async () => {
+  it('1A R10-2a: an unknown organisation gets Next\'s 404 from each of the 20 titles, never a raw error or a title', async () => {
     for (const [file, params] of PAGES()) {
       await expect(titleOf(file, { slug: 'no-such-organisation', ...params }), file).rejects.toMatchObject(NOT_FOUND);
     }

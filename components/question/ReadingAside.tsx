@@ -78,6 +78,7 @@ export function ReadingAside({ seals, versionNumber, note, next, stageTitle, sta
           <>
             <p>{Q.foot.last}</p>
             <p><Link href={stageHref}>{Q.nav.allQuestions}</Link></p>
+            <p><Link href={`${stageHref}/end`}>{Q.end.link}</Link></p>
           </>
         ) : (
           <>

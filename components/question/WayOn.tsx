@@ -18,6 +18,7 @@ export function WayOn({ next, stageHref }: { next: Pick<Neighbour, 'href' | 'tex
         ? <Link href={next.href}>{Q.foot.next(next.text)}</Link>
         : <span>{Q.foot.last}</span>}
       <Link href={stageHref}>{Q.nav.allQuestions}</Link>
+      {next === null ? <Link href={`${stageHref}/end`}>{Q.end.link}</Link> : null}
     </p>
   );
 }

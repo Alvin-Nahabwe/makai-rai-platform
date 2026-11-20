@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, WORKING_REPORT_PAGE, WORKING_REPORT_TITLE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
+import { QUESTION_COPY } from '@/lib/question/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
@@ -59,6 +60,14 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
       ask: S.ask, waiting: S.waiting, seal: S.seal, openAndSeal: S.openAndSeal, sealed: S.sealed,
       lostAsk: S.lost(S.ask), lostOpenAndSeal: S.lost(S.openAndSeal), serverAsk: S.server(S.ask), serverOpenAndSeal: S.server(S.openAndSeal),
       numberTakenAsk: S.numberTaken(S.ask), numberTakenOpenAndSeal: S.numberTaken(S.openAndSeal), whatMeansSeal: S.whatMeans('seal'),
+    });
+  });
+
+  it('the end-of-stage screen and the links to it hold no claim (Task 14)', () => {
+    const E = QUESTION_COPY.end;
+    assertNoClaims('end of stage copy', {
+      heading: E.heading, link: E.link, openReport: E.openReport, start: E.start('In-processing'), view: E.view('In-processing'),
+      openHeading: E.openHeading, nothingOpen: E.nothingOpen, more: E.more(2), moreOne: E.more(1), title: E.title,
     });
   });
 
