@@ -141,7 +141,11 @@ test('anti-goal 4: the page holds no control a role can see and not use (links o
     await page.goto(project.address);
     await expect(page.locator('[data-report-draft]')).toBeVisible();
     await expectNoSeriousA11yViolations(page, `working report, ${role}`);
-    await expect(page.locator('main').getByRole('button')).toHaveCount(0);
+    // Controller's ruling (fix wave item 5): a term tip's (i) is usable by every role (it only opens the term's definition), so it
+    // is the one button allowed; every other button, and every textbox, is still 0.
+    await expect(page.locator('main').getByRole('button').and(page.locator(':not(.ui-term-tip__button)'))).toHaveCount(0);
+    const tips = page.locator('main').getByRole('button').and(page.locator('.ui-term-tip__button'));
+    for (const target of await tips.evaluateAll((bs) => bs.map((b) => b.getAttribute('popovertarget')))) expect(target, 'a term tip opens its popover').toBeTruthy();
     await expect(page.locator('main').getByRole('textbox')).toHaveCount(0);
     // Every download link answers 200 for that role, so none is shown and then refused.
     const hrefs = await page.locator('main a[href*="/working-report"]').evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href));
