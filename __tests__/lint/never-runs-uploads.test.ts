@@ -169,8 +169,10 @@ describe('uploads are never executed or parsed', () => {
     const pool = codeOf(PDF_RENDER_POOL[0]);
     expect([...pool.matchAll(/\bgetBuiltinModule\b/g)]).toHaveLength(1);
     expect(pool).toMatch(/process\.getBuiltinModule\('node:worker_threads'\)/);
-    // The one Worker gets the path and the font, nothing that runs code (no eval, no argv, no execArgv).
-    expect([...pool.matchAll(/\bWorker\)\(([^)]*\)[^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' '))).toEqual(['workerPath, { workerData: { font: pdfFontSource() } }']);
+    // The one Worker gets the path, the font and a heap limit, nothing that runs code (no eval, no argv, no execArgv).
+    expect([...pool.matchAll(/\bWorker\)\(([^)]*\)[^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' ')))
+      .toEqual(['workerPath, { workerData: { font: pdfFontSource() }, resourceLimits: PDF_WORKER_RESOURCE_LIMITS }']);
+    expect(pool).toContain('export const PDF_WORKER_RESOURCE_LIMITS = Object.freeze({ maxOldGenerationSizeMb: 256 });');
     expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'documents', 'render', 'pdfWorker\.mjs'\)/);
     // The worker loads exactly its thread port, React, react-pdf and the shared break points; it requires and starts nothing.
     const worker = codeOf(PDF_RENDER_POOL[1]);

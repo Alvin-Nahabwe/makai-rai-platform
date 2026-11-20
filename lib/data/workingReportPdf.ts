@@ -1,11 +1,11 @@
 import type { Actor, Stage } from '@/types/record';
 import { STAGES } from '@/types/record';
 import { NotFoundError, type OrgContext } from '@/lib/data/tenant';
-import { ValidationFailed } from '@/lib/http/errors';
+import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { readWorkingReport } from '@/lib/data/workingReport';
 import type { WorkingReportPart } from '@/lib/documents/workingReport';
 import { availableParallelism } from 'node:os';
-import { createLimiter, type Limiter } from '@/lib/concurrency/limiter';
+import { createLimiter, LimiterRefusedError, type Limiter } from '@/lib/concurrency/limiter';
 import { composeWorkingReport, workingReportDocument } from '@/lib/documents/render/workingReport';
 import { toPdfTree } from '@/lib/documents/render/pdfTree';
 import { createPdfWorkerPool, pdfRenderLanes, type PdfWorkerPool } from '@/lib/documents/render/pdfWorkerPool';
@@ -22,14 +22,31 @@ import { createPdfWorkerPool, pdfRenderLanes, type PdfWorkerPool } from '@/lib/d
  * every other page needs. A download waiting for a permit has not started its read, so it holds no database connection. The limiter
  * and the workers live on `globalThis`, once per process: Next bundles this module into more than one chunk, and module state would
  * be one limiter per chunk (Task 16 fix report, finding 6).
+ *
+ * The wait is bounded (round 2; the controller's ruling on review M1, the reviewer's values): at most 40 downloads wait, about twice
+ * the 21-person burst, and the 41st is refused at once; one still waiting after 25 s is refused. Both answer 503 with `Retry-After`
+ * (WorkingReportBusyError), so a download is shed rather than left to nginx's 60 s and a bare 504. A download whose request is
+ * aborted (its client has gone) leaves the queue and is never read or rendered (the limiter's RequestAbortedError; the route answers it).
  */
+export const WORKING_REPORT_QUEUE = Object.freeze({ maxWaiting: 40, maxWaitMs: 25_000, retryAfterSeconds: 10 });
+export const WORKING_REPORT_BUSY_MESSAGE = 'Many reports are being prepared right now. Try again in a few seconds.';
+
+/** 503 `report_busy`: no render lane came free in time, or too many downloads were already waiting. The route adds `Retry-After`. */
+export class WorkingReportBusyError extends AppError {
+  readonly retryAfterSeconds = WORKING_REPORT_QUEUE.retryAfterSeconds;
+  constructor() {
+    super(503, 'report_busy', WORKING_REPORT_BUSY_MESSAGE, { retryAfterSeconds: WORKING_REPORT_QUEUE.retryAfterSeconds });
+  }
+}
+
 type Lanes = { limiter: Limiter; pool: PdfWorkerPool };
 const LANES = Symbol.for('makrai.workingReportPdf.lanes');
 function lanes(): Lanes {
   const store = globalThis as unknown as { [LANES]?: Lanes };
   if (store[LANES] === undefined) {
     const size = pdfRenderLanes(availableParallelism());
-    store[LANES] = { limiter: createLimiter(size), pool: createPdfWorkerPool({ size }) };
+    const { maxWaiting, maxWaitMs } = WORKING_REPORT_QUEUE;
+    store[LANES] = { limiter: createLimiter(size, { maxWaiting, maxWaitMs }), pool: createPdfWorkerPool({ size }) };
   }
   return store[LANES];
 }
@@ -51,12 +68,20 @@ const fileWord = (part: WorkingReportPart): string => part.replaceAll(':', '-').
 /**
  * The PDF of `part` of a project's working report. A stage's plan asked for by name answers 404 when that stage has no answers: the
  * whole report leaves it out too (§7). The file name is `working-report-draft-<YYYY-MM-DD>-<part>.pdf`, the day the answers were read (EAT).
+ * `signal` is the request's: aborted while the download waits, it is dropped from the queue (RequestAbortedError).
  */
 export async function workingReportPdf(
-  ctx: OrgContext, actor: Actor, projectId: string, part: WorkingReportPart,
+  ctx: OrgContext, actor: Actor, projectId: string, part: WorkingReportPart, signal?: AbortSignal,
 ): Promise<{ bytes: Buffer; fileName: string }> {
   const { limiter, pool } = lanes();
-  return limiter.run(async () => {
+  try {
+    return await limiter.run(() => readAndRender(), { signal });
+  } catch (e) {
+    if (e instanceof LimiterRefusedError) throw new WorkingReportBusyError();
+    throw e;
+  }
+
+  async function readAndRender(): Promise<{ bytes: Buffer; fileName: string }> {
     const { record, content } = await readWorkingReport(ctx, actor, projectId);
     if (part.startsWith('mitigation_plan:') && !record.stagesWithAnswers.includes(part.slice('mitigation_plan:'.length) as Stage)) {
       throw new NotFoundError();
@@ -64,5 +89,5 @@ export async function workingReportPdf(
     const { pages, title } = composeWorkingReport(record, content, part);
     const pdf = await pool.render(toPdfTree(workingReportDocument(pages, title)));
     return { bytes: pdf, fileName: `working-report-draft-${record.today}-${fileWord(part)}.pdf` };
-  });
+  }
 }

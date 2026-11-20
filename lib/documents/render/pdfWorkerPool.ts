@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import type { Worker } from 'node:worker_threads';
 import { pdfFontSource } from './font';
 import type { PdfTree } from './pdfTree';
+import type { LimiterTimers } from '@/lib/concurrency/limiter';
 
 /**
  * The working report's PDFs, rendered on worker threads (Task 16 fix; design §5, the workshop; owner decision 20 Nov 2026,
@@ -11,13 +12,50 @@ import type { PdfTree } from './pdfTree';
  *
  * The shape is lib/auth/passwordHash.ts's pool, kept separate because that one gates sign-in:
  * - `size` workers, started on first use; idle workers do not keep the process alive.
- * - A job is rejected when its worker dies, cannot start, answers something that is not bytes, or runs longer than `timeoutMs`;
- *   that worker is ended and a new one takes the next job. There is no fallback to rendering on the main thread: a rejected job
+ * - A job is rejected when its worker dies, cannot start, answers something that is not a non-empty PDF, sends an answer that
+ *   cannot be read (`messageerror`), or runs longer than `timeoutMs`; that worker is ended and a new one takes the next job.
+ * - A render that throws in the worker is rejected with the worker's own stack frames on the error, so the request's log line
+ *   (lib/http/toResponse.ts, which logs frames and never the message) names where in the worker it failed. There is no fallback to rendering on the main thread: a rejected job
  *   fails its request (500 with a support reference, lib/http/toResponse.ts), which is what this pool exists to avoid holding up.
  */
 
-/** A whole report renders in well under a second here; this bounds a worker that hangs, not a slow render. */
-export const PDF_JOB_TIMEOUT_MS = 60_000;
+/**
+ * A whole report renders in well under a second here (0.35–0.48 s, Task 16 fix report); this bounds a worker that hangs, not a slow
+ * render. 15 s, the reviewer's value (Task 16 review M1): with the limiter's 25 s wait and the read's ~17 s worst case it stays under
+ * nginx's 60 s proxy default, so a hung render's 500 with a support reference reaches the person instead of nginx's bare 504.
+ */
+export const PDF_JOB_TIMEOUT_MS = 15_000;
+
+/**
+ * Each render thread's heap limit (Task 16 review M3), so a runaway render ends its worker (and its job, as a failure) instead of
+ * growing the server's memory. Measured on the fixture's whole report (82,029 bytes; the workshop's 24-page report is 89 KB) over
+ * 20 renders on one worker: with no limit the heap grew to 214 MB before V8 collected it; with 128 or 256 MB the heap held at
+ * 88–90 MB with a live set of about 56 MB, every render succeeded, and 20 renders took the same time (7.7 s). 256 MB leaves about
+ * three times the observed heap for a larger bank, and two lanes cap the render threads' heaps at about 0.5 GB.
+ */
+export const PDF_WORKER_RESOURCE_LIMITS = Object.freeze({ maxOldGenerationSizeMb: 256 });
+
+const PDF_MAGIC = '%PDF-';
+/** True for a non-empty byte array that begins with the PDF magic; anything else is never served as a PDF. */
+function isPdf(bytes: unknown): bytes is Uint8Array {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < PDF_MAGIC.length) return false;
+  for (let i = 0; i < PDF_MAGIC.length; i += 1) if (bytes[i] !== PDF_MAGIC.charCodeAt(i)) return false;
+  return true;
+}
+
+/** `error`, with the worker's stack frames (`at …` lines) ahead of the main thread's own, so the log line shows both. */
+function withWorkerFrames(error: Error, workerStack: unknown): Error {
+  if (typeof workerStack !== 'string') return error;
+  const frames = workerStack.split('\n').filter((l) => /^\s+at /.test(l));
+  const own = (error.stack ?? '').split('\n').filter((l) => /^\s+at /.test(l));
+  error.stack = [`${error.name}: ${error.message}`, ...frames, ...own].join('\n');
+  return error;
+}
+
+const REAL_TIMERS: LimiterTimers = {
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
+};
 
 /** lib/documents/render/pdfWorker.mjs, resolved from the working directory: the project root, or .next/standalone in the image. */
 const WORKER_PATH = join(process.cwd(), 'lib', 'documents', 'render', 'pdfWorker.mjs');
@@ -46,11 +84,12 @@ export interface PdfWorkerPool {
 }
 
 type Job = { tree: PdfTree; resolve: (pdf: Buffer) => void; reject: (e: Error) => void };
-type Slot = { worker: Worker | null; job: Job | null; jobId: number; timer: NodeJS.Timeout | null };
+type Slot = { worker: Worker | null; job: Job | null; jobId: number; timer: unknown };
 
-export function createPdfWorkerPool(o: { size: number; workerPath?: string; timeoutMs?: number }): PdfWorkerPool {
+export function createPdfWorkerPool(o: { size: number; workerPath?: string; timeoutMs?: number; timers?: LimiterTimers }): PdfWorkerPool {
   const workerPath = o.workerPath ?? WORKER_PATH;
   const timeoutMs = o.timeoutMs ?? PDF_JOB_TIMEOUT_MS;
+  const timers = o.timers ?? REAL_TIMERS;
   const slots: Slot[] = Array.from({ length: o.size }, () => ({ worker: null, job: null, jobId: -1, timer: null }));
   const queue: Job[] = [];
   let nextId = 0;
@@ -68,7 +107,7 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
   /** Clears the slot's job and timer and lets an idle worker stop holding the process open; returns the job. */
   function finish(slot: Slot): Job | null {
     const job = slot.job;
-    if (slot.timer) clearTimeout(slot.timer);
+    if (slot.timer !== null) timers.clearTimeout(slot.timer);
     slot.job = null;
     slot.timer = null;
     slot.worker?.unref();
@@ -76,17 +115,19 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
   }
 
   function spawn(slot: Slot): Worker {
-    const worker = new (workerThreads().Worker)(workerPath, { workerData: { font: pdfFontSource() } });
+    const worker = new (workerThreads().Worker)(workerPath, { workerData: { font: pdfFontSource() }, resourceLimits: PDF_WORKER_RESOURCE_LIMITS });
     worker.unref();
-    worker.on('message', (m: { id: number; pdf?: unknown; error?: string }) => {
+    worker.on('message', (m: { id: number; pdf?: unknown; error?: string; stack?: unknown }) => {
       if (slot.worker !== worker || !slot.job || m.id !== slot.jobId) return;
       const job = finish(slot)!;
-      if (m.error !== undefined) job.reject(new Error(`pdf render failed: ${m.error}`));
-      else if (!(m.pdf instanceof Uint8Array)) job.reject(new Error('pdf worker answered something that is not bytes'));
+      if (m.error !== undefined) job.reject(withWorkerFrames(new Error(`pdf render failed: ${m.error}`), m.stack));
+      else if (!isPdf(m.pdf)) job.reject(new Error('pdf worker answered something that is not a PDF'));
       else job.resolve(Buffer.from(m.pdf.buffer, m.pdf.byteOffset, m.pdf.byteLength));
       pump();
     });
     worker.on('error', (e) => fail(slot, worker, new Error(`pdf worker failed: ${e.message}`)));
+    // An answer the main thread cannot deserialize: without this the job would wait out the timeout.
+    worker.on('messageerror', (e) => fail(slot, worker, new Error(`pdf worker answer could not be read: ${e.message}`)));
     worker.on('exit', (code) => fail(slot, worker, new Error(`pdf worker exited (code ${code})`)));
     slot.worker = worker;
     return worker;
@@ -108,7 +149,7 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
       slot.jobId = nextId++;
       slot.job = job;
       worker.ref(); // a job in flight keeps the process alive until it is answered
-      slot.timer = setTimeout(() => fail(slot, worker, new Error(`pdf render timed out after ${timeoutMs} ms`)), timeoutMs);
+      slot.timer = timers.setTimeout(() => fail(slot, worker, new Error(`pdf render timed out after ${timeoutMs} ms`)), timeoutMs);
       try {
         worker.postMessage({ id: slot.jobId, tree: job.tree });
       } catch (e) {

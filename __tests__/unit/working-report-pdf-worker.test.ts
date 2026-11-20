@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadContent } from '@/lib/content/loader';
 import { composeWorkingReport, renderWorkingReportPdf, workingReportDocument } from '@/lib/documents/render/workingReport';
 import { toPdfTree } from '@/lib/documents/render/pdfTree';
-import { createPdfWorkerPool, pdfRenderLanes, type PdfWorkerPool } from '@/lib/documents/render/pdfWorkerPool';
+import { EventEmitter } from 'node:events';
+import type { Worker } from 'node:worker_threads';
+import { createPdfWorkerPool, pdfRenderLanes, PDF_JOB_TIMEOUT_MS, PDF_WORKER_RESOURCE_LIMITS, type PdfWorkerPool } from '@/lib/documents/render/pdfWorkerPool';
 import { pdfPageRuns } from '../helpers/pdfText';
 import { fullRecord } from '../helpers/draftRecord';
 
@@ -34,6 +36,38 @@ afterEach(async () => {
 /** `p`, or a rejection after `ms`, so a job that is never settled fails the case instead of hanging it. */
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`still pending after ${ms} ms`)), ms))]);
+}
+
+const FINE = [...new TextEncoder().encode('%PDF-1.4 fixture')];
+
+/** Timers the case fires by hand, so no case waits on the clock for a timeout. */
+type FakeTimer = { id: number; fn: () => void; ms: number };
+function fakeTimers() {
+  const pending = new Map<number, FakeTimer>();
+  const made: FakeTimer[] = [];
+  let n = 0;
+  return {
+    made,
+    setTimeout(fn: () => void, ms: number) { const t = { id: ++n, fn, ms }; pending.set(t.id, t); made.push(t); return t.id; },
+    clearTimeout(id: unknown) { pending.delete(id as number); },
+    fire(t: FakeTimer) { if (pending.delete(t.id)) t.fn(); },
+  };
+}
+
+/** Workers the pool starts, through the real constructor, with `limits` in place of the pool's own resource limits when given. */
+function spyWorkers(limits?: object): Array<{ worker: Worker; options: Record<string, unknown> }> {
+  const real = process.getBuiltinModule.bind(process);
+  const RealWorker = (real('node:worker_threads') as { Worker: typeof Worker }).Worker;
+  const made: Array<{ worker: Worker; options: Record<string, unknown> }> = [];
+  vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
+    id === 'node:worker_threads'
+      ? { Worker: function W(path: string, options: Record<string, unknown>) {
+        const worker = new RealWorker(path, limits ? { ...options, resourceLimits: limits } : options);
+        made.push({ worker, options });
+        return worker;
+      } }
+      : real(id)) as typeof process.getBuiltinModule);
+  return made;
 }
 
 const docTitled = (title: string): ReactElement => createElement(Document, { title }, createElement(Page, { size: 'A4' }, createElement(Text, null, 'x')));
@@ -82,15 +116,19 @@ describe('the working report rendered on a worker thread', () => {
   it('a worker that dies rejects its job, and the next job runs on a new worker', async () => {
     const p = pool({ size: 1, workerPath: FAULTY_WORKER });
     await expect(within(p.render(toPdfTree(docTitled('crash'))), 10_000)).rejects.toThrow(/pdf worker exited/);
-    expect([...(await within(p.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual([1, 2, 3, 4]);
+    expect([...(await within(p.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual(FINE);
   }, 30_000);
 
-  it('a job that outlives the timeout is rejected, its worker ended, and the queue goes on', async () => {
-    const p = pool({ size: 1, workerPath: FAULTY_WORKER, timeoutMs: 1500 });
+  it('a job that outlives the 15 s timeout is rejected, its worker ended, and the queue goes on (round 2: was 60 s)', async () => {
+    const timers = fakeTimers();
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER, timers });
     const hung = p.render(toPdfTree(docTitled('hang')));
     const queued = p.render(toPdfTree(docTitled('fine')));
-    await expect(within(hung, 10_000)).rejects.toThrow(/timed out after 1500 ms/);
-    expect([...(await within(queued, 10_000))]).toEqual([1, 2, 3, 4]);
+    expect(PDF_JOB_TIMEOUT_MS).toBe(15_000);
+    expect(timers.made.map((t) => t.ms)).toEqual([15_000]);
+    timers.fire(timers.made[0]);
+    await expect(within(hung, 10_000)).rejects.toThrow(/timed out after 15000 ms/);
+    expect([...(await within(queued, 10_000))]).toEqual(FINE);
   }, 30_000);
 
   it('a worker file that cannot load fails the job loudly, it does not hang or fall back to the main thread', async () => {
@@ -117,4 +155,60 @@ describe('the working report rendered on a worker thread', () => {
   it('runs max(1, min(2, cores - 1)) render lanes: two measured best on the workshop burst, and a core is left for the main thread', () => {
     expect([1, 2, 3, 4, 12, 64].map(pdfRenderLanes)).toEqual([1, 1, 2, 2, 2, 2]);
   });
+
+  it('round 2 (review M2): an answer that is not a non-empty PDF is refused, never served as a PDF', async () => {
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    await expect(within(p.render(toPdfTree(docTitled('junk'))), 10_000)).rejects.toThrow(/not a PDF/);
+    await expect(within(p.render(toPdfTree(docTitled('empty'))), 10_000)).rejects.toThrow(/not a PDF/);
+    expect([...(await within(p.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual(FINE);
+  }, 30_000);
+
+  it('round 2 (review M2): a render that throws keeps the worker\'s own frames on the error, where the log line reads them', async () => {
+    const p = pool({ size: 1 });
+    const tree = { t: 'DOCUMENT', k: null, p: {}, c: { t: 'IMAGE', k: null, p: { src: 'x' } } };
+    const e = await within(p.render(tree as never), 30_000).then(() => null, (err: Error) => err);
+    expect(e?.message).toMatch(/pdf render failed: .*element type IMAGE/);
+    const frames = (e?.stack ?? '').split('\n').slice(1);
+    expect(frames[0]).toMatch(/^\s+at .*pdfWorker\.mjs:\d+:\d+\)?$/);
+  }, 40_000);
+
+  it('round 2 (review M3): an answer the main thread cannot read (messageerror) rejects the job and replaces the worker', async () => {
+    // A real messageerror needs a message Node cannot deserialize; this fake worker emits the event the pool listens for instead.
+    class FakeWorker extends EventEmitter {
+      static made: FakeWorker[] = [];
+      terminated = false;
+      constructor() { super(); FakeWorker.made.push(this); }
+      postMessage(m: { id: number }) {
+        const first = FakeWorker.made.length === 1;
+        setImmediate(() => first
+          ? this.emit('messageerror', new Error('could not deserialize'))
+          : this.emit('message', { id: m.id, pdf: new TextEncoder().encode('%PDF-1.4 fake') }));
+      }
+      ref() {}
+      unref() {}
+      terminate() { this.terminated = true; return Promise.resolve(0); }
+    }
+    const real = process.getBuiltinModule.bind(process);
+    vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
+      id === 'node:worker_threads' ? { Worker: FakeWorker } : real(id)) as typeof process.getBuiltinModule);
+    const p = pool({ size: 1, timers: fakeTimers() });
+    await expect(within(p.render(toPdfTree(docTitled('fine'))), 5_000)).rejects.toThrow(/pdf worker answer could not be read: could not deserialize/);
+    expect(FakeWorker.made[0].terminated).toBe(true);
+    expect((await within(p.render(toPdfTree(docTitled('fine'))), 5_000)).subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(FakeWorker.made).toHaveLength(2);
+  });
+
+  it('round 2 (review M3): each worker runs under a heap limit, and a render that outgrows it ends the job, not the process', async () => {
+    const seen = spyWorkers();
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    await within(p.render(toPdfTree(docTitled('fine'))), 10_000);
+    expect(PDF_WORKER_RESOURCE_LIMITS).toEqual({ maxOldGenerationSizeMb: 256 });
+    expect(seen[0].options.resourceLimits).toBe(PDF_WORKER_RESOURCE_LIMITS);
+    vi.restoreAllMocks();
+    // The same pool shape with a 32 MB limit, so the fixture reaches it quickly.
+    spyWorkers({ maxOldGenerationSizeMb: 32 });
+    const small = pool({ size: 1, workerPath: FAULTY_WORKER });
+    await expect(within(small.render(toPdfTree(docTitled('balloon'))), 30_000)).rejects.toThrow(/pdf worker (failed|exited)/);
+    expect([...(await within(small.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual(FINE);
+  }, 60_000);
 });

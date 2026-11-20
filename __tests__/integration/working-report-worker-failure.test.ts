@@ -48,3 +48,30 @@ it('a render worker that cannot load answers 500 internal_error with a support r
   expect({ status: r.status, code: body.code, reference: typeof body.reference }).toEqual({ status: 500, code: 'internal_error', reference: 'string' });
   expect(r.headers.get('content-type')).not.toBe('application/pdf');
 });
+
+it('round 2 (review M2): a render that throws in the worker is logged with the worker\'s own frames under the reference', async () => {
+  await store[LANES]?.pool.close();
+  store[LANES] = {
+    limiter: createLimiter(1),
+    pool: createPdfWorkerPool({ size: 1, workerPath: join(process.cwd(), '__tests__', 'fixtures', 'pdf-worker', 'throwing-worker.mjs') }),
+  };
+  const { contentVersionId } = await useFixtureContent('0.0.1-fixture');
+  const fx = await buildOrg({ label: 'wrt' });
+  const projectId = (await addProject(fx)).id;
+  await addDecision(fx, projectId, {
+    stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'done',
+    decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30',
+  });
+  const lines: string[] = [];
+  vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+  sessionAs(fx.members.viewer.userId);
+  const r = await callRoute(ROUTE, 'GET', { slug: fx.org.slug, params: { id: projectId }, query: {} });
+  const body = await r.json();
+  vi.restoreAllMocks();
+  expect({ status: r.status, code: body.code }).toEqual({ status: 500, code: 'internal_error' });
+  const logged = lines.filter((l) => l.includes('REQUEST_FAILED')).map((l) => JSON.parse(l));
+  expect(logged).toHaveLength(1);
+  expect(logged[0].reference).toBe(body.reference);
+  expect(logged[0].error.frames[0]).toMatch(/throwing-worker\.mjs:\d+:\d+/);
+});
+
