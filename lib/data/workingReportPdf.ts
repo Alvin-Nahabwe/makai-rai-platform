@@ -3,6 +3,7 @@ import { STAGES } from '@/types/record';
 import { NotFoundError, type OrgContext } from '@/lib/data/tenant';
 import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { readWorkingReport } from '@/lib/data/workingReport';
+import { isSerializationFailure } from '@/lib/data/pgErrors';
 import type { WorkingReportPart } from '@/lib/documents/workingReport';
 import { availableParallelism } from 'node:os';
 import { createLimiter, LimiterRefusedError, type Limiter } from '@/lib/concurrency/limiter';
@@ -53,6 +54,9 @@ function lanes(): Lanes {
   return store[LANES];
 }
 
+/** Prisma's P2028: an interactive transaction that could not start in time, or that expired. */
+const isTransactionTimeout = (e: unknown): boolean => typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'P2028';
+
 /** The report's parts by name. `all` is also what an absent `?part=` means. */
 const PARTS: ReadonlySet<string> = new Set<WorkingReportPart>(['all', 'summary', 'data_card', 'model_card', ...STAGES.map((s) => `mitigation_plan:${s}` as const)]);
 
@@ -78,7 +82,10 @@ export async function workingReportPdf(
   try {
     return await limiter.run(() => readAndRender(), { signal });
   } catch (e) {
-    if (e instanceof LimiterRefusedError) throw new WorkingReportBusyError();
+    // A full queue, a second serialisation failure of the read (readWorkingReport retries the first), or a transaction that could
+    // not start or ran out of time (P2028) is contention under a burst, not a bug: "try again", never the generic 500 (fix wave
+    // item 15; silent-failure audit M4).
+    if (e instanceof LimiterRefusedError || isSerializationFailure(e) || isTransactionTimeout(e)) throw new WorkingReportBusyError();
     throw e;
   }
 
