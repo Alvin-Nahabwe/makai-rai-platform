@@ -461,6 +461,21 @@ export interface DraftRecord {
 }
 
 /**
+ * A draft-read warning, said once per id per process (final review M12; silent-failure audit M3). Every report view, download and
+ * end screen reads the draft record, so a per-read line would repeat the same id all day and drown the signal. The ids already
+ * said live on `globalThis`: Next bundles this module into more than one chunk, and module state would be one set per chunk.
+ */
+const DRAFT_WARNED = Symbol.for('makrai.documents.draftWarned');
+function warnOncePerProcess(event: 'DRAFT_ORPHAN_DECISION' | 'DRAFT_CONTENT_VERSION_UNLISTED', id: string, details: Record<string, unknown>): void {
+  const store = globalThis as unknown as { [DRAFT_WARNED]?: Set<string> };
+  const said = (store[DRAFT_WARNED] ??= new Set<string>());
+  const key = `${event}:${id}`;
+  if (said.has(key)) return;
+  said.add(key);
+  logSecurityEvent(event, 'warn', { details });
+}
+
+/**
  * For each title-less shortfall finding of the stages whose question the running content does not hold, that question's words in the
  * content version its raising decision was recorded against, or null when this deployment does not list that version
  * (`unknown_content_version`), the version lacks the question, or the finding names no decision (Task 6 fix I1). A draft prints such a
@@ -480,6 +495,8 @@ async function recordedQuestionWordsOf(tx: TenantTx, stages: Iterable<SnapshotSt
       loaded.set(contentVersionId, loadContent((await contentRefById(tx, contentVersionId)).semver));
     } catch (e) {
       if (!(e instanceof AppError && e.code === 'unknown_content_version')) throw e;
+      // A packaging fault: an answer was recorded against a bundle this deployment does not hold (silent-failure audit M1).
+      warnOncePerProcess('DRAFT_CONTENT_VERSION_UNLISTED', contentVersionId, { contentVersionId });
       loaded.set(contentVersionId, null);
     }
   }
@@ -522,7 +539,7 @@ export async function readDraftRecord(tx: TenantTx, projectId: string, viewer: A
   let omittedAnswers = 0;
   for (const stage of STAGES) {
     const live = liveDecisionRows(await readStageRows(tx, projectId, stage), content);
-    for (const decisionVersionId of live.orphans) logSecurityEvent('DRAFT_ORPHAN_DECISION', 'warn', { details: { decisionVersionId, stage } });
+    for (const decisionVersionId of live.orphans) warnOncePerProcess('DRAFT_ORPHAN_DECISION', decisionVersionId, { decisionVersionId, stage });
     omittedAnswers += live.omittedAnswers;
     const plan = stagePlan(live.rows, { stage, content });
     const header: DraftHeader = {

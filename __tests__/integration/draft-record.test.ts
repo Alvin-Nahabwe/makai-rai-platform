@@ -19,6 +19,7 @@ import { useFixtureContent } from '../helpers/content';
 import { addAcceptedRisk, addDecision, addFinding, addMitigationVersion, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 import { sealFixture } from '../helpers/sealFixture';
 import { captureLogs } from '../helpers/logCapture';
+import { rememberFixtureRow } from '../setup/content';
 
 /**
  * Task 6 (path to outputs): the draft record is built from the rows a seal of each stage would name now, never from a seal, and the
@@ -299,6 +300,31 @@ describe('the draft record (Task 6)', () => {
     const texts = planFindingTexts(r);
     expect(texts.some((t) => t.includes('Q-ZZ-99 · question no longer in the framework'))).toBe(true);
     for (const { type, stage } of DRAFTS) expect(() => resolveFields(loadFieldMap(type), draftSnapshot(r, type, stage), {})).not.toThrow();
+  });
+
+  it('SF M1 (fix wave item 15): a removed question recorded against a version this deployment does not list prints the fixed line and logs DRAFT_CONTENT_VERSION_UNLISTED once', async () => {
+    const id = randomUUID();
+    rememberFixtureRow(id);
+    await testDb.frameworkVersion.create({ data: { id, semver: '0.0.9-unlisted', contentHash: 'x'.repeat(64), publishedAt: new Date('2026-01-01T00:00:00Z'), status: 'deprecated' } });
+    const orphan = await decide('pre-processing', 'Q-ZZ-99', { status: 'partly', contentVersionId: id });
+    await raiseShortfall('Q-ZZ-99', orphan.id);
+    const { result: r, lines } = await captureLogs(() => readDraft());
+    expect(planFindingTexts(r).some((t) => t.includes('Q-ZZ-99 · question no longer in the framework'))).toBe(true);
+    const logged = lines.filter((l) => l.includes('DRAFT_CONTENT_VERSION_UNLISTED')).map((l) => JSON.parse(l));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ level: 'warn', details: { contentVersionId: id } });
+    // Once per id per process (final review M12's rule): a second read of the same record logs nothing new.
+    const again = await captureLogs(() => readDraft());
+    expect(again.lines.filter((l) => l.includes('DRAFT_CONTENT_VERSION_UNLISTED'))).toEqual([]);
+  });
+
+  it('final review M12 / SF M3 (fix wave item 14): DRAFT_ORPHAN_DECISION is logged once per decision id per process, not on every read', async () => {
+    const orphan = await decide('pre-processing', 'Q-ZZ-97');
+    const first = await captureLogs(() => readDraft());
+    expect(first.lines.filter((l) => l.includes('DRAFT_ORPHAN_DECISION') && l.includes(orphan.id))).toHaveLength(1);
+    const second = await captureLogs(() => readDraft());
+    expect(second.lines.filter((l) => l.includes('DRAFT_ORPHAN_DECISION'))).toEqual([]);
+    expect(second.result.omittedAnswers).toBe(1);
   });
 
   it('isolation: another organisation\'s project id is NotFoundError', async () => {
