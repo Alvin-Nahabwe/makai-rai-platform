@@ -4,6 +4,9 @@ import { GRANTS, can } from '@/lib/authz/policy';
 import { sealStep, sealStepTexts, type SealStepState } from '@/lib/review/sealStep';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import type { SealView, StageReviewView } from '@/types/api';
+import * as TERMS from '@/lib/vocabulary/terms';
+import { ROLE_IDS, termPattern } from '@/lib/vocabulary/firstUse';
+import type { VocabularyEntry } from '@/lib/vocabulary/types';
 
 /**
  * Design G2 and SRS FR-DOC-09 clause 10: what the seal step of a stage shows each role, as a pure function of the role,
@@ -136,6 +139,16 @@ describe('the seal step (design G2, FR-DOC-09 clause 10)', () => {
     for (const role of ROLES) expect(sealStep(role, [damagedUnreadable(1)], false).kind).not.toBe('waiting');
     // An open review beside the damaged one is the key review (conflict 16): the step is about it.
     expect(sealStep('assessor', [damagedUnreadable(1), review(2)], false)).toEqual({ kind: 'waiting', reviewId: 'r2' });
+  });
+
+  it('fix round 1: "seal" is the only term the step\'s words use that the vocabulary defines at first use (roles aside), so listing them in routeTermTips suppresses no row\'s (i) the step does not itself define', () => {
+    const checked = (Object.values(TERMS) as VocabularyEntry[]).filter((t) => t.defineOnFirstUse && !(ROLE_IDS as readonly string[]).includes(t.id));
+    const states: SealStepState[] = [{ kind: 'hidden' }, { kind: 'ask' }, { kind: 'waiting', reviewId: 'r1' }, { kind: 'open_and_seal' }, { kind: 'seal', reviewId: 'r1' }, { kind: 'sealed' },
+      { kind: 'damaged', action: 'seal', reviewId: 'r1' }, { kind: 'damaged', action: 'ask', reviewId: 'r1' }, { kind: 'damaged', action: 'none', reviewId: 'r1' }];
+    for (const state of states) {
+      const used = checked.filter((t) => sealStepTexts(state).some((text) => termPattern(t.term).test(text))).map((t) => t.id);
+      expect({ state, used }).toEqual({ state, used: ['hidden', 'sealed'].includes(state.kind) ? [] : ['seal'] });
+    }
   });
 
   it('G2: each state reads the design\'s words, verbatim; hidden reads nothing', () => {
