@@ -219,7 +219,7 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
       {' '}
       {held
         ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.end.link}</span>
-        : <Link href={stageEndHref(stageHref)} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.end.link}</Link>}
+        : <Link href={stageEndHref(stageHref)} prefetch={false} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.end.link}</Link>}
     </p>
   );
 }

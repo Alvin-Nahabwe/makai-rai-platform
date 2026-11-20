@@ -19,7 +19,7 @@ export function WayOn({ next, stageHref }: { next: Pick<Neighbour, 'href' | 'tex
         ? <Link href={next.href}>{Q.foot.next(next.text)}</Link>
         : <span>{Q.foot.last}</span>}
       <Link href={stageHref}>{Q.nav.allQuestions}</Link>
-      {next === null ? <Link href={stageEndHref(stageHref)}>{Q.end.link}</Link> : null}
+      {next === null ? <Link href={stageEndHref(stageHref)} prefetch={false}>{Q.end.link}</Link> : null}
     </p>
   );
 }

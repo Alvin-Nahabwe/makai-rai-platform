@@ -177,7 +177,8 @@ const CARD_STAGE = { data_card: 'pre-processing', model_card: 'in-processing' } 
 
 /**
  * The order of the report, defined here once (conflict 14): page 1, the data card, the model card, then a mitigation plan for each stage with
- * answers, in stage order. A single part is that part alone, so a plan asked for by name is made even for a stage with no answers yet.
+ * answers, in stage order. A single part is that part alone. This function does not check that a plan's stage has answers: the download
+ * (lib/data/workingReportPdf.ts) answers 404 for a plan asked for by name whose stage has none, before it gets here.
  */
 export function workingReportPages(r: DraftRecord, part: WorkingReportPart): ReportPageRef[] {
   const card = (documentType: 'data_card' | 'model_card'): ReportPageRef => ({ kind: 'document', documentType, reviewStage: CARD_STAGE[documentType] });
