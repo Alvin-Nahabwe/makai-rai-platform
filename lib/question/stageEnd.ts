@@ -40,6 +40,11 @@ export interface StageEndData {
   applies: ReadonlySet<Stage>;
   /** Whether the viewer may record in this project: it decides "Start" or "View" for the next stage (ruling O1). */
   canWrite: boolean;
+  /**
+   * Whether the running content holds the question in that stage: the question page answers not-found for any other (panel.ts), so an
+   * open item on a question a release has since removed has no page to link to (anti-goal 4: no link to a page that is not there).
+   */
+  hasQuestion: (stage: Stage, questionId: string) => boolean;
 }
 
 /**
@@ -54,5 +59,6 @@ export async function loadStageEnd(ctx: OrgContext, viewerId: string, projectId:
   return {
     page, takenAt: record.takenAt, summary, applies: stagesThatApply(content, record.developmentStage),
     canWrite: can(ctx.role, 'decision:write') && !page.projectArchived,
+    hasQuestion: (st, questionId) => content.questions.get(questionId)?.stage === st,
   };
 }

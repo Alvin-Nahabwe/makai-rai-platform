@@ -1,7 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, questionPath, stagePath, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, openQuestionIn, questionPath, saveAlert, saveStatus, stagePath, waitForQuestionPage } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
+import { FIELD_COPY } from '../lib/ui/field/copy';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { REVIEW_COPY } from '../lib/review/copy';
 import { ERRORS_COPY } from '../lib/errors/copy';
@@ -113,4 +116,73 @@ test('anti-goal 4: on the end screen, for an Assessor, a Reviewer and a Viewer, 
     await expect(next).toBeVisible();
     await expect(page.getByRole('link', { name: role === 'assessor' ? E.view('In-processing') : E.start('In-processing') })).toHaveCount(0);
   }
+});
+
+/**
+ * Ruling on Task 14's review (risk b): the push to the end screen happens only on a clean "Saved". A message the person must see
+ * keeps them on the last question, with the end screen one link away: "Saved without <file>... save again", text typed while the
+ * save was out (CR-1, UX-25: the kept copy must be shown), and "already saved" (M-04). Q-PP-23 is the last question of Pre-processing.
+ */
+const endLink = (page: Page) => page.locator('[data-region="answer-form"]').getByRole('link', { name: E.link });
+const reasonField = (page: Page) => page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`);
+
+/**
+ * The person is still on the question: a push after the save is a navigation that starts within moments of the "Saved" line, so
+ * the check waits for one (it must not arrive), then asserts the question's address, the end screen's link and no end heading.
+ */
+async function stayedOnQuestion(page: Page, projectId: string): Promise<void> {
+  await expect(page.waitForURL(/\/end$/u, { timeout: 4_000 }), 'a save with a message to read must not navigate to the end screen').rejects.toThrow();
+  await expect(page).toHaveURL(new RegExp(`${questionPath(projectId, LAST)}$`));
+  await expect(endLink(page)).toHaveAttribute('href', endPath(projectId, 'pre-processing'));
+  await expect(page.getByRole('heading', { level: 1, name: E.heading })).toHaveCount(0);
+}
+
+test('G3 risk b, CR-1 7.4.1: text typed while the last question\'s save is out keeps the person on the question, the field, the unsaved line and a link to the end screen', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', LAST, baseURL!);
+  await fillValid(page, { reason: 'Sent reason' });
+  let release!: () => void;
+  const held = new Promise<void>((res) => (release = res));
+  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText('Saving...');
+  await reasonField(page).fill('Typed while it was saving');
+  release();
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
+  await expect(reasonField(page)).toHaveValue('Typed while it was saving');
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
+  await stayedOnQuestion(page, projectId);
+});
+
+test('G3 risk b, M-04: "already saved" on the last question keeps the person on the question with a link to the end screen', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', LAST, baseURL!);
+  await fillValid(page);
+  await page.route('**/decisions', async (r) => { await r.fetch(); await r.abort('failed'); }, { times: 1 });   // the server commits, the page sees a failure
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(saveStatus(page)).toHaveText(/^This was already saved at \d{2}:\d{2} \S+ \(version 1\)\.$/);
+  await stayedOnQuestion(page, projectId);
+});
+
+test('G3 risk b, "Saved without <file>": the last question keeps the person on the question, with the line that says to save again and a link to the end screen', async ({ page }) => {
+  await actAsSeat(page, 'admin');
+  const projectId = await openQuestionIn(page, LAST);
+  await fillValid(page);
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  await page.route('**/evidence', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    await held;
+    try { await route.abort('failed'); } catch { /* cancelled by the page */ }
+  });
+  const name = 'left-out-last.pdf';
+  await page.locator('input[type="file"]').setInputFiles({ name, mimeType: 'application/pdf', buffer: Buffer.from(`%PDF-1.4\n${name}\n`) });
+  await expect(page.locator('[data-upload-progress] > progress')).toHaveAttribute('aria-label', `Uploading ${name}`);
+  const sent = page.waitForRequest((r) => r.method() === 'POST' && /\/decisions$/.test(new URL(r.url()).pathname));
+  await page.getByRole('button', { name: DECISION_FORM_COPY.saveWithout(1) }).click();
+  await sent;
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./, { timeout: 20_000 });
+  await expect(page.getByText(`${DECISION_FORM_COPY.savedWithout.before}${name}${DECISION_FORM_COPY.savedWithout.after}`)).toBeVisible();
+  await stayedOnQuestion(page, projectId);
+  release();
 });

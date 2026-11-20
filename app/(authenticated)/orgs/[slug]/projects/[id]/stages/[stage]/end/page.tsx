@@ -47,12 +47,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
  */
 export default async function StageEndPage({ params }: { params: Params }) {
   const { slug, id, stage } = await params;
-  const { page, takenAt, summary, applies, canWrite } = await load(slug, id, stage);
+  const { page, takenAt, summary, applies, canWrite, hasQuestion } = await load(slug, id, stage);
   return (
     <>
       <StageEnd
         orgSlug={slug} projectId={id} projectName={page.projectName} projectArchived={page.projectArchived} stage={page.stage} takenAt={takenAt}
-        rows={page.rows} marks={page.marks} summary={summary} applies={applies} canWrite={canWrite} sealStep={page.sealStep}
+        rows={page.rows} marks={page.marks} summary={summary} applies={applies} canWrite={canWrite} hasQuestion={hasQuestion} sealStep={page.sealStep}
       />
       <RememberProject userId={page.viewerId} orgSlug={slug} projectId={page.projectId} />
     </>

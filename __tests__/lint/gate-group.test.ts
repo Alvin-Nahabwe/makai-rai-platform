@@ -51,7 +51,7 @@ const routesOf = (appDir: string): string[] =>
     .filter((r) => !r.split('/').some((segment) => segment.startsWith('@')))
     .sort();
 
-/** The 38 page addresses at the base of this task (c1c933b6), from screen-stages.mjs's walk of app/ that day. */
+/** The page addresses the group-gate lint expects: one entry per page file under app/ (the shell's @project mirrors are not addresses). It grows with each new route. */
 const ROUTES_AT_BASE = [
   '/', '/about', '/acceptances', '/account', '/admin/accounts', '/admin/organisations', '/admin/organisations/[id]',
   '/admin/organisations/new', '/change-password', '/explore/controls', '/explore/framework', '/forgot-password', '/help',

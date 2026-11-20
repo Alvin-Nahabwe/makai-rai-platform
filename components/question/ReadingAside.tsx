@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { ButtonLink } from '@/components/ui/Button';
 import { ReadingDefinition } from './ReadingDefinition';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { stageEndHref } from '@/lib/question/stageEndHref';
 import { TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
 import type { SealRef } from '@/types/seal';
 import './reading.css';
@@ -78,7 +79,7 @@ export function ReadingAside({ seals, versionNumber, note, next, stageTitle, sta
           <>
             <p>{Q.foot.last}</p>
             <p><Link href={stageHref}>{Q.nav.allQuestions}</Link></p>
-            <p><Link href={`${stageHref}/end`}>{Q.end.link}</Link></p>
+            <p><Link href={stageEndHref(stageHref)}>{Q.end.link}</Link></p>
           </>
         ) : (
           <>

@@ -26,6 +26,7 @@ import { PROJECT_COPY } from '@/lib/project/copy';
 import { STAGES, type Stage } from '@/types/record';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { pageTitle } from '@/lib/ui/title';
+import { stageEndHref } from '@/lib/question/stageEndHref';
 import RememberProject from '@/components/layout/RememberProject';
 import '@/components/question/stage-route.css';
 
@@ -111,7 +112,7 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       {/* Spec 7.2: the whole stage's tally in words, each kind beside its mark (every question, not the page the list shows). */}
       <StageTally rows={data.rows} marks={data.marks} />
       {/* Design G3: the stage's end screen, reachable again from here (the controller's call). */}
-      <p className="stage-route__end"><ListLink href={`${base}/stages/${data.stage}/end`}>{QUESTION_COPY.end.link}</ListLink></p>
+      <p className="stage-route__end"><ListLink href={stageEndHref(`${base}/stages/${data.stage}`)}>{QUESTION_COPY.end.link}</ListLink></p>
       {/* The follow-up counts as links, each only above zero (plan 1C Task 3): the findings list and the stage's follow-up. */}
       {openFindings > 0 || overdueMitigations > 0 ? (
         <p className="stage-route__followup">

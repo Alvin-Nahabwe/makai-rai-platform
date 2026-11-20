@@ -67,7 +67,7 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
     const E = QUESTION_COPY.end;
     assertNoClaims('end of stage copy', {
       heading: E.heading, link: E.link, openReport: E.openReport, start: E.start('In-processing'), view: E.view('In-processing'),
-      openHeading: E.openHeading, nothingOpen: E.nothingOpen, more: E.more(2), moreOne: E.more(1), title: E.title,
+      openHeading: E.openHeading, nothingOpen: E.nothingOpen, more: E.more(2), moreOne: E.more(1), title: E.title, whatMeans: E.whatMeans('risk area'),
     });
   });
 

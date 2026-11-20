@@ -290,9 +290,17 @@ describe('Save beside the next question (R2, R9)', () => {
   });
 
   it('design G3: a saved last question goes to the stage\'s end screen; any other saved question stays', () => {
-    expect(endHrefAfterSave(null, STAGE)).toBe(`${STAGE}/end`);
-    expect(endHrefAfterSave(NEXT, STAGE)).toBeNull();
-    expect(endHrefAfterSave(null, undefined)).toBeNull();
+    const clean = { statusId: 'M-03', leftOut: [] as string[], typedDuringSave: false };
+    expect(endHrefAfterSave(null, STAGE, clean)).toBe(`${STAGE}/end`);
+    expect(endHrefAfterSave(NEXT, STAGE, clean)).toBeNull();
+    expect(endHrefAfterSave(null, undefined, clean)).toBeNull();
+  });
+
+  it('design G3, ruling on risk b: the push happens only on a clean Saved; a message the person must see keeps them on the question', () => {
+    // "Saved without <file>... save again" (M-03 with a left-out file), text typed during the save (CR-1, UX-25), "already saved" (M-04).
+    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: ['a.pdf'], typedDuringSave: false })).toBeNull();
+    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: [], typedDuringSave: true })).toBeNull();
+    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
   });
 
   it('on the stage\'s last question: the last-question line and All questions', () => {

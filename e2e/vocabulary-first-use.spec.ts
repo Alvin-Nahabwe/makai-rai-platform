@@ -442,3 +442,54 @@ test.describe.serial('vocabulary first use', () => {
     expect(hits.length, `first uses not beside their definition:\n${worklist(hits).join('\n')}`).toBe(0);
   });
 });
+
+/**
+ * The first-use rule on the three pages of the path to outputs that show the working report's words, asserted outright: these do
+ * NOT read the worklist above, whose last test is marked `test.fail()` until Task 20 and so cannot fail for a term these pages
+ * leave undefined. The controller's ruling on Task 14's review: the end screen (`working report`, `risk area`, `control` when
+ * shown, `finding`), the project page (`working report`, `risk area`) and the working report (`risk area`, `control`) define
+ * those terms at first use. The project has one team finding with no risk area (so the "no risk area" heading shows on the end
+ * screen and the report) whose title uses none of the terms. A page that shows none of a term is not a pass: the floors name the
+ * terms each page must have shown, so a copy change that removes a use cannot leave the check empty.
+ */
+test('vocabulary first use (explicit): the end screen, the project page and the working report define their terms at first use', async ({ browser, baseURL, playwright }) => {
+  test.setTimeout(3 * 60_000);
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
+  const slug = manifest.orgs[0].slug;
+  const owner = manifest.users.find((u) => u.orgSlug === slug && u.role === 'owner' && u.index === 0);
+  if (!owner) throw new Error(`vocabulary-first-use: no owner seat for ${slug} in the fixture manifest`);
+  const api = await playwright.request.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
+  const seed = async (url: string, data: Record<string, unknown>): Promise<{ id: string }> => {
+    const response = await api.post(new URL(url, baseURL).href, { headers: { origin: baseURL ?? '' }, data: { requestId: crypto.randomUUID(), ...data }, maxRedirects: 0 });
+    expect(response.status(), `seeding ${url}`).toBe(201);
+    return (await response.json()) as { id: string };
+  };
+  const project = await seed(`/api/v1/orgs/${slug}/projects`, { name: `Explicit first-use ${Date.now()}`, aiSystemType: 'classification' });
+  await seed(`/api/v1/orgs/${slug}/projects/${project.id}/findings`, {
+    stage: 'pre-processing', title: 'Consent notice is missing', description: 'Raised by the team.', riskArea: null, questionId: null, decisionVersionId: null,
+  });
+  await api.dispose();
+
+  const base = `/orgs/${slug}/projects/${project.id}`;
+  const pages: Array<{ name: string; path: string; ids: string[]; mustShow: string[] }> = [
+    { name: 'the end screen', path: `${base}/stages/pre-processing/end`, ids: ['working-report', 'risk-area', 'control', 'finding'], mustShow: ['working-report', 'risk-area'] },
+    { name: 'the project page', path: base, ids: ['working-report', 'risk-area'], mustShow: ['working-report'] },
+    { name: 'the working report', path: `${base}/report`, ids: ['working-report', 'risk-area', 'control'], mustShow: ['working-report', 'risk-area'] },
+  ];
+  const context = await browser.newContext({ baseURL, storageState: owner.storageStatePath });
+  await abortPendingBackgroundRequests(context);
+  const page = await context.newPage();
+  failOnDialog(page);
+  for (const p of pages) {
+    await page.goto(p.path);
+    await expect(page.locator('main h1').first()).toBeVisible();
+    const nodes = await page.evaluate(collectTextNodes, { blockSelector: BLOCK_SELECTOR, legalRoute: false, definitions: DEFINITIONS });
+    expect(nodes, `${p.name}: the page has no main`).not.toBeNull();
+    const wanted = CONCEPTS.filter((c) => p.ids.includes(c.id));
+    expect(wanted.map((c) => c.id).sort(), `${p.name}: the concepts checked`).toEqual([...p.ids].sort());
+    expect(firstUseViolations(nodes!, wanted, CONTENT_NAMES), `${p.name}: first uses not beside their definition`).toEqual([]);
+    const shown = new Set(nodes!.flatMap((n) => n.termIds));
+    for (const id of p.mustShow) expect(shown.has(id), `${p.name} marks no use of "${id}" with a Term`).toBe(true);
+  }
+  await context.close();
+});

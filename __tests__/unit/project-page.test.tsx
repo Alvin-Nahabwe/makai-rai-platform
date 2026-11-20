@@ -405,6 +405,17 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(P.overview.openReport).toBe('Open the working report');
   });
 
+  it('first use: "working report" and "risk area", in the G5 line, are defined beside it with a TermTip each', () => {
+    const html = render();
+    const line = html.slice(html.indexOf('<p class="project-page__gets-line">'), html.indexOf('</p>', html.indexOf('<p class="project-page__gets-line">')));
+    for (const id of ['working-report', 'risk-area']) {
+      expect(line, id).toContain(`data-term="${id}"`);
+      expect(line.match(new RegExp(`data-definition="${id}"`, 'g')), id).toHaveLength(1);
+    }
+    // The button's label is a later use, not marked again.
+    expect(html.match(/data-term="working-report"/g)).toHaveLength(1);
+  });
+
   it('G7 display: a stage with applies false reads "Doesn\'t apply to this project yet" and still links to the stage', () => {
     const d = { ...data(), applies: { 'pre-processing': true, 'in-processing': false, 'post-processing': true } };
     const html = renderToStaticMarkup(<ProjectPage data={d} routes={routesOf(d)} continueTo={null} />);

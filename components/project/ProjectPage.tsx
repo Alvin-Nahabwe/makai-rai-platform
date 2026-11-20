@@ -14,7 +14,7 @@ import { ButtonLink } from '@/components/ui/Button';
 import type { ContinueTarget } from '@/lib/home/types';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { SHELL_COPY } from '@/lib/shell/copy';
-import { TERM_SEAL, TERM_STAGE_REVIEW } from '@/lib/vocabulary/terms';
+import { TERM_RISK_AREA, TERM_SEAL, TERM_STAGE_REVIEW, TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
 
 const P = PROJECT_COPY;
 
@@ -62,7 +62,12 @@ export function ProjectPage({ data, routes, continueTo, children }: {
       <ArchivedBanner archived={project.archived} />
       {/* G5: what a person gets, then the one primary action, in the body (the header has no actions wrapper). Every role may read the report. */}
       <div className="project-page__gets">
-        <p className="project-page__gets-line">{P.overview.whatYouGet}</p>
+        {/* The line's "working report" and "risk area" are the page's first uses of both: each is defined beside it. */}
+        <p className="project-page__gets-line">
+          <Term of={TERM_WORKING_REPORT}><Term of={TERM_RISK_AREA}>{P.overview.whatYouGet}</Term></Term>
+          <TermTip of={TERM_WORKING_REPORT} label={P.whatMeans(TERM_WORKING_REPORT.term)} />
+          <TermTip of={TERM_RISK_AREA} label={P.whatMeans(TERM_RISK_AREA.term)} />
+        </p>
         <p className="project-page__primary"><ButtonLink variant="primary" href={`${base}/report`}>{P.overview.openReport}</ButtonLink></p>
       </div>
       <div className="project-lines-frame">

@@ -77,6 +77,8 @@ export const QUESTION_COPY = Object.freeze({
     openHeading: 'Next steps in this stage',
     nothingOpen: 'Nothing is open in this stage.',
     more: (n: number): string => (n === 1 ? '1 more is listed in the working report.' : `${n} more are listed in the working report.`),
+    /** The accessible name of the (i) beside a term the screen defines at its first use: 'What does "risk area" mean?'. */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
   }),
   reworded: Object.freeze({
     line: "The description of good practice changed after your team's decision.",

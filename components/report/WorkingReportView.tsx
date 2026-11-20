@@ -1,17 +1,22 @@
 import type { ReactElement } from 'react';
 import { Definition, Term } from '@/components/ui/Definition';
+import { TermTip } from '@/components/ui/TermTip';
 import '@/components/ui/buttonStyles';
 import { draftSnapshot, type DraftRecord } from '@/lib/data/documents';
-import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NOT_RECORDED_YET, STAGE_TERMS, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
+import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, NOT_RECORDED_YET, STAGE_TERMS, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { resolveFields } from '@/lib/documents/resolve';
 import { workingReportPages, type OpenItem, type ReportPageRef, type WorkingReportPart, type WorkingReportSummary } from '@/lib/documents/workingReport';
 import { PROJECT_COPY } from '@/lib/project/copy';
-import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
+import { TERM_CONTROL, TERM_RISK_AREA, TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
+import type { DefinedEntry } from '@/lib/vocabulary/types';
 import type { Stage } from '@/types/record';
 import './report.css';
 
 const C = PROJECT_COPY.workingReport;
+
+/** The (i) beside a term the page defines at its first use. */
+const tip = (term: DefinedEntry): ReactElement => <TermTip of={term} label={PROJECT_COPY.whatMeans(term.term)} />;
 
 type Props = { orgSlug: string; projectId: string; record: DraftRecord; summary: WorkingReportSummary };
 
@@ -45,7 +50,8 @@ const titleOf = (ref: ReportPageRef): string => {
   return ref.documentType === 'mitigation_plan' ? C.planTitle(name, stageName(ref.reviewStage)) : name;
 };
 
-function Item({ item }: { item: OpenItem }): ReactElement {
+/** `defineControls`: this item holds the page's first "Suggested controls", the first use of the term when page 1 shows controls. */
+function Item({ item, defineControls }: { item: OpenItem; defineControls: boolean }): ReactElement {
   return (
     <li className="report-item" data-open-item>
       <p className="report-item__title">{item.title}</p>
@@ -54,7 +60,7 @@ function Item({ item }: { item: OpenItem }): ReactElement {
       {item.alsoAreas.length > 0 ? <p className="report-item__fact">{W.alsoTouches}: {item.alsoAreas.join(', ')}</p> : null}
       {item.controls.length > 0 ? (
         <div className="report-item__controls">
-          <p className="report-item__fact">{W.controls}</p>
+          <p className="report-item__fact">{defineControls ? <><Term of={TERM_CONTROL}>{W.controls}</Term>{tip(TERM_CONTROL)}</> : W.controls}</p>
           <ul>
             {item.controls.map((c) => (
               <li key={c.id} data-control>
@@ -70,19 +76,20 @@ function Item({ item }: { item: OpenItem }): ReactElement {
 }
 
 /** Page 1 on screen: the same blocks, in the same order, as the PDF's page 1 (lib/documents/render/summaryPage.tsx). */
-function Summary({ summary: s, headingId }: { summary: WorkingReportSummary; headingId: string }): ReactElement {
+export function Summary({ summary: s, headingId }: { summary: WorkingReportSummary; headingId: string }): ReactElement {
   const byStage = <T extends { stage: Stage }>(rows: readonly T[]) => groupRuns(rows, (r) => r.stage);
+  const firstControls = s.controlsShown ? s.nextSteps.flatMap((g) => g.items).find((i) => i.controls.length > 0)?.findingId ?? null : null;
   return (
     <section id="report-summary" className="report-section" aria-labelledby={headingId}>
       <h2 id={headingId}>{W.title}</h2>
       {s.omittedAnswers > 0 ? <p className="report-note">{W.omitted(s.omittedAnswers)}</p> : null}
 
       <h3>{W.nextSteps}</h3>
-      {s.nextSteps.length === 0 ? <p>{W.nothingOpen}</p> : !s.controlsShown ? <p className="report-muted">{CONTROLS_AFTER_APPROVAL}</p> : null}
+      {s.nextSteps.length === 0 ? <p>{W.nothingOpen}</p> : !s.controlsShown ? <p className="report-muted"><Term of={TERM_CONTROL}>{CONTROLS_AFTER_APPROVAL}</Term>{tip(TERM_CONTROL)}</p> : null}
       {s.nextSteps.map((g) => (
         <div key={g.areaId ?? g.areaName} className="report-group">
-          <h4>{g.areaName}</h4>
-          <ul className="report-items">{g.items.map((i) => <Item key={i.findingId} item={i} />)}</ul>
+          <h4>{g.areaName === NO_RISK_AREA_GROUP ? <><Term of={TERM_RISK_AREA}>{g.areaName}</Term>{tip(TERM_RISK_AREA)}</> : g.areaName}</h4>
+          <ul className="report-items">{g.items.map((i) => <Item key={i.findingId} item={i} defineControls={i.findingId === firstControls} />)}</ul>
         </div>
       ))}
 

@@ -5,7 +5,7 @@ import type { StageRow } from '@/lib/question/stageList';
 import type { AreaGroup, OpenItem, WorkingReportSummary } from '@/lib/documents/workingReport';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
-import { draftLine } from '@/lib/documents/copy';
+import { draftLine, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 import { stagesThatApply } from '@/lib/project/applicability';
 import type { SealStepState } from '@/lib/review/sealStep';
 import type { Stage } from '@/types/record';
@@ -43,7 +43,7 @@ type Over = Partial<Parameters<typeof StageEnd>[0]>;
 const render = (over: Over = {}): string => renderToStaticMarkup(
   <StageEnd
     orgSlug="acme" projectId="p1" projectName="Project A" stage="pre-processing" takenAt={TAKEN} rows={ROWS} marks={MARKS} summary={summary([])} applies={ALL}
-    canWrite sealStep={{ kind: 'hidden' } satisfies SealStepState} {...over}
+    canWrite hasQuestion={() => true} sealStep={{ kind: 'hidden' } satisfies SealStepState} {...over}
   />,
 );
 
@@ -60,7 +60,8 @@ describe('StageEnd (design G3)', () => {
 
   it('the primary action is Open the working report; it is the only primary button', () => {
     const h = render();
-    expect(h).toMatch(/<a class="ui-button ui-button--primary" href="\/orgs\/acme\/projects\/p1\/report">Open the working report<\/a>/);
+    // With nothing more to list, the action holds the page's first "working report", marked (its tip follows the button).
+    expect(h).toMatch(/<a class="ui-button ui-button--primary" href="\/orgs\/acme\/projects\/p1\/report">Open the <span data-term="working-report">working report<\/span><\/a>/);
     expect(h.match(/ui-button--primary/g)).toHaveLength(1);
   });
 
@@ -140,6 +141,63 @@ describe('StageEnd (design G3)', () => {
   it('a Viewer\'s screen has no button of its own: the report and the stage are links', () => {
     const h = render({ canWrite: false });
     expect(h).not.toMatch(/<button(?![^>]*ui-term-tip__button)/);
-    expect(h).toContain('Open the working report');
+    expect(h).toContain('Open the <span data-term="working-report">working report</span>');
+  });
+
+  it('anti-goal 4: an open item whose question is no longer in the framework is text, not a link (it would open the not-found page)', () => {
+    const gone = (n: number, areaId: string | null): AreaGroup => ({ areaId, areaName: areaId ?? REMOVED_QUESTION_GROUP, items: [item(n, 'pre-processing')] });
+    const known = (stage: Stage, questionId: string): boolean => stage === 'pre-processing' && questionId === 'Q-1';
+    const h = render({
+      summary: summary([gone(2, null), gone(3, 'Bias (PP-01)'), group('Consent (PP-02)', [item(1, 'pre-processing')])]),
+      hasQuestion: known,
+    });
+    // The item on a known question links to it; the two on questions the running content lacks (one grouped under a risk area) do not.
+    expect(h).toMatch(/<a [^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-1"[^>]*>Open item 1<\/a>/);
+    expect(h).toContain('Open item 2');
+    expect(h).toContain('Open item 3');
+    expect(h).not.toContain('questions/Q-2');
+    expect(h).not.toContain('questions/Q-3');
+    expect(h).toContain(REMOVED_QUESTION_GROUP);
+  });
+
+  it('a question that exists only in another stage is not linked either (the question page answers not-found for a stage that is not its own)', () => {
+    const h = render({ summary: summary([group('Bias (PP-01)', [item(1, 'pre-processing')])]), hasQuestion: () => false });
+    expect(h).toContain('Open item 1');
+    expect(h).not.toContain('questions/Q-1');
+  });
+
+  describe('first use of a defined term (the vocabulary rule), defined with a TermTip beside the first use', () => {
+    const tips = (h: string, id: string): number => (h.match(new RegExp(`data-definition="${id}"`, 'g')) ?? []).length;
+    const termAt = (h: string, id: string): string => h.slice(h.indexOf(`data-term="${id}"`));
+
+    it('"working report": the first use is the "more are listed" line when there is one, and the action when there is not', () => {
+      const many = summary([group('Bias (PP-01)', [1, 2, 3, 4].map((n) => item(n, 'pre-processing')))]);
+      const h = render({ summary: many });
+      expect(tips(h, 'working-report')).toBe(1);
+      expect(termAt(h, 'working-report').startsWith(`data-term="working-report">${E.more(1)}</span><span class="ui-term-tip">`)).toBe(true);
+      // The action's label, after it, is not marked again.
+      expect(h.match(/data-term="working-report"/g)).toHaveLength(1);
+      const none = render();
+      expect(tips(none, 'working-report')).toBe(1);
+      expect(none).toMatch(/<a class="ui-button ui-button--primary"[^>]*>Open the <span data-term="working-report">working report<\/span><\/a>\s*<span class="ui-term-tip">/);
+      expect(none.indexOf('data-definition="working-report"')).toBeGreaterThan(none.indexOf('Open the'));
+    });
+
+    it('"risk area": the heading of the items the team raised with no risk area is marked, and its tip is in that heading', () => {
+      const h = render({ summary: summary([{ areaId: null, areaName: NO_RISK_AREA_GROUP, items: [item(1, 'pre-processing')] }]) });
+      expect(tips(h, 'risk-area')).toBe(1);
+      expect(h).toMatch(new RegExp(`<h3><span data-term="risk-area">${NO_RISK_AREA_GROUP}</span><span class="ui-term-tip">.*?</span></h3>`));
+      // A named area is the framework's own name, not the term.
+      expect(tips(render({ summary: summary([group('Bias (PP-01)', [item(1, 'pre-processing')])]) }), 'risk-area')).toBe(0);
+    });
+
+    it('"control": the first "Suggested controls" is marked once and later ones are not; none when page 1 hides them', () => {
+      const controls = [{ id: 'C-1', name: 'Check the sampling', notebookHref: null }];
+      const shown = render({ summary: summary([group('Bias (PP-01)', [item(1, 'pre-processing', controls), item(2, 'pre-processing', controls)])], true) });
+      expect(tips(shown, 'control')).toBe(1);
+      expect(shown.match(new RegExp(WORKING_REPORT_PAGE.controls, 'g'))).toHaveLength(2);
+      expect(shown).toMatch(new RegExp(`<span data-term="control">${WORKING_REPORT_PAGE.controls}</span><span class="ui-term-tip">`));
+      expect(tips(render({ summary: summary([group('Bias (PP-01)', [item(1, 'pre-processing')])]) }), 'control')).toBe(0);
+    });
   });
 });
