@@ -73,5 +73,8 @@ it('round 2 (review M2): a render that throws in the worker is logged with the w
   expect(logged).toHaveLength(1);
   expect(logged[0].reference).toBe(body.reference);
   expect(logged[0].error.frames[0]).toMatch(/throwing-worker\.mjs:\d+:\d+/);
+  // The worker's error class stands in for its message, whose text (a frame-shaped line among it) never reaches the log.
+  expect(logged[0].error.code).toBe('PDF_WORKER_TYPEERROR');
+  expect(lines.join('\n')).not.toMatch(/secret|render threw/);
 });
 

@@ -161,6 +161,31 @@ describe('createLimiter: wait limit, queue cap and gone clients', () => {
     expect({ started, active: limiter.active, waiting: limiter.waiting }).toEqual({ started: false, active: 0, waiting: 0 });
   });
 
+  it('a client gone just after its task was granted the permit: the task never starts, the permit passes on, the counts return to zero', async () => {
+    const timers = fakeTimers();
+    const limiter = createLimiter(1, { maxWaiting: 40, maxWaitMs: 25_000, timers });
+    const hold = deferred();
+    const running = limiter.run(() => hold.promise);
+    const gone = new AbortController();
+    let started = false;
+    const granted = limiter.run(async () => { started = true; return 'x'; }, { signal: gone.signal });
+    const third = deferred();
+    const after = limiter.run(() => third.promise);
+    // Registered after `running`'s own reaction, so it runs once the permit has been handed to `granted` (it has left the queue,
+    // its timer and abort listener are gone) and before `granted`'s task can start.
+    let waitingAtAbort = -1;
+    void hold.promise.then(() => { waitingAtAbort = limiter.waiting; gone.abort(); });
+    hold.resolve('h');
+    await running;
+    await expect(granted).rejects.toBeInstanceOf(RequestAbortedError);
+    expect(waitingAtAbort).toBe(1); // only `after` still waited: the abort landed after the grant, not in the queue
+    await settle();
+    expect({ started, active: limiter.active, waiting: limiter.waiting }).toEqual({ started: false, active: 1, waiting: 0 });
+    third.resolve('third');
+    await expect(after).resolves.toBe('third');
+    expect({ active: limiter.active, waiting: limiter.waiting, timersLeft: timers.pending.size }).toEqual({ active: 0, waiting: 0, timersLeft: 0 });
+  });
+
   it('a task whose client has already gone never runs, even with a permit free', async () => {
     const limiter = createLimiter(1, { maxWaiting: 40, maxWaitMs: 25_000, timers: fakeTimers() });
     const gone = new AbortController();

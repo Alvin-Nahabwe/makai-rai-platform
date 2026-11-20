@@ -16,7 +16,7 @@ const SCRIPT = join(process.cwd(), 'scripts', 'check-standalone.mjs');
 /** Files the server loads at run time without importing them (check-standalone.mjs RUNTIME_FILES). */
 const RUNTIME = [
   'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json',
-  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/@react-pdf/renderer/package.json',
+  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'lib/http/stackFrames.mjs', 'node_modules/@react-pdf/renderer/package.json',
   'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
   // What the PDF worker's imports resolve to in the image (Task 16 review M6, traced from an isolated copy of .next/standalone).
   'node_modules/react/index.js', 'node_modules/react/cjs/react.production.js', 'node_modules/@react-pdf/renderer/lib/react-pdf.js',

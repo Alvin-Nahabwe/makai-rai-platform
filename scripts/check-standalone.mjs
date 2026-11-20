@@ -27,7 +27,7 @@ const findings = [];
 // The working report's render worker (lib/documents/render/pdfWorkerPool.ts starts it by path) and what it imports outside the trace.
 const RUNTIME_FILES = [
   'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json',
-  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/@react-pdf/renderer/package.json',
+  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'lib/http/stackFrames.mjs', 'node_modules/@react-pdf/renderer/package.json',
   'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
   // The files the PDF worker's own imports resolve to in the image, not stand-ins for them (Task 16 review M6): traced by running
   // pdfWorker.mjs from an isolated copy of .next/standalone with a resolve hook. The other ~110 files that trace showed (react-pdf's

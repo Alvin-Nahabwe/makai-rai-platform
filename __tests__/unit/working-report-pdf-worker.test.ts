@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Fragment, createElement, type ReactElement } from 'react';
 import { Document, Link, Page, Text, View } from '@react-pdf/renderer';
@@ -8,6 +9,7 @@ import { toPdfTree } from '@/lib/documents/render/pdfTree';
 import { EventEmitter } from 'node:events';
 import type { Worker } from 'node:worker_threads';
 import { createPdfWorkerPool, pdfRenderLanes, PDF_JOB_TIMEOUT_MS, PDF_WORKER_RESOURCE_LIMITS, type PdfWorkerPool } from '@/lib/documents/render/pdfWorkerPool';
+import { toResponse } from '@/lib/http/toResponse';
 import { pdfPageRuns } from '../helpers/pdfText';
 import { fullRecord } from '../helpers/draftRecord';
 
@@ -39,6 +41,9 @@ function within<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 const FINE = [...new TextEncoder().encode('%PDF-1.4 fixture')];
+/** The line of lib/documents/render/pdfWorker.mjs that refuses an element type it does not draw. */
+const TYPE_CHECK_LINE = readFileSync(join(process.cwd(), 'lib', 'documents', 'render', 'pdfWorker.mjs'), 'utf8')
+  .split('\n').findIndex((l) => l.includes('is not one the worker draws')) + 1;
 
 /** Timers the case fires by hand, so no case waits on the clock for a timeout. */
 type FakeTimer = { id: number; fn: () => void; ms: number };
@@ -149,7 +154,10 @@ describe('the working report rendered on a worker thread', () => {
   it('the worker draws only the report: a tree with another element type is refused by the worker too', async () => {
     const p = pool({ size: 1 });
     const tree = { t: 'DOCUMENT', k: null, p: {}, c: { t: 'IMAGE', k: null, p: { src: 'x' } } };
-    await expect(within(p.render(tree as never), 30_000)).rejects.toThrow(/pdf render failed: .*element type IMAGE/);
+    // The message is not carried (it can hold the report's text), so the first frame shows where: the worker's type check.
+    const e = await within(p.render(tree as never), 30_000).then(() => null, (err: Error) => err);
+    expect(e?.message).toBe('pdf render failed in the worker (PDF_WORKER_ERROR)');
+    expect((e?.stack ?? '').split('\n')[1]).toMatch(new RegExp(`^\\s+at build \\(.*pdfWorker\\.mjs:${TYPE_CHECK_LINE}:\\d+\\)$`));
   }, 40_000);
 
   it('runs max(1, min(2, cores - 1)) render lanes: two measured best on the workshop burst, and a core is left for the main thread', () => {
@@ -167,10 +175,42 @@ describe('the working report rendered on a worker thread', () => {
     const p = pool({ size: 1 });
     const tree = { t: 'DOCUMENT', k: null, p: {}, c: { t: 'IMAGE', k: null, p: { src: 'x' } } };
     const e = await within(p.render(tree as never), 30_000).then(() => null, (err: Error) => err);
-    expect(e?.message).toMatch(/pdf render failed: .*element type IMAGE/);
+    expect(e?.message).toMatch(/^pdf render failed in the worker/);
     const frames = (e?.stack ?? '').split('\n').slice(1);
     expect(frames[0]).toMatch(/^\s+at .*pdfWorker\.mjs:\d+:\d+\)?$/);
   }, 40_000);
+
+  it('a render error whose message holds lines shaped like stack frames: none of that text reaches the error or the log line', async () => {
+    // build() puts the element type into its error, so a multi-line type is a message with lines that start `at`, one of them a
+    // well-formed V8 frame. Record text in a render error would reach the log the same way.
+    const LEAK = 'IMAGE\n    at Evil (secret answer text)\n    at secret answer text (/srv/secret-answer.js:1:2)\n    at Evil.secretAnswer (file:///srv/secret.mjs:3:4)';
+    const p = pool({ size: 1 });
+    const tree = { t: 'DOCUMENT', k: null, p: {}, c: { t: LEAK, k: null, p: {} } };
+    const e = await within(p.render(tree as never), 30_000).then(() => null, (err: Error) => err);
+    expect(e).toBeInstanceOf(Error);
+    expect(`${e!.message}\n${e!.stack}`).not.toMatch(/secret|Evil/i);
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+    toResponse(e);
+    const logged = lines.filter((l) => l.includes('REQUEST_FAILED'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).not.toMatch(/secret|Evil/i);
+    const entry = JSON.parse(logged[0]);
+    // A fixed classification stands where the message would be: the worker's error name, as a code the log line keeps.
+    expect({ name: entry.error.name, code: entry.error.code }).toEqual({ name: 'PdfRenderFailedError', code: 'PDF_WORKER_ERROR' });
+    expect(entry.error.frames[0]).toMatch(/^at build \(.*pdfWorker\.mjs:\d+:\d+\)$/);
+  }, 40_000);
+
+  it('the pool trusts no text from the worker: a raw stack, a message, a made-up name and frames that are not frames are all dropped', async () => {
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    const e = await within(p.render(toPdfTree(docTitled('leak'))), 10_000).then(() => null, (err: Error) => err);
+    expect(e).toBeInstanceOf(Error);
+    expect(`${e!.message}\n${e!.stack}`).not.toMatch(/secret/i);
+    expect((e as Error & { code?: string }).code).toBe('PDF_WORKER_ERROR');
+    expect((e!.stack ?? '').split('\n').filter((l) => l.includes('/srv/'))).toEqual(['    at failingRender (/srv/fixture.mjs:3:9)']);
+    // The worker is still good after an answer like that.
+    expect([...(await within(p.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual(FINE);
+  }, 30_000);
 
   it('round 2 (review M3): an answer the main thread cannot read (messageerror) rejects the job and replaces the worker', async () => {
     // A real messageerror needs a message Node cannot deserialize; this fake worker emits the event the pool listens for instead.

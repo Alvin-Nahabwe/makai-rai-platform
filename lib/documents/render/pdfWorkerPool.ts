@@ -3,6 +3,7 @@ import type { Worker } from 'node:worker_threads';
 import { pdfFontSource } from './font';
 import type { PdfTree } from './pdfTree';
 import type { LimiterTimers } from '@/lib/concurrency/limiter';
+import { CLASS_NAME, FRAME, MAX_FRAMES } from '@/lib/http/stackFrames.mjs';
 
 /**
  * The working report's PDFs, rendered on worker threads (Task 16 fix; design §5, the workshop; owner decision 20 Nov 2026,
@@ -14,8 +15,10 @@ import type { LimiterTimers } from '@/lib/concurrency/limiter';
  * - `size` workers, started on first use; idle workers do not keep the process alive.
  * - A job is rejected when its worker dies, cannot start, answers something that is not a non-empty PDF, sends an answer that
  *   cannot be read (`messageerror`), or runs longer than `timeoutMs`; that worker is ended and a new one takes the next job.
- * - A render that throws in the worker is rejected with the worker's own stack frames on the error, so the request's log line
- *   (lib/http/toResponse.ts, which logs frames and never the message) names where in the worker it failed. There is no fallback to rendering on the main thread: a rejected job
+ * - A render that throws in the worker is rejected with a PdfRenderFailedError: the worker's error class as a code, and the worker's
+ *   own stack frames, so the request's log line (lib/http/toResponse.ts, which logs the code and frames, never the message) names
+ *   where in the worker it failed. The worker sends no message and no raw stack, and the pool keeps only what it can check: a class
+ *   name, and lines in V8's frame shape (lib/http/stackFrames.mjs). There is no fallback to rendering on the main thread: a rejected job
  *   fails its request (500 with a support reference, lib/http/toResponse.ts), which is what this pool exists to avoid holding up.
  */
 
@@ -43,13 +46,30 @@ function isPdf(bytes: unknown): bytes is Uint8Array {
   return true;
 }
 
-/** `error`, with the worker's stack frames (`at …` lines) ahead of the main thread's own, so the log line shows both. */
-function withWorkerFrames(error: Error, workerStack: unknown): Error {
-  if (typeof workerStack !== 'string') return error;
-  const frames = workerStack.split('\n').filter((l) => /^\s+at /.test(l));
-  const own = (error.stack ?? '').split('\n').filter((l) => /^\s+at /.test(l));
-  error.stack = [`${error.name}: ${error.message}`, ...frames, ...own].join('\n');
-  return error;
+/** A worker class name short enough that `PDF_WORKER_<NAME>` is a code toResponse's log line keeps (at most 41 characters). */
+const CODE_NAME = /^[A-Za-z][A-Za-z0-9_]{0,29}$/;
+
+/**
+ * A render that threw on its worker. The worker's message is never carried: it can hold the report's text, and the log line must
+ * not. `code` is the fixed classification in its place, `PDF_WORKER_` and the worker's error class (`PDF_WORKER_ERROR` for a name
+ * that is not a plain class name), and the stack is this error's head, then the worker's frames, then the main thread's own. Of
+ * what the worker sent, only strings in V8's frame shape are kept, at most ten: the pool splits no stack and trusts no other text.
+ */
+export class PdfRenderFailedError extends Error {
+  readonly code: string;
+  constructor(workerName: unknown, workerFrames: unknown) {
+    const name = typeof workerName === 'string' && CLASS_NAME.test(workerName) && CODE_NAME.test(workerName) ? workerName : 'Error';
+    const code = `PDF_WORKER_${name.toUpperCase()}`;
+    super(`pdf render failed in the worker (${code})`);
+    this.name = 'PdfRenderFailedError';
+    this.code = code;
+    const frames = Array.isArray(workerFrames)
+      ? workerFrames.filter((l): l is string => typeof l === 'string' && FRAME.test(l)).slice(0, MAX_FRAMES)
+      : [];
+    // The main thread's own stack has only the fixed message above it, so its frame-shaped lines are frames.
+    const own = (this.stack ?? '').split('\n').filter((l) => FRAME.test(l));
+    this.stack = [`${this.name}: ${this.message}`, ...frames, ...own].join('\n');
+  }
 }
 
 const REAL_TIMERS: LimiterTimers = {
@@ -117,10 +137,10 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
   function spawn(slot: Slot): Worker {
     const worker = new (workerThreads().Worker)(workerPath, { workerData: { font: pdfFontSource() }, resourceLimits: PDF_WORKER_RESOURCE_LIMITS });
     worker.unref();
-    worker.on('message', (m: { id: number; pdf?: unknown; error?: string; stack?: unknown }) => {
+    worker.on('message', (m: { id: number; pdf?: unknown; error?: unknown; frames?: unknown }) => {
       if (slot.worker !== worker || !slot.job || m.id !== slot.jobId) return;
       const job = finish(slot)!;
-      if (m.error !== undefined) job.reject(withWorkerFrames(new Error(`pdf render failed: ${m.error}`), m.stack));
+      if (m.error !== undefined) job.reject(new PdfRenderFailedError(m.error, m.frames));
       else if (!isPdf(m.pdf)) job.reject(new Error('pdf worker answered something that is not a PDF'));
       else job.resolve(Buffer.from(m.pdf.buffer, m.pdf.byteOffset, m.pdf.byteLength));
       pump();

@@ -174,10 +174,11 @@ describe('uploads are never executed or parsed', () => {
       .toEqual(['workerPath, { workerData: { font: pdfFontSource() }, resourceLimits: PDF_WORKER_RESOURCE_LIMITS }']);
     expect(pool).toContain('export const PDF_WORKER_RESOURCE_LIMITS = Object.freeze({ maxOldGenerationSizeMb: 256 });');
     expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'documents', 'render', 'pdfWorker\.mjs'\)/);
-    // The worker loads exactly its thread port, React, react-pdf and the shared break points; it requires and starts nothing.
+    // The worker loads exactly its thread port, React, react-pdf, the shared break points and the shared stack-frame shape; it
+    // requires and starts nothing.
     const worker = codeOf(PDF_RENDER_POOL[1]);
     expect([...worker.matchAll(/\bfrom\s*'([^']+)'/g)].map((m) => m[1]).sort())
-      .toEqual(['./breakPoints.mjs', '@react-pdf/renderer', 'node:worker_threads', 'react', 'react/jsx-runtime']);
+      .toEqual(['../../http/stackFrames.mjs', './breakPoints.mjs', '@react-pdf/renderer', 'node:worker_threads', 'react', 'react/jsx-runtime']);
     expect(worker).not.toMatch(/\bimport\s*\(|\brequire\s*\(|\bprocess\.(binding|dlopen)|\bnew\s+Worker\b/);
     // React by its default export only: the image has only React's production build, where Node cannot list named exports.
     expect(worker).not.toMatch(/import\s*\{[^}]*\}\s*from\s*'react(\/jsx-runtime)?'/);

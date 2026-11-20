@@ -23,13 +23,13 @@ const nextConfig: NextConfig = {
    * `scripts/check-standalone.mjs` fails the build check when either is missing.
    *
    * `lib/documents/render/pdfWorker.mjs` is started the same way, by path, to render working reports off the main thread
-   * (lib/documents/render/pdfWorkerPool.ts), and imports `./breakPoints.mjs` and `react/jsx-runtime` at run time; react-pdf
+   * (lib/documents/render/pdfWorkerPool.ts), and imports `./breakPoints.mjs`, `lib/http/stackFrames.mjs` and `react/jsx-runtime` at run time; react-pdf
    * itself is a server external package the routes already trace. The check fails the build when any of them is missing.
    */
   outputFileTracingIncludes: {
     '/*': [
       'data/**/*.json', 'data/legal/**/*.md', 'data/fonts/**', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**',
-      'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
+      'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'lib/http/stackFrames.mjs', 'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
     ],
   },
   /**

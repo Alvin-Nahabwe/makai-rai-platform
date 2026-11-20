@@ -110,3 +110,32 @@ it('a download whose client has gone leaves the queue, is never rendered, and is
   expect(renders).toHaveLength(0);
   expect(lines.filter((l) => l.includes('REQUEST_FAILED'))).toEqual([]);
 });
+
+it('the production lanes take those values: the limiter the route builds refuses the 41st waiting download, and one waiting 25 s', async () => {
+  // No lanes of the case's own: the route builds the real ones (lib/data/workingReportPdf.ts lanes()) on its first download.
+  const { fx, projectId } = await seedProject((await useFixtureContent('0.0.1-fixture')).contentVersionId);
+  store[LANES] = undefined;
+  const first = await callRoute(ROUTE, 'GET', { slug: fx.org.slug, params: { id: projectId }, query: {} });
+  expect(first.status).toBe(200);
+  const built = store[LANES]!;
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // Hold every permit, whatever this machine's lane count; the task that first has to wait is waiter 1. None is ever released.
+    while (built.limiter.waiting === 0) built.limiter.run(() => new Promise<void>(() => {})).catch(() => {});
+    const outcome: string[] = [];
+    const wait = (i: number) => built.limiter.run(async () => 'ran').then(() => outcome.push(`ran ${i}`), (e: { reason?: string }) => outcome.push(`${i} ${e.reason}`));
+    for (let i = 2; i <= 41; i++) void wait(i);
+    const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+    await settle();
+    expect({ waiting: built.limiter.waiting, outcome }).toEqual({ waiting: 40, outcome: ['41 full'] });
+    vi.advanceTimersByTime(24_999);
+    await settle();
+    expect(built.limiter.waiting).toBe(40);
+    vi.advanceTimersByTime(1);
+    await settle();
+    expect({ waiting: built.limiter.waiting, timedOut: outcome.filter((o) => o.endsWith('timed_out')).length }).toEqual({ waiting: 0, timedOut: 39 });
+  } finally {
+    vi.useRealTimers();
+    await built.pool.close();
+  }
+});
