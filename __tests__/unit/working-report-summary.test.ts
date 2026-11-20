@@ -3,7 +3,6 @@ import type { DecisionStatus, Stage, UtcInstant } from '@/types/record';
 import { STAGES } from '@/types/record';
 import type { ContentRef, FindingView, UserRef } from '@/types/api';
 import type { SealManifestV1 } from '@/types/seal';
-import type { LoadedContent } from '@/types/content';
 import type { DraftRecord } from '@/lib/data/documents';
 import { loadContent } from '@/lib/content/loader';
 import { controlsForArea, questionAreaIds } from '@/lib/content/suggestions';

@@ -8,7 +8,7 @@ import {
 } from '@/lib/content/suggestions';
 import { GATE_DERIVED_NA, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, wordsThenCode } from '@/lib/documents/copy';
 import {
-  STATUS_WORD, findingTitle, notApplicableLine, textOf, type DocumentSnapshot, type SealedDecision, type SealedFinding,
+  STATUS_WORD, findingTitle, notApplicableLine, textOf, type DocumentSnapshot, type SealedFinding,
 } from '@/lib/documents/resolve';
 
 /**

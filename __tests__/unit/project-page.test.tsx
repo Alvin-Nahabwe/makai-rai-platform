@@ -313,9 +313,6 @@ describe('S-10 as three lines of stops (Route R5)', () => {
     expect(tipsIn(stop(later['post-processing'], 'recorded'))).toEqual(['partly', 'not-yet', 'not-applicable']);
   });
 
-  /** Markup without lane 1's TermTips (the (i) and its popover's sentence), for reading the words around them. */
-  const noTip = (markup: string) => markup.replace(/<span class="ui-term-tip">.*?<\/span><\/span><\/span>/g, '');
-
   it('G4: each stage shows "N of M", a progress element in data-stage-bar named "N of M questions recorded", and Next: Question N · Continue as a link', () => {
     // COUNTS: 24 questions, 9 with no decision, none removed by the gate: 15 of 24. The first open question of routeFor is the 15th (14 decided before it).
     const l = lines(render());
