@@ -437,7 +437,9 @@ test('R4: on the question page the line reads that the finding can now be closed
   await page.goto(`/orgs/${fx.org.slug}/projects/${project.id}/stages/pre-processing/questions/Q-PP-01`);
   await expect(page.locator('#question-heading')).toBeVisible();
   await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
-  const region = page.locator('[data-region="finding-link"]');
+  // A writer's finding line is in the decision card's foot (components/decision/DecisionCard.tsx, HeldFindingLink); the
+  // page's own finding-link region is a reader's raise link only.
+  const region = page.locator('[data-region="answer-form"]');
   await expect(region.getByText(QUESTION_COPY.findingLink.open)).toBeVisible();
   let loads = 0;
   page.on('load', () => { loads++; });
