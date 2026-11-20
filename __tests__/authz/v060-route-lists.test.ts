@@ -188,7 +188,7 @@ describe('route lists', () => {
     for (const f of withReason) expect({ f, isRow21To29: f in ROWS_21_TO_29 }).toEqual({ f, isRow21To29: true });
   });
 
-  it('NFR-INT-02: RETRY_KEYED_WRITES holds rows 1 to 3, 5 to 13, 16 and 19 with every non-GET method of each, and besides them only rows 21 to 29', () => {
+  it('NFR-INT-02: RETRY_KEYED_WRITES holds rows 1 to 3, 5 to 13, 16 and 19 and the seal request (design G2) with every non-GET method of each, and besides them only rows 21 to 29', () => {
     const rows = [
       `${P}decisions/route.ts`, `${P}questions/[questionId]/withdrawal/route.ts`, `${P}evidence/route.ts`, `${P}findings/route.ts`,
       `${P}findings/[findingId]/mitigations/route.ts`, `${P}findings/[findingId]/mitigations/[mitigationId]/route.ts`,
@@ -196,6 +196,8 @@ describe('route lists', () => {
       `${P}findings/[findingId]/withdrawal/route.ts`, `${P}findings/[findingId]/close-by-decision/route.ts`,
       `${P}reviews/route.ts`, `${P}reviews/[reviewId]/seals/route.ts`, `${P}reviews/[reviewId]/documents/route.ts`,
       `${ORG}documents/[documentId]/withdrawal/route.ts`,
+      // Design G2 (path to outputs): the seal request opens the stage's review, keyed by its request id (receipt mode).
+      `${P}reviews/seal-request/route.ts`,
     ];
     for (const f of rows) expect({ f, methods: [...(RETRY_KEYED_WRITES[f] ?? [])] }).toEqual({ f, methods: Object.keys(ROUTE_ACTIONS[f]).filter((m) => m !== 'GET') });
     for (const f of Object.keys(RETRY_KEYED_WRITES)) expect({ f, allowed: rows.includes(f) || f in ROWS_21_TO_29 }).toEqual({ f, allowed: true });

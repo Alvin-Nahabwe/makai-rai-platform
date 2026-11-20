@@ -463,12 +463,14 @@ describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', (
     }
   });
 
-  it('FR-PRJ-03 RF-4: only the project routes and the member service write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
+  it('FR-PRJ-03 RF-4: only the project routes, the member service and the seal request write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
     // A receipt-mode call is not counted against the gate (it creates or changes a project or a membership). A file that
     // joins the list must be added here on purpose: if it writes a record of a project it has to call the gate instead.
     const RECEIPT_MODE = [
       'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
       'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts', 'app/api/v1/orgs/[slug]/projects/route.ts', 'lib/data/members.ts',
+      // Design G2 (path to outputs): requestSeal may open a stage review, a record of a project, so it calls the gate itself.
+      'lib/data/reviews.ts',
     ];
     expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0 && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
   });
@@ -479,6 +481,23 @@ describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', (
       'lib/data/seals.ts', 'lib/data/reviews.ts', 'lib/data/decisions.ts', 'lib/data/evidence.ts', 'lib/data/findings.ts',
       'lib/data/teamFindings.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
     ]));
+  });
+
+  it('anti-goal 3: every file under lib/documents/, components/report/ and components/question/StageEnd.tsx that calls controlsForQuestion, controlsForArea or renders SuggestedControls or FindingSuggestions also calls controlSuggestionsOn; controlSuggestionsOn has a production caller', () => {
+    // The roots are varied (m4): a root that does not exist yet (components/report) holds no file, and a new file under it is found.
+    const underRoot = (root: string): string[] => {
+      try { return root.endsWith('.tsx') ? [root] : walk(root); } catch { return []; }
+    };
+    const files = [...underRoot('lib/documents'), ...underRoot('components/report'), ...underRoot('components/question/StageEnd.tsx')].filter((f) => {
+      try { return code(f).length > 0; } catch { return false; }
+    });
+    const SUGGESTS = /\b(controlsForQuestion|controlsForArea)\(|<(SuggestedControls|FindingSuggestions)\b/;
+    const suggesting = files.filter((f) => SUGGESTS.test(code(f)));
+    expect(suggesting).toContain('lib/documents/resolve.ts');
+    expect(suggesting).toContain('lib/documents/workingReport.ts');
+    for (const f of suggesting) expect({ f, gated: /\bcontrolSuggestionsOn\(/.test(code(f)) }).toEqual({ f, gated: true });
+    const callers = allFiles().filter((f) => f !== 'lib/content/suggestions.ts' && /\bcontrolSuggestionsOn\(/.test(code(f)));
+    expect(callers).toEqual(expect.arrayContaining(['lib/documents/resolve.ts', 'lib/documents/workingReport.ts']));
   });
 
   it('FR-PRJ-03 RF-4 (lint self-test): a writer file with an unguarded record write is found', () => {

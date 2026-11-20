@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TERM_WORKING_REPORT } from '../../lib/vocabulary/terms';
 import {
   type ContentExclusions, contentStrings, CONTENT_FILES, fieldMapTexts, formatHit, lintHtml, lintText, lintTs, notebookTexts,
   phraseRules, PROPER_NAMES, ratchetViolations, worklistShapeProblems, readBundle, RULES, RUNNING, scopeContent, scopeCopyModules, scopeEmail,
@@ -352,6 +353,13 @@ const FIELD_MAP_STRINGS_FLOOR = 156;
 const EMAIL_STRINGS_FLOOR = 45;
 
 describe('the vocabulary lint, on the repository', () => {
+  it('the working-report term carries the approved definition, at most 20 words', () => {
+    expect(TERM_WORKING_REPORT.term).toBe('working report');
+    expect(TERM_WORKING_REPORT.definition).toBe('A summary of where the project stands, with draft documents, made from current answers. Not sealed.');
+    expect(TERM_WORKING_REPORT.definition.split(/\s+/).length).toBeLessThanOrEqual(20);
+    expect(TERM_WORKING_REPORT.defineOnFirstUse).toBe(true);
+  });
+
   it('scope (2): every string of the running content bundle, signed and unsigned, holds no retired phrase', () => {
     const bundle = readBundle(RUNNING);
     const units = contentStrings(bundle, RUNNING, CONTENT_EXCLUSIONS, SIGNED_KEYS);

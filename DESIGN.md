@@ -83,7 +83,7 @@ The platform records decisions a team makes about one AI system. The design has 
 
 - **Operate mode.** Almost every screen is a task: record a decision, read a finding, open a review. Scanning, consistency and plain words come before expression.
 - **The Route.** A project has three stages. A stage is a line of questions, each a mark. The person's position is "You are here". The words stay plain: the interface says "question" and "stage", not "stop" or "line" (spec principle 4; `route-target-decisions.md`, R1).
-- **No score.** There is no percentage, bar, fill or total across stages. Status is a shape and a word, in ink. Tallies are written in words beside the marks.
+- **No score.** There is no score, percentage or total across stages. The one bar allowed is a per-stage bar of "N of M questions recorded" on S-10, marked `data-stage-bar`, with the count in words beside it (owner, 19 November 2026: "Allow progress display"). Status is a shape and a word, in ink. Tallies are written in words beside the marks.
 - **One orange.** The action orange fills the one primary button of a view. Orange text appears on white and on the page ground as `--color-action-text`, and once on navy as the peach `--color-on-shell-accent` (ADR 0022).
 - **Both themes.** Light is the default. Dark is applied by the operating system's preference or by the theme switch, and the two dark blocks in `app/globals.css` hold identical values (`__tests__/unit/design-tokens.test.ts` checks it).
 
@@ -243,7 +243,7 @@ The route is the stage drawn as one line, a mark per question.
 
 **The row of marks** (`<RouteRow>`). One mark per question in a wrapping row, joined by a 2 px line in `--color-mark`, then a tally list: a 16 px shape, a bold count and the words. Each stop's accessible text is "title: status words". The current stop is ringed 2 px in `--color-action-text` and carries `aria-current="step"`. There is no fill, percentage or total. A defined status word can carry an (i) `<TermTip>` on its first use.
 
-**The rail** (`components/layout/Rail.tsx`, `ShellProject.tsx`, `shell.css`; ruling R4). On a project the rail shows the project's name and its three stages, each with a line mark and one line of state, such as "Not started" or "You are here · 24 questions". The current stage sits on a `--color-shell-hover` plate, and its state line is in the peach `--color-on-shell-accent` (#F4B983), 9.37:1 on the shell and 7.86:1 on the plate in light, 11.18:1 and 8.96:1 in dark. This is the one orange text on navy; every other rail text is `--color-shell-ink` or `--color-shell-muted` (ADR 0022). The mark on the current stage's line is an orange disc, `--color-action`, ringed in shell ink. The current rail item (Home, Projects and so on) is an action-orange fill with white text.
+**The rail** (`components/layout/Rail.tsx`, `ShellProject.tsx`, `shell.css`; ruling R4). On a project the rail shows the project's name and its three stages, each with a line mark and one line of state, such as "Not started" or "You are here · 24 questions". Under the stages is one link, "Working report" (`.shell-project__report`, 44 px high, shell ink, underlined on hover, not prefetched), to the project's working report. The current stage sits on a `--color-shell-hover` plate, and its state line is in the peach `--color-on-shell-accent` (#F4B983), 9.37:1 on the shell and 7.86:1 on the plate in light, 11.18:1 and 8.96:1 in dark. This is the one orange text on navy; every other rail text is `--color-shell-ink` or `--color-shell-muted` (ADR 0022). The mark on the current stage's line is an orange disc, `--color-action`, ringed in shell ink. The current rail item (Home, Projects and so on) is an action-orange fill with white text.
 
 ## The saved mark
 
@@ -351,15 +351,25 @@ S-10, `components/project/ProjectPage.tsx`, `StageLine.tsx`, `ProjectPage.css` (
 
 **Owner ruling of 15 November 2026, 20:50** (`progress.md`, line "20:50 OWNER RULED"): S-10 has no row of marks. Its tally is in words with marks, as sketched. Its mitigations are the overdue ones as plates, plus one line "{n} other open mitigations" linking to Findings. This departs from SRS FR-FUP-01 and FR-FUP-05.
 
+**Owner ruling of 19 November 2026** ("Allow progress display", design section 5 of `Claude outputs/2026-11-19-path-to-outputs-design.md`; it reverses the no-progress rule of this section): S-10 may show one bar per stage, "N of M questions recorded", with the count in words beside it. The bar is a `<progress>` or a proportional fill inside an element carrying `data-stage-bar`, on the project page only. There is still no score, no percentage, and no total or bar across stages; the claims lint now allows the word "progress", and `e2e/helpers/noScore.ts` allows the bar only there, and still fails a `%` inside it. "Outputs without sealing" (same section): the working report is a draft from current answers, not a sealed record.
+
 **Built** (owner rulings of 19:25, 20:50 and 21:32). "Still open in this stage" shows a count. Overdue mitigations are `<ItemPlate>`s, followed by one line "{n} other open mitigations" linking to Findings. "Recorded so far" is `<RouteTally>`: the tally in words with a mark beside each count and no row of marks. First-use definitions are (i) `<TermTip>`s. Each review is one line, "Review n · sealed <date> · k changed since". A busy project still runs about 1,098 px tall at 1440 by 900 (known, deferred).
 
 Home has one "New project" for an Owner, an Admin and an Assessor.
 
-What is built and stays: counts are words and numerals for one stage, with no percentage, bar or total across stages; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
+What is built and stays: counts are words and numerals for one stage, with no percentage and no total or bar across stages, and at most one `data-stage-bar` bar per stage on S-10; an overdue plate is an `<ItemPlate>` whose "was due <date>" alone is in `--color-overdue`.
+
+## The working report
+
+`components/report/WorkingReportView.tsx` and `report.css`, the page `…/projects/<id>/report` (path to outputs, G1). It refines the project page's world and adds no new one: one column at `--max-width-narrow`, the h1 and h2 steps of the type scale, hairlines in `--color-border-container` between items, no card around a section and no colour for a status. It holds links only: one primary `.ui-button--primary` link downloads the whole report as a PDF and a row of text links downloads each part. It has no button and no field, so there is nothing a role can see and not use. The answers are page 1 ("Where this project stands") and then each draft document, with each field as a code and label beside its text and a small provenance line.
+
+- **The draft line** is the one box that carries the page's draft state: a 2 px `--color-heading` border on `--color-tint`, semibold, always the first block. On screen it is `position: sticky` at the top of the scroll area, so it stays in view wherever the report is scrolled to. In print it is `position: fixed`, which the browser repeats on every printed page; the content sits in a real table whose empty header group is as tall as the line and is repeated too, so no text of any page starts under it (a header group on a `div` is not repeated). Its words are `draftLine` of `lib/documents/copy.ts`, the same as the PDF's.
+- **Print** is black on white whatever the theme and omits the downloads.
+- **No score.** Nothing on the page counts or rates the project; the one number is a field's own answer.
 
 ## Voice and vocabulary
 
-- **The words are the vocabulary's.** `data/vocabulary.json` is generated from `records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md` section 2 by `scripts/vocabulary/generate.mjs`; it holds 115 concepts, each with a term, a definition of at most 20 words and the terms to retire, and its lint rules are in `scripts/vocabulary/lint-rules.json`. The typed form is `lib/vocabulary/terms.ts`. `__tests__/lint/vocabulary.test.ts` fails when a retired term appears in copy.
+- **The words are the vocabulary's.** `data/vocabulary.json` is generated from `records/plans/2026-11-11-ux-redesign/copy-audit/CONSOLIDATED.md` section 2 by `scripts/vocabulary/generate.mjs`; it holds 116 concepts, each with a term, a definition of at most 20 words and the terms to retire, and its lint rules are in `scripts/vocabulary/lint-rules.json`. The typed form is `lib/vocabulary/terms.ts`. `__tests__/lint/vocabulary.test.ts` fails when a retired term appears in copy.
 - **A term is defined where it is first met**, in the same sentence every time: `<Term>` marks the use and `<Definition>` or `<TermTip>` gives the sentence.
 - **Copy lives in modules.** Each area keeps its strings in `lib/<area>/copy.ts` (for example `lib/ui/copy.ts`, `lib/shell/copy.ts`, `lib/project/copy.ts`, `lib/errors/copy.ts`); components and tests read the same constants. `__tests__/lint/copy-modules.test.ts` and `no-inline-copy.test.ts` hold this.
 - **Voice rules** are the twelve rules of `CONSOLIDATED.md` section 3. Not restated here.
@@ -380,7 +390,7 @@ Inline SVG from the Lucide set (ISC licence, the licence text sits beside the re
 ## Do's and don'ts
 
 - Do use one primary button per view, in `--color-action`; do not use the action orange as text.
-- Do say a status in a shape and a word; do not colour-code a status, and do not add a percentage, bar or total.
+- Do say a status in a shape and a word; do not colour-code a status, and do not add a score, a percentage or a total. The only bar is the per-stage `data-stage-bar` on S-10, with its count in words.
 - Do keep green for the Done mark and the "Saved" confirmation, and red for an overdue date and the word "Overdue".
 - Do put a term's definition beside its first use; do not use a retired term.
 - Do read colours, sizes and spaces from the tokens; do not write a literal value in a component's sheet.

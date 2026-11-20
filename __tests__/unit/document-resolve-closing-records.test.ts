@@ -61,7 +61,7 @@ function sealed(stage: Stage, findings: F[], decisions: D[]): SealedStage {
   return {
     stage,
     seal: {
-      sealId: `seal-${stage}`, sealNumber: 1, reviewId: `review-${stage}`, reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
+      kind: 'sealed', sealId: `seal-${stage}`, sealNumber: 1, reviewId: `review-${stage}`, reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
       sealedAt: '2026-11-14T19:00:00.000Z', sealedBy: user('Olive Owner'), sealedByRole: 'owner', enteredByPeople: 2,
     },
     preparedFor: null,
@@ -88,7 +88,7 @@ function snap(documentType: DocumentSnapshot['documentType'], stage: Stage, find
   const chosen = sealed(stage, findings, o.decisions ?? []);
   const stages = Object.fromEntries(STAGES.map((x) => [x, x === stage ? chosen : o.other?.stage === x ? sealed(x, [], o.other.decisions) : null])) as DocumentSnapshot['stages'];
   return {
-    documentType, reviewStage: stage, chosen, stages, contents: new Map([['cv1', content]]),
+    provenance: { kind: 'sealed' }, documentType, reviewStage: stage, chosen, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: '2026-11-14',
     erasures: {
       evidence: new Map(), findings: new Map(), accepted_risks: new Map(), stage_reviews: new Map(),

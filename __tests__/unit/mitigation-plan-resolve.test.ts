@@ -98,14 +98,14 @@ function snapshot(s: SnapSpec = {}): DocumentSnapshot {
   const chosen: SealedStage = {
     stage: 'pre-processing',
     seal: {
-      sealId: 'seal-pp', sealNumber: 1, reviewId: 'review-pp', reviewName: 'Pre-processing review 1', fingerprint: 'c0ffee00'.repeat(8),
+      kind: 'sealed', sealId: 'seal-pp', sealNumber: 1, reviewId: 'review-pp', reviewName: 'Pre-processing review 1', fingerprint: 'c0ffee00'.repeat(8),
       sealedAt: '2026-11-01T09:30:15.000Z', sealedBy: user('Sealer S.'), sealedByRole: 'owner', enteredByPeople: 2,
     },
     preparedFor: s.preparedFor === undefined ? null : s.preparedFor, manifest, decisions, derived, findings: (s.findings ?? []).map(sealedFinding),
   };
   const stages = Object.fromEntries(STAGES.map((st) => [st, st === 'pre-processing' ? chosen : null])) as DocumentSnapshot['stages'];
   return {
-    documentType: 'mitigation_plan', reviewStage: 'pre-processing' as Stage, chosen, stages, contents: new Map([['cv1', content]]),
+    provenance: { kind: 'sealed' }, documentType: 'mitigation_plan', reviewStage: 'pre-processing' as Stage, chosen, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: s.today ?? '2026-11-03',
     erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map(), ...s.erasures },
   };

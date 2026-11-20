@@ -119,7 +119,7 @@ export function contentChangedLine(latestSeal: SealView | null, runningSemver: s
 
 /** What a refused write shows (UX-25: said once, assertively), whether Retry can help, and whether the page reloads. */
 export type RefusalLine = { message: string; retry: boolean; refresh: boolean };
-type Refused = { status: number; body: Pick<ApiErrorBody, 'code'> & { retryAfterSeconds?: number } };
+type Refused = { status: number; body: Pick<ApiErrorBody, 'code'> & { retryAfterSeconds?: number; error?: string } };
 
 const waitMinutes = (seconds: number | undefined) => {
   const n = typeof seconds === 'number' && seconds > 0 ? Math.ceil(seconds / 60) : 1;
@@ -155,6 +155,25 @@ export function openRefusal(out: Refused): RefusalLine {
   if (body.code === 'project_archived') return { message: REVIEW_COPY.open.archived, retry: false, refresh: false };
   if (status === 403 && body.code === 'forbidden') return { message: REVIEW_COPY.open.roleChanged, retry: false, refresh: false };
   return { message: REVIEW_COPY.open.server, retry: status >= 500, refresh: false };
+}
+
+/**
+ * The seal step's refusals (design G2), on the open form's rules: its words for a sign-out, a rate limit, an archived
+ * project and a lowered role, since the request opens a review. A server problem names the button pressed (`button`),
+ * which sends the same request id again. A refusal that is not a fault says the server's own message. A number another
+ * open took (the service already tried twice) is said, with the button to press again, which returns the review that
+ * open made; the page is not reloaded under the reader.
+ */
+export function sealRequestRefusal(out: Refused, button: string): RefusalLine {
+  const { status, body } = out;
+  if (body.code === 'number_taken') return { message: REVIEW_COPY.sealStep.numberTaken(button), retry: false, refresh: false };
+  if (status === 401) return { message: REVIEW_COPY.open.signedOut, retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: REVIEW_COPY.open.rateLimited(waitMinutes(body.retryAfterSeconds)), retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: REVIEW_COPY.open.archived, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: REVIEW_COPY.open.roleChanged, retry: false, refresh: false };
+  // A refusal that is not a fault says its own message, as the decision form does (DecisionForm.tsx, `body.error`).
+  if (status < 500 && typeof body.error === 'string' && body.error !== '') return { message: body.error, retry: false, refresh: false };
+  return { message: REVIEW_COPY.sealStep.server(button), retry: status >= 500, refresh: false };
 }
 
 /**

@@ -8,6 +8,7 @@ import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { rewordedQuestionIds } from '@/lib/question/reworded';
 import { buildStageRows, type StageRow } from '@/lib/question/stageList';
 import { markKindOf } from '@/lib/ui/marks';
+import { sealStep, type SealStepState } from '@/lib/review/sealStep';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { ScopeAnswer, Stage } from '@/types/record';
 import type { ChangedSinceSeal, DecisionVersionView } from '@/types/api';
@@ -22,6 +23,8 @@ export interface StagePageData {
   marks: Record<string, StatusMarkKind>;
   /** The personal data question's current answer, so its row and its stop say "Answer: Yes"; null with none. */
   scopeAnswer: ScopeAnswer | null;
+  /** What the seal step under the heading shows the viewer's role (design G2; lib/review/sealStep.ts). */
+  sealStep: SealStepState;
 }
 
 /**
@@ -60,6 +63,7 @@ export async function loadStagePage(ctx: OrgContext, viewerId: string, projectId
     review: newest === null ? null : { id: newest.id, name: newest.name },
     marks: marksOf(rows, current),
     scopeAnswer: gate,
+    sealStep: sealStep(ctx.role, reviews, project.archivedAt !== null),
   };
 }
 

@@ -6,8 +6,8 @@
  * `CLAIMS_CORE` is FR-PUB-01's own pattern (SRS line 1103) with `\bscored\b` and `\breadiness report\b` added
  * (owner question B26: the SRS pattern misses one of the strings its own *Why* cites). `CLAIMS` adds the rest of
  * the list with its forms. A word the SRS bans in one sense only ("approved" as something the platform gives,
- * "level" as a grade, "progress" or "complete" about a stage or project) is matched in the forms that carry that
- * sense; "complete the form" is not banned. `NEVER_LIST` holds one sentence per word or form that `CLAIMS` must
+ * "level" as a grade, "complete" about a stage or project) is matched in the forms that carry that
+ * sense (the word "progress" is allowed since 19 Nov 2026, owner: "Allow progress display"); "complete the form" is not banned. `NEVER_LIST` holds one sentence per word or form that `CLAIMS` must
  * flag, and `MAY_APPEAR` ordinary strings it must not.
  */
 
@@ -48,7 +48,6 @@ export const NEVER_WORDS = [
   String.raw`\bpercentages?\b`,
   String.raw`\bper ?cent(age)?s?\b`,
   String.raw`\d\s?%`,
-  String.raw`\bprogress(ed|es|ing)?\b`,
   String.raw`\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b`,
   String.raw`\bcompleted\b`,
   String.raw`\bmark(ed)? (as )?complete(d)?\b`,
@@ -75,8 +74,8 @@ export const CLAIMS = new RegExp(`${CLAIMS_CORE.source}|${NEVER_WORDS.join('|')}
 
 // SRS 7.5.3 (line 2472): "these words and their forms never appear" in the interface, documents and emails.
 // One synthetic page per entry holds one sentence with the word; the pattern must flag it. The qualified words
-// ("approved" as something the platform gives, "level" as a grade, "progress" or "complete" about a stage or
-// project) are flagged in the forms that carry the qualifier; their bare uses ("complete the form") are not banned.
+// ("approved" as something the platform gives, "level" as a grade, "complete" about a stage or
+// project; "progress" is no longer banned, owner 19 Nov 2026) are flagged in the forms that carry the qualifier; their bare uses ("complete the form") are not banned.
 export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['compliance', 'Our compliance guide'], ['compliant', 'This record is compliant'],
   ['audit', 'Open the audit log'], ['audits', 'Teams run audits'], ['audited', 'Every record is audited'],
@@ -94,7 +93,6 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['band', 'Band B'], ['bands', 'Bands of answers'],
   ['pass', 'Pass'], ['passed', 'The stage passed'], ['fail', 'Fail'], ['failed', 'The review failed'],
   ['percentage', 'A percentage of items'], ['%', '40% of items have a decision'],
-  ['progress (about a stage)', 'Progress through the stage'],
   ['complete (about a stage)', 'This stage is complete'], ['complete (about a project)', 'The project was completed'],
   ['mark as complete', 'Mark as complete'], ['completion', 'Completion of the stage'],
   ['severity', 'Severity of the finding'],
@@ -110,8 +108,8 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['level 0', 'Level 0: not started'], ['level two', 'Your team is at level two.'], ['level-3', 'A level-3 team'],
   ['risk-level', 'A risk-level badge'], ['level of risk', 'The level of risk is high.'],
   ['powered by AI', 'Checks powered by AI'], ['AI powered', 'AI powered suggestions'], ['AI-powered (U+2011)', 'AI\u2011powered checks'],
-  ['auditable', 'Every decision is auditable.'], ['progressed', 'The stage has progressed to review.'],
-  ['progressing', 'Progressing well'], ['Gates A and B', 'Gates A and B'], ['Gate-A', 'Gate-A review'],
+  ['auditable', 'Every decision is auditable.'],
+  ['Gates A and B', 'Gates A and B'], ['Gate-A', 'Gate-A review'],
   ['conformant', 'Conformant with ISO/IEC 42001'], ['nonconformity', 'Two nonconformities were found'],
   ['certifying', 'Certifying body'], ['recertification', 'Recertification due'], ['severities', 'Severities'],
   // C4 round 1 (CR-2): the most likely ways the banned senses appear.
@@ -139,6 +137,7 @@ export const MAY_APPEAR = [
   'The team has obtained the approvals and registrations they require', 'Approvals are easy to lose track of', 'A missing approval can stop a deployment',
   'The level I expect', 'A level a reader can follow', 'A complete review of the literature', 'The complete project record',
   'Authority', 'Frank discussion', 'A progressive web app', 'Your decision is saved', 'Try again',
+  'Progress by stage', 'The stage has progressed', 'Progressing well',
   'Complete your profile', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
 ];
 

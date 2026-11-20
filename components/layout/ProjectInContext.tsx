@@ -14,11 +14,11 @@ export type ProjectSlotParams = { slug: string; id: string; stage?: string };
  * and no error.js in the slot: an error other than "not found" propagates to the page's error boundary (S2), it is never
  * quietly turned into a rail without its block.
  */
-export async function ProjectInContext({ identity, params }: { identity: Identity; params: ProjectSlotParams }) {
+export async function ProjectInContext({ identity, params, onReport = false }: { identity: Identity; params: ProjectSlotParams; onReport?: boolean }) {
   // A stage segment that names no stage is the page's 404: no project block there, and nothing read for it (review M5).
   const stage = stageParam(params.stage);
   if (params.stage !== undefined && stage === null) return null;
   const project = await loadShellProject(identity, { slug: params.slug, id: params.id });
   if (project === null) return null;
-  return <ShellProjectSlot project={project} orgSlug={params.slug} currentStage={stage} />;
+  return <ShellProjectSlot project={project} orgSlug={params.slug} currentStage={stage} onReport={onReport} />;
 }

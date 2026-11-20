@@ -2,7 +2,6 @@ import { Fragment, type ReactElement, type ReactNode } from 'react';
 import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
 import type { Stage } from '@/types/record';
 import { ListLink } from '@/components/ui/ListLink';
-import { ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { ItemPlate } from '@/components/ui/ItemPlate';
 import { RouteTally, type DefinedTallyKind } from '@/components/ui/RouteRow';
@@ -16,9 +15,8 @@ import { compareFollowUp } from '@/lib/followup/rules';
 import { formatDay } from '@/lib/format/dates';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
-import { positionWords } from '@/lib/ui/copy';
+import { stageProgress } from '@/lib/project/stageProgress';
 import type { StageRoute } from '@/lib/project/routes';
-import type { ContinueTarget } from '@/lib/home/types';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import {
   TERM_ACCEPTED_RISK, TERM_DOES_NOT_APPLY, TERM_DONE, TERM_FINDING, TERM_MITIGATION, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY,
@@ -49,16 +47,20 @@ export type StageLineProps = {
   stage: Stage; base: string; counts: StageCounts; route: StageRoute;
   followUp: { items: FollowUpItem[]; cannotAct: FollowUpItem[] }; reviews: readonly StageReviewView[];
   canOpenReview: boolean; uses: FirstUses;
-  /** The page's one primary action when it continues THIS stage (plan 1C C11); null on every other line. */
-  primary: ContinueTarget | null;
+  /** G7: whether the project's development stage leaves this stage in. False reads "Doesn't apply to this project yet"; the stage stays openable. */
+  applies: boolean;
+  /** Whether the person may record here: the next link reads "Continue", else "View" (same target, read only). */
+  canRecord: boolean;
+  /** I1: the question Home names as the next step (loadContinueTarget), when it is in this stage; the next link points at it instead of the first open question. */
+  continueId?: string | null;
 };
 
 /**
  * One stage of S-10 as a vertical line of stops (Route R5; spec 9.2; the sketch `surfaces/project.png`): exactly five
- * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage (with the next step and the
- * page's primary action on the line the page continues), what is still open, what is recorded so far, its reviews, and the
+ * stops, always, so the three lines' stops share rows (a subgrid, ProjectPage.css): the stage (with its progress bar and
+ * the link to its next question), what is still open, what is recorded so far, its reviews, and the
  * last stop with what is left and the link to the stage's questions. Counts are
- * words and numerals of this stage alone; no percentage, bar or total across stages (FR-RM-04).
+ * words and numerals of this stage alone; one bar per stage in words ("N of M"), never a percentage or a total across stages (FR-RM-04).
  *
  * Where a defined term is first used is decided by components/project/firstUse.ts, which mirrors the order and the words
  * of these stops: when a stop's words change here, update firstUse.ts with them.
@@ -72,10 +74,7 @@ export function StageLine(p: StageLineProps): ReactElement {
         <h2 id={headingId}><Term of={STAGE_TERM[p.stage]}>{name}</Term></h2>
         <Definition of={STAGE_TERM[p.stage]} as="p" />
         <p className="stage-line__count">{plural(p.counts.questions, C.question, C.questions)}</p>
-        {/* Owner's ruling on C3 (option A): on the line the page continues, the next step and the one primary action sit in
-            the head stop, inside the first view. Hidden while the lines are stacked: ProjectPage shows the same block once
-            above them then, so exactly one primary is in the accessibility tree at any width (ProjectPage.css). */}
-        {p.primary !== null ? <NextStep target={p.primary} base={p.base} route={p.route} counts={p.counts} where="line" /> : null}
+        <Progress {...p} />
       </div>
       <StillOpen {...p} />
       <div className="stage-line__stop stage-line__stop--recorded">
@@ -268,44 +267,37 @@ function BeforeSealing({ counts: c, base, stage }: { counts: StageCounts; base: 
 }
 
 /**
- * The next step (plan 1C C11; owner's ruling on C3): "Next question" and that question in words with its place in the
- * stage when the question has no decision yet, then the page's one primary action. When the person is sent to a question
- * already decided (C11's "last-saved" rule: a stage with nothing open), "Every question in this stage has a decision." (or,
- * should the counts still hold open questions, how many) and the button. Rendered in the target line's head stop, and once
- * above the lines for the stacked form (`where`), one of the two hidden by CSS at every width.
+ * G4 and G7 in the head stop: "N of M questions recorded" with a bar (a `<progress>`, named and valued in the same words, because
+ * a bare one is read as a percentage), then "Next: Question N · Continue" to the stage's first question with no decision. N and M
+ * come from `stageProgress` alone: an answered gate counts as recorded though byStatus does not hold it. `data-stage-bar` is what
+ * the no-score rule allows (DESIGN.md; e2e/helpers/noScore.ts). A stage the project does not reach says so instead, and keeps its
+ * link in the last stop; with answers already given it shows them too, since answers are never hidden (G7).
  */
-export function NextStep({ target, base, route, counts, where }: {
-  target: ContinueTarget; base: string; route: StageRoute; counts: StageCounts; where: 'line' | 'stacked';
-}): ReactElement {
-  const questionId = target.questionId;
-  const at = questionId === null ? -1 : route.stops.findIndex((s) => s.id === questionId);
-  const next = at !== -1 && route.stops[at].kind === 'no_decision' ? route.stops[at] : null;
-  const href = questionId === null ? stagePath(base, target.stage) : `${stagePath(base, target.stage)}/questions/${questionId}`;
-  // Above the stacked lines the block is not inside its stage's line, so it names the stage before the place in it. Below
-  // 52rem that is the page's first use of the stage's term (N1): the name is marked as the term with lane 1's (i) beside
-  // it, in the same p. The line's own head stop keeps its Definition under the heading.
-  const term = STAGE_TERM[target.stage];
-  const stagePrefix = where === 'stacked'
-    ? <><Term of={term}>{P.stageNames[target.stage]}</Term><TermTip of={term} label={P.whatMeans(term.term)} />{SEP}</>
-    : null;
+function Progress(p: StageLineProps): ReactElement | null {
+  const { recorded, recordable } = stageProgress(p.counts);
+  const hidden = !p.applies && recorded === 0;
+  // The first open question, unless Home's continue target is an open question of this stage: then that one, so the page and Home name one question.
+  const open = p.route.noDecision;
+  const first = open.find((q) => q.id === p.continueId) ?? open[0];
+  const at = first === undefined ? -1 : p.route.stops.findIndex((s) => s.id === first.id);
+  const wordsId = `${p.stage}-progress`;
+  const name = P.overview.progressName(recorded, recordable);
   return (
-    <div className={`next-step-block next-step-block--${where}`}>
-      <p className="stage-line__next">
-        {next !== null ? (
-          <>
-            {/* The label and the question, at most two lines (R7); the place in the stage under them, whole. */}
-            <span className="stage-line__next-words">
-              <b className="stage-line__next-label">{P.nextLabel}</b>{' '}
-              <span className="stage-line__next-text">{next.title}</span>
-            </span>{' '}
-            <span className="stage-line__position">{stagePrefix}{positionWords(at + 1, route.stops.length)}</span>
-          </>
-        ) : <>{stagePrefix}{counts.noDecision > 0 ? P.noDecisionYet(counts.noDecision) : P.allDecided}</>}
-      </p>
-      <p className="stage-line__primary">
-        <ButtonLink variant="primary" href={href}>{target.label === 'continue' ? P.continue : P.start}</ButtonLink>
-      </p>
-    </div>
+    <>
+      {p.applies ? null : <p className="stage-line__not-applicable">{P.overview.doesNotApply}</p>}
+      {hidden ? null : (
+        <div className="stage-line__progress" data-stage-bar="">
+          <p className="stage-line__progress-words" id={wordsId}>{name}</p>
+          {/* max is at least 1 (a stage with no question left to record has nothing to fill). */}
+          <progress className="stage-line__bar" max={Math.max(recordable, 1)} value={recorded} aria-labelledby={wordsId} aria-valuetext={name} />
+        </div>
+      )}
+      {first !== undefined && p.applies ? (
+        <p className="stage-line__next-row">
+          <ListLink className="stage-line__next-link" href={first.href}>{P.overview.nextQuestion(at + 1, p.canRecord)}</ListLink>
+        </p>
+      ) : null}
+    </>
   );
 }
 

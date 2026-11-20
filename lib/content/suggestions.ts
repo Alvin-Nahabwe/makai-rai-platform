@@ -10,6 +10,12 @@ export type ControlGroup = {
   controls: Array<{ control: ContentControl; alsoAddresses: string[]; usuallyAppliedIn: Stage | null }>;
 };
 
+/**
+ * Whether suggested controls are shown at all: only when the content says its risk-to-control mapping is approved
+ * (`controlSuggestionsApproved`, owner: "Areas now, controls later"). Absent in content means off.
+ */
+export const controlSuggestionsOn = (c: Pick<LoadedContent, 'controlSuggestionsApproved'>): boolean => c.controlSuggestionsApproved;
+
 const areaOfEntry = (e: string | { area: string }): string => (typeof e === 'string' ? e : e.area);
 
 const unique = (xs: readonly string[]): string[] => [...new Set(xs)];

@@ -30,7 +30,7 @@ function input(type: DocumentType, names: { organisationName: string; projectNam
     text: `Seal 2 of Pre-processing review 1: sealed 3 Nov 2026 09:00:00 UTC by Amina (owner); decisions entered by 2 people. Fingerprint ${formatFingerprint(FINGERPRINT, 'full')}`,
   });
   const seals = [{ sealId: 's1', sealNumber: 2, reviewId: 'r1', reviewName: 'Pre-processing review 1', fingerprint: FINGERPRINT }];
-  return { map, fields, seals, issuedAt: '2026-11-03T10:42:07.000Z', ...names };
+  return { map, fields, stamp: { kind: 'issued', issuedAt: '2026-11-03T10:42:07.000Z', seals }, ...names };
 }
 
 /** One printed line as pdftotext -bbox reads it: the words that share a box height, merged left to right. */

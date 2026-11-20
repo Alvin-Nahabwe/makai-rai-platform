@@ -62,6 +62,13 @@ export const QUESTION_COPY = Object.freeze({
     next: (title: string): string => `Next question: ${title}`,
     last: 'This is the last question in this stage.',
   }),
+  /**
+   * The link to a stage's end screen (path to outputs, design G3), on the stage page, the last question and the reading view. The
+   * screen's own words are in lib/question/end/copy.ts (STAGE_END_COPY), apart from this object, which the question page ships.
+   */
+  end: Object.freeze({
+    link: 'Where your project stands',
+  }),
   reworded: Object.freeze({
     line: "The description of good practice changed after your team's decision.",
     summary: 'See the earlier description',

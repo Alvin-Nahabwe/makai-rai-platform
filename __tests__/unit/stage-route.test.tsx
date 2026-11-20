@@ -31,7 +31,7 @@ const KIND_MARK: Record<StageRow['kind'], StatusMarkKind> = {
 const data = (rows: StageRow[], over: Partial<StagePageData> = {}): StagePageData => ({
   orgSlug: 'org-a', orgId: 'o1', projectId: 'p1', projectName: 'Project A', projectArchived: false, stage: 'pre-processing', viewerId: 'u1',
   rows, nothingRecorded: false, changed: null, review: null, followUp: { openFindings: 0, overdueMitigations: 0 },
-  marks: Object.fromEntries(rows.map((r) => [r.questionId, KIND_MARK[r.kind]])), scopeAnswer: null, ...over,
+  marks: Object.fromEntries(rows.map((r) => [r.questionId, KIND_MARK[r.kind]])), scopeAnswer: null, sealStep: { kind: 'hidden' }, ...over,
 });
 const render = (d: StagePageData, show: Parameters<typeof StageWorkspace>[0]['show'] = 'all') =>
   renderToStaticMarkup(createElement(StageWorkspace, { data: d, show, shown: null }));
@@ -207,7 +207,7 @@ describe('All questions: the page\'s head', () => {
       if (b.includes('ui-term-tip')) expect(b).toMatch(/(<span class="stage-route__keep">[^<\s]+|\u00a0[^<\s]+<\/span>)<span class="ui-term-tip">/);
     }
     expect(items[3]).toMatch(/<span data-term="[^"]+"><span class="stage-route__keep stage-route__lead">[\s\S]*?1\u00a0personal<\/span><\/span> data question <span class="stage-route__keep">answered<span class="ui-term-tip">/);
-    const css = readFileSync('components/question/stage-route.css', 'utf8');
+    const css = readFileSync('components/question/stage-tally.css', 'utf8');
     expect(css).toMatch(/\.stage-route__keep\s*\{[^}]*white-space:\s*nowrap;/);
     expect(css).not.toMatch(/\.stage-route__tally-head/);
   });

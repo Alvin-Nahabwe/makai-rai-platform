@@ -657,6 +657,25 @@
   line-height: var(--line-height-heading);
 }
 
+.shell-project__report {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-primary);
+  margin-block-start: var(--space-1);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--color-shell-ink);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.shell-project__report:hover {
+  /* a:hover in app/globals.css (0,1,1) would paint it the link colour, navy on navy. */
+  color: var(--color-shell-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .shell-project__stage--current .shell-project__state {
   /* Peach (--color-on-shell-accent, #F4B983 in both themes, only on the navy shell; the coordinator's ruling reversing
      D12), the shell ink as a fallback. */

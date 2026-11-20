@@ -1,0 +1,4113 @@
+{
+  "status": "draft",
+  "for": "The experts' risk-mapping sign-off (G6), to ship as content 5.2.0. Nothing here is approved.",
+  "base": {
+    "version": "5.1.0",
+    "commit": "f4d3c186",
+    "questionBank.json": "aa9cbd209201388eaf2e55a316edd5bc92513c79dd031156727d61496f09e899",
+    "assessmentAreas.json": "f7476658334d2b2ef902409718f4ef5648845fc548e092ce24bffa86c3109c6b"
+  },
+  "notes": [
+    "gaps is an ordered list: the first area heads the question in the working report (lib/documents/workingReport.ts:44-54).",
+    "role in optionGapMap is carried as in 5.1.0 but is not signed: the risk-mapping payload keeps area ids only (lib/content/signoffs.ts:60-70).",
+    "controlsShown lists the controls the question page offers before any checklist option is ticked, in the order shown."
+  ],
+  "questions": {
+    "Q-PP-01": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-01"
+        ],
+        "proposed": [
+          "PP-01"
+        ]
+      },
+      "reason": "\"checked whether AI is the best approach … simpler options\" is PP-01 (techno-solutionist bias) and C-01 (alternatives analysis) word for word.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ],
+        "proposed": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PP-02": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you clearly defined the problem your AI system aims to solve, including specific objectives and success criteria?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-01"
+        ],
+        "proposed": [
+          "PP-01"
+        ]
+      },
+      "reason": "\"defined the problem … objectives and success criteria\" belongs in problem formulation, where PP-01 says the bias is introduced. No control covers writing a problem statement or success measures; C-02 is the nearest.",
+      "confidence": "medium",
+      "note": "Needs a control the 28 do not have (problem statement and success criteria).",
+      "controlsShown": {
+        "now": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ],
+        "proposed": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PP-03": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you identified all stakeholders who are directly or indirectly affected by the AI system?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-04"
+        ],
+        "proposed": [
+          "PP-04"
+        ]
+      },
+      "reason": "\"identified all stakeholders\" is PP-04's first mitigation (stakeholder mapping) and C-07. The area also shows C-03 and C-05, which are data audits; that is the cost of controls attaching per area.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-07"
+        ]
+      }
+    },
+    "Q-PP-04": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-03",
+          "PP-04"
+        ],
+        "proposed": [
+          "PP-03",
+          "PP-04"
+        ]
+      },
+      "reason": "\"affect protected or vulnerable groups\" is C-06 (protected group identification) under PP-03 and C-07 under PP-04.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07"
+        ]
+      }
+    },
+    "Q-PP-05": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you conducted a human rights impact assessment for the AI system?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PP-03",
+          "PP-04"
+        ],
+        "proposed": [
+          "PP-03",
+          "PP-04",
+          "PP-01"
+        ]
+      },
+      "reason": "Add PP-01 last. A human rights impact assessment touches PP-03 (societal harm) and PP-04 (who is served), but neither area reaches an impact-assessment control. C-02 (Cost-Benefit & Impact Assessment) links the EU AI Act Art. 27 fundamental rights impact assessment, and C-01 links Canada's Algorithmic Impact Assessment tool; both sit under PP-01. PP-01 goes last so the report heading stays PP-03. C-07 (under PP-04) maps who is helped or harmed and links NIST MAP 5.1 on impacts, a partial fit already reached.",
+      "confidence": "medium",
+      "note": "Experts: the alternative is adding C-02 to PP-03, which would offer it to all seven questions that reach PP-03.",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07",
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PP-24": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of the people affected) and brought in the ones your team lacks?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PP-03",
+          "PP-04"
+        ],
+        "proposed": [
+          "PP-03",
+          "PP-04",
+          "PP-01"
+        ]
+      },
+      "reason": "\"checked which perspectives the problem needs … brought in the ones your team lacks\" is C-20 (multi-stakeholder consultation), and PP-01's `mitigated` text names \"stakeholder consultation during problem definition\". This is CG-19, which the 5.0.0 sitting deferred as a mapping change (SITTING-1.md:424). PP-01 goes last so the report heading stays PP-03.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07",
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PP-07": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you estimated the energy use and carbon cost of the proposed AI system?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-05"
+        ],
+        "proposed": [
+          "PO-05"
+        ]
+      },
+      "reason": "\"energy use and carbon cost\" is PO-05's definition, and C-02 lists CodeCarbon. Under the PO-05 row it suggests C-02 and C-01 instead of C-02 and C-26.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-02",
+          "C-26"
+        ],
+        "proposed": [
+          "C-02",
+          "C-01"
+        ]
+      }
+    },
+    "Q-PP-08": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you documented the data sources, collection methods, and rationale for data selection?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-07"
+        ],
+        "proposed": [
+          "PO-07"
+        ]
+      },
+      "reason": "\"documented the data sources\" is PO-07 (documentation deficit), and C-19 (datasheet) is the practice. Under the PO-07 row C-26 drops out; C-17 and C-28 remain as related documentation.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-PP-09": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you assessed whether your training data is representative of the target population?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PP-02",
+          "PP-04",
+          "PP-05"
+        ],
+        "proposed": [
+          "PP-04",
+          "PP-05",
+          "PP-02"
+        ]
+      },
+      "reason": "Same areas, new order. \"representative of the target population\" is PP-04's definition (design population does not match the population served), so PP-04 should head the report, not PP-02 (data too sparse).",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-07",
+          "C-08"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-07",
+          "C-08",
+          "C-04"
+        ]
+      }
+    },
+    "Q-PP-11": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-03"
+        ],
+        "proposed": [
+          "PP-03"
+        ]
+      },
+      "reason": "\"input could stand in for a sensitive attribute\" is a route for historical and societal bias (PP-03); C-04 and C-06 fit.",
+      "confidence": "medium",
+      "note": "IP-01 (algorithmic discrimination) would also fit; the experts may want it second.",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ]
+      }
+    },
+    "Q-PP-12": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked that the data labels are correct and consistent?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-07"
+        ],
+        "proposed": [
+          "PP-07"
+        ]
+      },
+      "reason": "\"data labels are correct and consistent\" is PP-07 and C-12 (labelling QA).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-12"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-12"
+        ]
+      }
+    },
+    "Q-PP-GATE-SENSITIVE": {
+      "stage": "pre-processing",
+      "type": "gate",
+      "text": "Does your data contain information that could identify a person, or other sensitive personal information?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [],
+        "proposed": []
+      },
+      "reason": "The gate decides whether Q-PP-13 and Q-PP-14 apply. A gate maps to no risk area (validate.ts, FR-CNT-04), so it stays empty.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [],
+        "proposed": []
+      }
+    },
+    "Q-PP-13": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you obtained proper informed consent for data collection and use?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-06"
+        ],
+        "proposed": [
+          "PP-06"
+        ]
+      },
+      "reason": "\"informed consent\" is PP-06 and C-11.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ]
+      }
+    },
+    "Q-PP-14": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-06"
+        ],
+        "proposed": [
+          "PP-06"
+        ]
+      },
+      "reason": "\"removed or replaced the details … that could identify a person\" is PP-06 and C-10.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ]
+      }
+    },
+    "Q-PP-16": {
+      "stage": "pre-processing",
+      "type": "checklist",
+      "text": "Which of the following data quality assessments have you performed?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [],
+        "proposed": []
+      },
+      "reason": "A checklist: its areas come from the options (see the option table). `gaps` stays empty.",
+      "confidence": "high",
+      "optionGapMap": {
+        "now": {
+          "Missing data analysis": [
+            {
+              "area": "PP-02",
+              "role": "primary"
+            }
+          ],
+          "Outlier detection": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ],
+          "Duplicate detection": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ],
+          "Class imbalance analysis": [
+            {
+              "area": "PP-02",
+              "role": "supporting"
+            },
+            {
+              "area": "PP-05",
+              "role": "supporting"
+            }
+          ],
+          "Correlation matrix analysis": [
+            {
+              "area": "PP-03",
+              "role": "supplementary"
+            }
+          ],
+          "Distribution analysis across subgroups": [
+            {
+              "area": "PP-04",
+              "role": "primary"
+            },
+            {
+              "area": "PP-05",
+              "role": "supporting"
+            }
+          ],
+          "Data lineage/provenance tracking": [
+            {
+              "area": "PO-07",
+              "role": "primary"
+            }
+          ],
+          "Temporal consistency checks": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ]
+        },
+        "proposed": {
+          "Missing data analysis": [
+            {
+              "area": "PP-02",
+              "role": "primary"
+            }
+          ],
+          "Outlier detection": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ],
+          "Duplicate detection": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ],
+          "Class imbalance analysis": [
+            {
+              "area": "PP-02",
+              "role": "supporting"
+            },
+            {
+              "area": "PP-05",
+              "role": "supporting"
+            }
+          ],
+          "Correlation matrix analysis": [
+            {
+              "area": "PP-03",
+              "role": "supplementary"
+            }
+          ],
+          "Distribution analysis across subgroups": [
+            {
+              "area": "PP-04",
+              "role": "primary"
+            },
+            {
+              "area": "PP-05",
+              "role": "supporting"
+            }
+          ],
+          "Data lineage/provenance tracking": [
+            {
+              "area": "PO-07",
+              "role": "primary"
+            }
+          ],
+          "Temporal consistency checks": [
+            {
+              "area": "IP-07",
+              "role": "supporting"
+            }
+          ]
+        }
+      },
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-09",
+          "C-10",
+          "C-08",
+          "C-06",
+          "C-07",
+          "C-17",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-09",
+          "C-08",
+          "C-06",
+          "C-07",
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-PP-17": {
+      "stage": "pre-processing",
+      "type": "checklist",
+      "text": "Which of the following bias types have you assessed for in your data?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [],
+        "proposed": []
+      },
+      "reason": "A checklist: its areas come from the options (see the option table). `gaps` stays empty.",
+      "confidence": "high",
+      "optionGapMap": {
+        "now": {
+          "Historical bias": [
+            {
+              "area": "PP-03",
+              "role": "primary"
+            }
+          ],
+          "Population bias": [
+            {
+              "area": "PP-04",
+              "role": "primary"
+            }
+          ],
+          "Sampling/generalization bias": [
+            {
+              "area": "PP-05",
+              "role": "primary"
+            }
+          ],
+          "Labeling bias": [
+            {
+              "area": "PP-07",
+              "role": "primary"
+            }
+          ],
+          "Survey bias": [
+            {
+              "area": "PP-05",
+              "role": "supplementary"
+            }
+          ],
+          "Survivorship bias": [
+            {
+              "area": "PP-02",
+              "role": "supporting"
+            }
+          ],
+          "Measurement bias": [
+            {
+              "area": "PP-02",
+              "role": "supporting"
+            }
+          ],
+          "Exclusion bias": [
+            {
+              "area": "PP-04",
+              "role": "supporting"
+            }
+          ]
+        },
+        "proposed": {
+          "Historical bias": [
+            {
+              "area": "PP-03",
+              "role": "primary"
+            }
+          ],
+          "Population bias": [
+            {
+              "area": "PP-04",
+              "role": "primary"
+            }
+          ],
+          "Sampling/generalization bias": [
+            {
+              "area": "PP-05",
+              "role": "primary"
+            }
+          ],
+          "Labeling bias": [
+            {
+              "area": "PP-07",
+              "role": "primary"
+            }
+          ],
+          "Survey bias": [
+            {
+              "area": "PP-05",
+              "role": "supplementary"
+            }
+          ],
+          "Survivorship bias": [
+            {
+              "area": "PP-05",
+              "role": "supporting"
+            }
+          ],
+          "Measurement bias": [
+            {
+              "area": "PP-02",
+              "role": "supporting"
+            }
+          ],
+          "Exclusion bias": [
+            {
+              "area": "PP-04",
+              "role": "supporting"
+            }
+          ]
+        }
+      },
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07",
+          "C-08",
+          "C-12"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06",
+          "C-05",
+          "C-07",
+          "C-08",
+          "C-12"
+        ]
+      }
+    },
+    "Q-PP-18": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you assessed whether your data collection methods could introduce selection bias?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PP-02",
+          "PP-05"
+        ],
+        "proposed": [
+          "PP-05",
+          "PP-02"
+        ]
+      },
+      "reason": "Same areas, new order. \"collection methods could introduce selection bias\" is PP-05's definition (non-random or uneven sampling), so PP-05 should head the report.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-08"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-08",
+          "C-04"
+        ]
+      }
+    },
+    "Q-PP-19": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you evaluated whether historical patterns in the data reflect past discrimination or systemic inequities?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-03"
+        ],
+        "proposed": [
+          "PP-03"
+        ]
+      },
+      "reason": "\"historical patterns … reflect past discrimination\" is PP-03's definition.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ]
+      }
+    },
+    "Q-PP-20": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether your training data is recent enough for the time the system will be used?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-02",
+          "PO-01"
+        ],
+        "proposed": [
+          "PP-02",
+          "PO-01"
+        ]
+      },
+      "reason": "\"recent enough for the time the system will be used\" is data relevance (PP-02) and drift (PO-01). PO-01 also brings C-23 (canary rollout), which does not fit a pre-processing check; that is the cost of controls attaching per area.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PP-21": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you established data governance policies covering access, sharing, and retention?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-06",
+          "PO-03"
+        ],
+        "proposed": [
+          "PP-06",
+          "PO-03"
+        ]
+      },
+      "reason": "\"data governance policies covering access, sharing, and retention\" is C-09 under PP-06. Under the PO-03 row, drift (C-21) drops out, C-26 (who decides, by role) leads PO-03's list, and C-28 (incident response) comes in, a weak fit for this question.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-21",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-26",
+          "C-28",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PP-22": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether your data has enough examples of rare cases and conditions?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PP-02",
+          "PP-04"
+        ],
+        "proposed": [
+          "PP-02",
+          "PP-04"
+        ]
+      },
+      "reason": "\"enough examples of rare cases\" is data scarcity (PP-02) and the served population (PP-04).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-05",
+          "C-07"
+        ]
+      }
+    },
+    "Q-PP-23": {
+      "stage": "pre-processing",
+      "type": "likert-5",
+      "text": "Have you engaged domain experts in reviewing data quality and relevance?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PP-07",
+          "IP-02"
+        ],
+        "proposed": [
+          "PP-07",
+          "PP-02"
+        ]
+      },
+      "reason": "Swap IP-02 for PP-02. \"domain experts … reviewing data quality and relevance\" is label checking (PP-07) and relevance (PP-02: data \"not relevant to the problem\"). Aggregation bias (IP-02) is about pooling groups in a model, not about expert review.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-12",
+          "C-13",
+          "C-14",
+          "C-16"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-12",
+          "C-05"
+        ]
+      }
+    },
+    "Q-IP-01": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you written down why you chose this type of model for your problem and your data?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-03",
+          "IP-04"
+        ],
+        "proposed": [
+          "IP-03",
+          "IP-04"
+        ]
+      },
+      "reason": "\"why you chose this type of model\" touches opacity (IP-03: \"selecting interpretable models where appropriate\") and IP-04. Unsure: IP-04 is about evaluation metrics, not model choice; C-17 (model card) is the useful control there.",
+      "confidence": "low",
+      "note": "Experts: keep IP-04, or replace it with PP-01 so C-01 (alternatives) is suggested.",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19",
+          "C-13"
+        ],
+        "proposed": [
+          "C-17",
+          "C-18",
+          "C-13",
+          "C-14"
+        ]
+      }
+    },
+    "Q-IP-02": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you ensured that training, validation, and test datasets are representative of the same underlying population?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-01",
+          "IP-02"
+        ],
+        "proposed": [
+          "PP-05",
+          "IP-02"
+        ]
+      },
+      "reason": "Swap IP-01 for PP-05 and lead with it. \"training, validation, and test datasets are representative of the same underlying population\" is generalisation (PP-05: \"causing models to generalize poorly\"). PP-05 brings C-08, one of whose links is scikit-learn's guide to cross-validation and stratified sampling, the usual way to keep splits representative, and C-05. Discrimination (IP-01) is not what this question checks.",
+      "confidence": "medium",
+      "note": "Unsure about the area: the split question has no exact one. PP-05 is a pre-processing area, so its controls show \"Usually applied in Pre-processing\".",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-08",
+          "C-13",
+          "C-14",
+          "C-16"
+        ]
+      }
+    },
+    "Q-IP-03": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-04"
+        ],
+        "proposed": [
+          "IP-04"
+        ]
+      },
+      "reason": "\"different kinds of error your model makes\" is metric choice (IP-04). Under the IP-04 row it suggests C-13, C-14 and C-17 instead of C-13, C-17 and C-18. C-14 is the nearest: its MetricFrame link can report error rates per group, though no title names error types.",
+      "confidence": "medium",
+      "note": "No control is about measuring error types; see the gaps list.",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-17",
+          "C-18"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-17"
+        ]
+      }
+    },
+    "Q-IP-04": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you calculated performance metrics separately for each relevant subgroup (e.g., by age, gender, ethnicity)?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-01",
+          "IP-02",
+          "IP-04"
+        ],
+        "proposed": [
+          "IP-01",
+          "IP-02",
+          "IP-04"
+        ]
+      },
+      "reason": "\"performance metrics separately for each relevant subgroup\" is C-14, reached through IP-01 and IP-02, and C-13.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16",
+          "C-17",
+          "C-18"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16",
+          "C-17"
+        ]
+      }
+    },
+    "Q-IP-06": {
+      "stage": "in-processing",
+      "type": "checklist",
+      "text": "Which fairness metrics have you computed?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-01"
+        ],
+        "proposed": [
+          "IP-01"
+        ]
+      },
+      "reason": "Fairness metrics are IP-01 (C-13). Its `gaps` (IP-01) always shows; the options add IP-02 for the conditional metrics.",
+      "confidence": "high",
+      "optionGapMap": {
+        "now": {
+          "Statistical Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Conditional Statistical Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "primary"
+            }
+          ],
+          "Predictive Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "False Positive Error Rate Balance": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "False Negative Error Rate Balance": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Overall Accuracy Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Treatment Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Conditional Use Accuracy Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "supporting"
+            }
+          ],
+          "Test Fairness / Well-Calibration": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ]
+        },
+        "proposed": {
+          "Statistical Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Conditional Statistical Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "primary"
+            }
+          ],
+          "Predictive Parity": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "False Positive Error Rate Balance": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "False Negative Error Rate Balance": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Overall Accuracy Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Treatment Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ],
+          "Conditional Use Accuracy Equality": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "supporting"
+            }
+          ],
+          "Test Fairness / Well-Calibration": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            }
+          ]
+        }
+      },
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16"
+        ]
+      }
+    },
+    "Q-IP-07": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you applied explainability methods (e.g., SHAP, LIME, feature importance) to understand model decisions?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-03"
+        ],
+        "proposed": [
+          "IP-03"
+        ]
+      },
+      "reason": "\"explainability methods (e.g., SHAP, LIME …)\" is C-18 under IP-03 word for word.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-18"
+        ]
+      }
+    },
+    "Q-IP-08": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-05",
+          "IP-03",
+          "IP-06"
+        ],
+        "proposed": [
+          "IP-05"
+        ]
+      },
+      "reason": "Drop IP-03 and IP-06. \"tested the model on data that differs from its training data\" is IP-05 (robustness). Under the IP-05 row it is offered C-18, whose links include the Adversarial Robustness Toolbox that its good practice names, and C-16, whose GroupKFold link holds out whole groups such as the \"held-out sites\" it names. IP-03 and IP-06 came only from the 5.0.0 merge rule (SITTING-1.md:422), not from the question.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-15",
+          "C-18",
+          "C-17",
+          "C-19"
+        ],
+        "proposed": [
+          "C-18",
+          "C-16",
+          "C-21"
+        ]
+      }
+    },
+    "Q-IP-16": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you compared your model's performance against a simple baseline (e.g., majority class, logistic regression)?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-04"
+        ],
+        "proposed": [
+          "PP-01"
+        ]
+      },
+      "reason": "Replace IP-04 with PP-01. \"compared … against a simple baseline\" tests whether the complexity is justified, which is PP-01 and C-01. Under IP-04 it was offered fairness metrics, a model card and explainability (audit sample: WRONG).",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-17",
+          "C-18"
+        ],
+        "proposed": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-IP-17": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-03",
+          "IP-05"
+        ],
+        "proposed": [
+          "IP-03",
+          "IP-05"
+        ]
+      },
+      "reason": "\"relies on shortcuts in the data\" is IP-05 (breaks when data shifts), found with explanations (IP-03). C-18 (SHAP, permutation importance) sits under both areas.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19",
+          "C-13",
+          "C-15"
+        ],
+        "proposed": [
+          "C-17",
+          "C-18",
+          "C-16",
+          "C-21"
+        ]
+      }
+    },
+    "Q-IP-18": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether the model's confidence matches how often it is right?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-05"
+        ],
+        "proposed": [
+          "IP-04"
+        ]
+      },
+      "reason": "Replace IP-05 with IP-04. \"confidence matches how often it is right\" is calibration, which Q-IP-13 already maps to IP-04 (\"Calibration analysis\"); one area for one practice. Neither area has a calibration control.",
+      "confidence": "low",
+      "note": "No calibration control exists; see the gaps list.",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-15",
+          "C-18"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-17"
+        ]
+      }
+    },
+    "Q-IP-09": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you chosen the simplest model that performs well enough?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-03"
+        ],
+        "proposed": [
+          "IP-03",
+          "PP-01"
+        ]
+      },
+      "reason": "Add PP-01. \"the simplest model that performs well enough\" is IP-03 (interpretable models) and the same trade-off as C-01 (alternatives analysis); PP-01 brings C-01.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-18",
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      }
+    },
+    "Q-IP-10": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-06"
+        ],
+        "proposed": [
+          "IP-06"
+        ]
+      },
+      "reason": "\"recorded everything needed to train the same model again\" is IP-06's definition. Under the IP-06 row it suggests C-17, C-19 and C-28 instead of C-17, C-18 and C-19. C-17 links MLflow (experiment and model tracking) and DVC (data and model versioning), and C-28 documents dependencies and configuration.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-IP-11": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you checked that records are not lost or changed as your data is moved and processed?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-07"
+        ],
+        "proposed": [
+          "IP-07"
+        ]
+      },
+      "reason": "\"records are not lost or changed as your data is moved\" is IP-07 (data integrity). Under the IP-07 row, anonymisation (C-10) drops out.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-03",
+          "C-09",
+          "C-10"
+        ],
+        "proposed": [
+          "C-03",
+          "C-09"
+        ]
+      }
+    },
+    "Q-IP-12": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you created or updated a model card for this model?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-06",
+          "PO-07"
+        ],
+        "proposed": [
+          "PO-07",
+          "IP-06"
+        ]
+      },
+      "reason": "Same areas, new order. \"created or updated a model card\" is documentation (PO-07 lists model cards first), so PO-07 should head the report; C-17 is reached either way.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-IP-13": {
+      "stage": "in-processing",
+      "type": "checklist",
+      "text": "Which additional evaluation methods have you applied?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [],
+        "proposed": []
+      },
+      "reason": "A checklist: its areas come from the options (see the option table). `gaps` stays empty.",
+      "confidence": "high",
+      "optionGapMap": {
+        "now": {
+          "Cross-validation (k-fold)": [
+            {
+              "area": "IP-04",
+              "role": "primary"
+            }
+          ],
+          "Bootstrapping": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ],
+          "Nested cross-validation": [
+            {
+              "area": "IP-04",
+              "role": "supplementary"
+            }
+          ],
+          "Learning curves analysis": [
+            {
+              "area": "IP-05",
+              "role": "primary"
+            }
+          ],
+          "Calibration analysis": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ],
+          "Error analysis by subgroup": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "primary"
+            }
+          ],
+          "Sensitivity/perturbation analysis": [
+            {
+              "area": "IP-05",
+              "role": "primary"
+            }
+          ],
+          "AUC-ROC curve analysis": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ]
+        },
+        "proposed": {
+          "Cross-validation (k-fold)": [
+            {
+              "area": "IP-04",
+              "role": "primary"
+            }
+          ],
+          "Bootstrapping": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ],
+          "Nested cross-validation": [
+            {
+              "area": "IP-04",
+              "role": "supplementary"
+            }
+          ],
+          "Learning curves analysis": [
+            {
+              "area": "IP-05",
+              "role": "primary"
+            }
+          ],
+          "Calibration analysis": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ],
+          "Error analysis by subgroup": [
+            {
+              "area": "IP-01",
+              "role": "supporting"
+            },
+            {
+              "area": "IP-02",
+              "role": "primary"
+            }
+          ],
+          "Sensitivity/perturbation analysis": [
+            {
+              "area": "IP-05",
+              "role": "primary"
+            }
+          ],
+          "AUC-ROC curve analysis": [
+            {
+              "area": "IP-04",
+              "role": "supporting"
+            }
+          ]
+        }
+      },
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-17",
+          "C-18",
+          "C-15",
+          "C-14",
+          "C-16"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-17",
+          "C-18",
+          "C-16",
+          "C-21",
+          "C-15"
+        ]
+      }
+    },
+    "Q-IP-14": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you considered whether aggregating data across populations masks important subgroup differences?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-02"
+        ],
+        "proposed": [
+          "IP-02"
+        ]
+      },
+      "reason": "\"aggregating data across populations masks … subgroup differences\" is IP-02's definition.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-16"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-16"
+        ]
+      }
+    },
+    "Q-IP-15": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-01",
+          "IP-04"
+        ],
+        "proposed": [
+          "IP-01",
+          "IP-04"
+        ]
+      },
+      "reason": "\"tuned … results did not get worse for some groups\" is IP-01 (different outcomes for groups) and IP-04 (the measure optimised).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-17",
+          "C-18"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-17"
+        ]
+      }
+    },
+    "Q-IP-19": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you assessed whether the model's errors have differential impact across demographic groups?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-01",
+          "IP-02"
+        ],
+        "proposed": [
+          "IP-01",
+          "IP-02"
+        ]
+      },
+      "reason": "\"errors have differential impact across demographic groups\" is IP-01 and IP-02.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-15",
+          "C-16"
+        ]
+      }
+    },
+    "Q-IP-20": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "IP-03",
+          "PO-07"
+        ],
+        "proposed": [
+          "PO-07",
+          "IP-03"
+        ]
+      },
+      "reason": "Same areas, new order. \"documented the model's known limitations\" is documentation (PO-07; C-17 covers \"where it fails\"), so PO-07 should head the report.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28",
+          "C-18"
+        ]
+      }
+    },
+    "Q-IP-21": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you used version control for your code, data processing and trained models?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-06"
+        ],
+        "proposed": [
+          "IP-06"
+        ]
+      },
+      "reason": "Keep IP-06: \"version control for your code, data processing and trained models\" is IP-06's first named mitigation (\"code versioning\"). The fault was IP-06's control list, fixed in the IP-06 row: C-18 (explainability) goes, C-28 comes in. C-17 stays, and its links are the three tools the good practice names: Git, DVC and MLflow.",
+      "confidence": "high",
+      "note": "C-17's name and description are about the model card; versioning is in its links only. The experts may want C-17's description to say so, a text change that keeps the count of 28.",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-IP-22": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you checked whether someone could trick or manipulate the model?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-05",
+          "IP-07"
+        ],
+        "proposed": [
+          "IP-05",
+          "IP-07"
+        ]
+      },
+      "reason": "\"trick or manipulate the model\" is robustness (IP-05) and unauthorised modification (IP-07). Under the IP-05 row it is offered C-18 first, whose links include the Adversarial Robustness Toolbox that its good practice names.",
+      "confidence": "medium",
+      "note": "C-18's name and description are about explainability; the adversarial tool is in its links only. IP-07's controls (C-03, C-09) are not security tests.",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-15",
+          "C-18",
+          "C-03",
+          "C-09",
+          "C-10"
+        ],
+        "proposed": [
+          "C-18",
+          "C-16",
+          "C-21",
+          "C-03",
+          "C-09"
+        ]
+      }
+    },
+    "Q-IP-24": {
+      "stage": "in-processing",
+      "type": "likert-5",
+      "text": "Have you tested the model on data from a later time than its training data?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "IP-05",
+          "PO-01"
+        ],
+        "proposed": [
+          "IP-05",
+          "PO-01"
+        ]
+      },
+      "reason": "\"data from a later time than its training data\" is IP-05 (distribution shift) and PO-01 (drift). C-21's links (two-sample Kolmogorov-Smirnov test, Evidently) detect that shift.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-13",
+          "C-15",
+          "C-18",
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-18",
+          "C-16",
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-01": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-01"
+        ],
+        "proposed": [
+          "PO-01"
+        ]
+      },
+      "reason": "\"check … whether its performance or its input data have changed\" is PO-01 and C-21.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-02": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you defined triggers and procedures for model retraining?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-01"
+        ],
+        "proposed": [
+          "PO-01"
+        ]
+      },
+      "reason": "\"triggers and procedures for model retraining\" is C-22 under PO-01.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-03": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Can a person review and overrule the system's outputs before they are acted on?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-02"
+        ],
+        "proposed": [
+          "PO-02"
+        ]
+      },
+      "reason": "\"a person review and overrule the system's outputs\" is C-24 under PO-02.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-24",
+          "C-25"
+        ],
+        "proposed": [
+          "C-21",
+          "C-24",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PO-04": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you defined clear roles and responsibilities for AI system outcomes (accountability matrix)?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-03"
+        ],
+        "proposed": [
+          "PO-03"
+        ]
+      },
+      "reason": "\"roles and responsibilities … (accountability matrix)\" is C-26 under PO-03.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-26",
+          "C-28",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PO-05": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you created an incident response plan for when the AI system produces harmful outputs?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-02",
+          "PO-03"
+        ],
+        "proposed": [
+          "PO-03",
+          "PO-02"
+        ]
+      },
+      "reason": "Same areas, new order. \"incident response plan\" is named in PO-03's `mitigated` text, so PO-03 should head the report. Under the PO-03 row it is offered C-26 (who is alerted, by role), then C-28, whose description covers \"what to do when things break\" and whose link is NIST MANAGE 4.1 on incident response, then C-25 (telling and helping the people affected). PO-02 adds C-24 (pause or shut the system down).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-24",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-26",
+          "C-28",
+          "C-25",
+          "C-21",
+          "C-24"
+        ]
+      }
+    },
+    "Q-PO-06": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you provided training or educational resources for end-users of the AI system?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-04"
+        ],
+        "proposed": [
+          "PO-04"
+        ]
+      },
+      "reason": "\"training or educational resources for end-users\" is C-27 under PO-04.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ]
+      }
+    },
+    "Q-PO-07": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Can end-users understand the AI system's outputs, confidence levels, and limitations?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-04",
+          "PO-02"
+        ],
+        "proposed": [
+          "PO-04",
+          "PO-02"
+        ]
+      },
+      "reason": "\"end-users understand the AI system's outputs, confidence levels, and limitations\" is PO-04 (user literacy), with PO-02 for acting on low confidence.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-21"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-21"
+        ]
+      }
+    },
+    "Q-PO-16": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you introduced the system in stages, for example at one site first, before using it everywhere?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-01"
+        ],
+        "proposed": [
+          "PO-01"
+        ]
+      },
+      "reason": "\"introduced the system in stages\" is C-23 (canary deployment) under PO-01.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-17": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Once the system is in use, do you check results for each group as well as overall accuracy?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-01",
+          "PO-06"
+        ],
+        "proposed": [
+          "PO-01",
+          "IP-01"
+        ]
+      },
+      "reason": "Swap PO-06 for IP-01. \"check results for each group as well as overall\" is subgroup monitoring (C-13, C-14 under IP-01). Feedback loop absence (PO-06) is about people reporting problems, which this question does not ask.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-13",
+          "C-14",
+          "C-15"
+        ]
+      }
+    },
+    "Q-PO-18": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you defined performance thresholds below which the system should be automatically disabled or flagged?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-01",
+          "PO-02"
+        ],
+        "proposed": [
+          "PO-01",
+          "PO-02"
+        ]
+      },
+      "reason": "\"thresholds below which the system should be … disabled or flagged\" is PO-01 (monitoring) and PO-02 (C-24: shut down).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-24",
+          "C-25"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-24",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PO-08": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you established feedback channels for affected communities and end-users?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-06"
+        ],
+        "proposed": [
+          "PO-06"
+        ]
+      },
+      "reason": "\"feedback channels for affected communities\" is PO-06's definition and C-25.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PO-09": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-06"
+        ],
+        "proposed": [
+          "PO-06"
+        ]
+      },
+      "reason": "\"contest or appeal those decisions\" is C-25 under PO-06.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PO-10": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you created complete documentation for the deployed system (codebook, deployment specs)?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-07"
+        ],
+        "proposed": [
+          "PO-07"
+        ]
+      },
+      "reason": "\"documentation for the deployed system (codebook, deployment specs)\" is C-28 under PO-07.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-17",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-PO-11": {
+      "stage": "post-processing",
+      "type": "checklist",
+      "text": "Which of the following governance measures are in place?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [],
+        "proposed": []
+      },
+      "reason": "A checklist: its areas come from the options (see the option table). `gaps` stays empty.",
+      "confidence": "high",
+      "optionGapMap": {
+        "now": {
+          "Data governance committee": [
+            {
+              "area": "PO-03",
+              "role": "primary"
+            }
+          ],
+          "Ethics review board/process": [
+            {
+              "area": "PO-03",
+              "role": "primary"
+            }
+          ],
+          "Audit trail/logging": [
+            {
+              "area": "PO-03",
+              "role": "supporting"
+            },
+            {
+              "area": "PO-07",
+              "role": "primary"
+            }
+          ],
+          "Version control for models and data": [
+            {
+              "area": "IP-06",
+              "role": "primary"
+            },
+            {
+              "area": "PO-07",
+              "role": "supporting"
+            }
+          ],
+          "Access control policies": [
+            {
+              "area": "PP-06",
+              "role": "primary"
+            }
+          ],
+          "Compliance with national data protection laws": [
+            {
+              "area": "PP-06",
+              "role": "primary"
+            }
+          ],
+          "Regular third-party audits": [
+            {
+              "area": "PO-03",
+              "role": "supporting"
+            }
+          ],
+          "Community advisory board": [
+            {
+              "area": "PO-06",
+              "role": "primary"
+            }
+          ]
+        },
+        "proposed": {
+          "Data governance committee": [
+            {
+              "area": "PP-06",
+              "role": "primary"
+            },
+            {
+              "area": "PO-03",
+              "role": "supporting"
+            }
+          ],
+          "Ethics review board/process": [
+            {
+              "area": "PO-03",
+              "role": "primary"
+            }
+          ],
+          "Audit trail/logging": [
+            {
+              "area": "IP-07",
+              "role": "primary"
+            },
+            {
+              "area": "PO-03",
+              "role": "supporting"
+            }
+          ],
+          "Version control for models and data": [
+            {
+              "area": "IP-06",
+              "role": "primary"
+            },
+            {
+              "area": "PO-07",
+              "role": "supporting"
+            }
+          ],
+          "Access control policies": [
+            {
+              "area": "PP-06",
+              "role": "primary"
+            }
+          ],
+          "Compliance with national data protection laws": [
+            {
+              "area": "PP-06",
+              "role": "primary"
+            }
+          ],
+          "Regular third-party audits": [
+            {
+              "area": "PO-03",
+              "role": "supporting"
+            }
+          ],
+          "Community advisory board": [
+            {
+              "area": "PO-06",
+              "role": "primary"
+            }
+          ]
+        }
+      },
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-25",
+          "C-26",
+          "C-17",
+          "C-19",
+          "C-28",
+          "C-18",
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-24",
+          "C-27"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-26",
+          "C-28",
+          "C-25",
+          "C-03",
+          "C-17",
+          "C-19",
+          "C-24",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PO-12": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you assessed the AI system's performance across the deployment context's diversity (geographic, linguistic, cultural)?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-01"
+        ],
+        "proposed": [
+          "IP-02",
+          "PO-01"
+        ]
+      },
+      "reason": "Add IP-02 and lead with it. \"performance across the deployment context's diversity (geographic, linguistic, cultural)\" is results broken down by group (IP-02: works on average but fails for specific populations; C-14, C-16). PO-01 stays for checking in use.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-16",
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-13": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you planned when and how the AI system will be retired or replaced?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-05"
+        ],
+        "proposed": [
+          "PO-03",
+          "PO-05"
+        ]
+      },
+      "reason": "Add PO-03 and lead with it. \"planned when and how the AI system will be retired\" is mainly a decision about who decides and how users and data are handled (PO-03). Under the PO-03 row the report leads with C-26 (who decides), then C-28 (its link covers change management). PO-05 stays second because the question's good practice counts \"the computing and energy the system uses while running\" (C-02 links CodeCarbon).",
+      "confidence": "medium",
+      "note": "No control's description or link title is about retiring a system. The nearest are C-09 (data \"eventually retired\") and C-24, whose link is NIST MANAGE 2.4 on how to \"supersede, disengage or deactivate a system\"; this proposal reaches neither. The experts may prefer adding PO-02 for C-24, or IP-07 or PP-06 for C-09.",
+      "controlsShown": {
+        "now": [
+          "C-02",
+          "C-26"
+        ],
+        "proposed": [
+          "C-26",
+          "C-28",
+          "C-25",
+          "C-02",
+          "C-01"
+        ]
+      }
+    },
+    "Q-PO-14": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-02",
+          "PO-01",
+          "PO-03"
+        ],
+        "proposed": [
+          "PO-02",
+          "PO-01"
+        ]
+      },
+      "reason": "Drop PO-03. \"handle unusual inputs safely … flagging them for a person\" is PO-02 (C-24) and PO-01 (detecting inputs unlike training data). PO-03 came from the 5.0.0 merge rule (SITTING-1.md:422), not from the question.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-24",
+          "C-25",
+          "C-22",
+          "C-23",
+          "C-26"
+        ],
+        "proposed": [
+          "C-21",
+          "C-24",
+          "C-25",
+          "C-22",
+          "C-23"
+        ]
+      }
+    },
+    "Q-PO-15": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you communicated the AI system's limitations and intended use to all stakeholders?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-04",
+          "PO-07"
+        ],
+        "proposed": [
+          "PO-04",
+          "PO-07"
+        ]
+      },
+      "reason": "\"communicated the AI system's limitations and intended use to all stakeholders\" is PO-04 (understanding limitations) and PO-07 (documentation).",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-17",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      }
+    },
+    "Q-PO-20": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you involved representatives of affected communities in the design and evaluation of the AI system?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-06",
+          "PO-02"
+        ],
+        "proposed": [
+          "PO-06"
+        ]
+      },
+      "reason": "Drop PO-02. \"involved representatives of affected communities in the design and evaluation\" is PO-06's \"community engagement\", which under the PO-06 row brings C-20. Human oversight of outputs (PO-02) is not asked.",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-21"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-20"
+        ]
+      }
+    },
+    "Q-PO-21": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you assessed the AI system's impact on existing workflows and professional practices?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-02",
+          "PO-04"
+        ],
+        "proposed": [
+          "PO-02",
+          "PO-04"
+        ]
+      },
+      "reason": "\"impact on existing workflows and professional practices\" is PO-02 (how people review outputs in their work) and PO-04 (what users understand).",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-21",
+          "C-24",
+          "C-25",
+          "C-27"
+        ]
+      }
+    },
+    "Q-PO-22": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-03"
+        ],
+        "proposed": [
+          "PP-06",
+          "PO-03"
+        ]
+      },
+      "reason": "Add PP-06 and lead with it. \"compliance with applicable data protection regulations\" is PP-06, whose `mitigated` text ends \"compliance with national data protection laws\" (C-09, C-10, C-11). PO-03 stays for \"ethical guidelines\" approvals; under the PO-03 row, drift (C-21) drops out.",
+      "confidence": "high",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-26",
+          "C-28",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PO-23": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you established regular review cycles to reassess the AI system's appropriateness and performance?",
+      "status": "proposed",
+      "change": "keep",
+      "gaps": {
+        "now": [
+          "PO-01",
+          "PO-03"
+        ],
+        "proposed": [
+          "PO-01",
+          "PO-03"
+        ]
+      },
+      "reason": "\"regular review cycles to reassess … appropriateness and performance\" is PO-01 (performance) and PO-03 (who decides).",
+      "confidence": "medium",
+      "controlsShown": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23",
+          "C-26",
+          "C-28",
+          "C-25"
+        ]
+      }
+    },
+    "Q-PO-24": {
+      "stage": "post-processing",
+      "type": "likert-5",
+      "text": "Have you considered the AI system's impact on equity of access to services?",
+      "status": "proposed",
+      "change": "change",
+      "gaps": {
+        "now": [
+          "PO-04"
+        ],
+        "proposed": [
+          "PO-04",
+          "PP-04"
+        ]
+      },
+      "reason": "Add PP-04. \"impact on equity of access to services\" is about who the system serves (PP-04: C-07 maps who is helped or harmed), as well as user literacy (PO-04).",
+      "confidence": "low",
+      "note": "Unsure: equity of access has no exact area; the experts may prefer IP-01.",
+      "controlsShown": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-27",
+          "C-03",
+          "C-05",
+          "C-07"
+        ]
+      }
+    }
+  },
+  "areas": {
+    "PP-01": {
+      "name": "Techno-solutionist Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ],
+        "proposed": [
+          "C-01",
+          "C-02",
+          "C-20"
+        ]
+      },
+      "reason": "C-01, C-02 and C-20 are the three practices PP-01's own `mitigated` text names: alternatives analysis, cost-benefit evaluation, stakeholder consultation.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-01",
+        "Q-PP-02",
+        "Q-PP-05",
+        "Q-PP-24",
+        "Q-IP-16",
+        "Q-IP-09"
+      ]
+    },
+    "PP-02": {
+      "name": "Data Scarcity & Availability Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-05"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-05"
+        ]
+      },
+      "reason": "C-03 (completeness) and C-05 (who is missing) match PP-02's \"completeness audits, representativeness analysis\". C-04 (biases in how data was collected) is a weaker fit for data that is too sparse; kept because nothing closer exists.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-PP-09",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-18",
+        "Q-PP-20",
+        "Q-PP-22",
+        "Q-PP-23"
+      ]
+    },
+    "PP-03": {
+      "name": "Historical & Societal Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-06"
+        ]
+      },
+      "reason": "C-04 (biases baked into the data) and C-06 (protected groups) are PP-03's \"contextual bias analysis, protected group identification\"; C-03 covers the representativeness side.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-04",
+        "Q-PP-05",
+        "Q-PP-24",
+        "Q-PP-11",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-19"
+      ]
+    },
+    "PP-04": {
+      "name": "Population Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-05",
+          "C-07"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-07"
+        ]
+      },
+      "reason": "C-07 (stakeholder mapping), C-05 (distribution) and C-03 (representativeness) are PP-04's \"stakeholder mapping, deployment context analysis, and cross-population validation\".",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-03",
+        "Q-PP-04",
+        "Q-PP-05",
+        "Q-PP-24",
+        "Q-PP-09",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-22",
+        "Q-PO-24"
+      ]
+    },
+    "PP-05": {
+      "name": "Sampling & Generalization Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-05",
+          "C-08"
+        ],
+        "proposed": [
+          "C-03",
+          "C-05",
+          "C-08"
+        ]
+      },
+      "reason": "C-08 (sampling strategy), C-05 and C-03 are PP-05's \"stratified sampling … balanced data collection\".",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-09",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-18",
+        "Q-IP-02"
+      ]
+    },
+    "PP-06": {
+      "name": "Privacy & Consent Violations",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ],
+        "proposed": [
+          "C-09",
+          "C-10",
+          "C-11"
+        ]
+      },
+      "reason": "C-09, C-10 and C-11 are PP-06's \"informed consent protocols, data anonymization techniques, access controls\".",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-13",
+        "Q-PP-14",
+        "Q-PP-21",
+        "Q-PO-11",
+        "Q-PO-22"
+      ]
+    },
+    "PP-07": {
+      "name": "Labeling Bias",
+      "stage": "pre-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-04",
+          "C-12"
+        ],
+        "proposed": [
+          "C-03",
+          "C-04",
+          "C-12"
+        ]
+      },
+      "reason": "C-12 (labelling QA) is PP-07's \"inter-rater reliability … labeling guidelines\"; C-04 covers \"who labeled it\" and C-03 label accuracy.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-12",
+        "Q-PP-17",
+        "Q-PP-23"
+      ]
+    },
+    "IP-01": {
+      "name": "Algorithmic Discrimination",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-15"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-15"
+        ]
+      },
+      "reason": "C-13, C-14 and C-15 are IP-01's \"fairness metrics evaluation, subgroup analysis, and bias mitigation techniques\", in that order.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-IP-04",
+        "Q-IP-06",
+        "Q-IP-13",
+        "Q-IP-15",
+        "Q-IP-19",
+        "Q-PO-17"
+      ]
+    },
+    "IP-02": {
+      "name": "Aggregation Bias",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-13",
+          "C-14",
+          "C-16"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-16"
+        ]
+      },
+      "reason": "C-14 (disaggregated) and C-16 (stratified or separate models) are IP-02's \"disaggregated analysis … separate models\"; C-13 measures the subgroup gap.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-IP-02",
+        "Q-IP-04",
+        "Q-IP-06",
+        "Q-IP-13",
+        "Q-IP-14",
+        "Q-IP-19",
+        "Q-PO-12"
+      ]
+    },
+    "IP-03": {
+      "name": "Opacity & Unexplainability",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-18"
+        ]
+      },
+      "reason": "Drop C-19. A datasheet documents the data, and IP-03 is about decisions nobody can explain; its `mitigated` text names explainability methods and model documentation (C-18, C-17). C-19 stays reached through IP-06 and PO-07.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-IP-01",
+        "Q-IP-07",
+        "Q-IP-17",
+        "Q-IP-09",
+        "Q-IP-20"
+      ]
+    },
+    "IP-04": {
+      "name": "Metric Selection Bias",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-13",
+          "C-17",
+          "C-18"
+        ],
+        "proposed": [
+          "C-13",
+          "C-14",
+          "C-17"
+        ]
+      },
+      "reason": "Swap C-18 for C-14. IP-04's `mitigated` text is \"contextual metric selection, multi-metric evaluation\". C-14 (Disaggregated Performance Analysis) links Fairlearn's MetricFrame, which reports several metrics side by side for each subgroup. C-18's links (SHAP, permutation feature importance, the Adversarial Robustness Toolbox) explain or attack a model; none is about which metric is used.",
+      "confidence": "medium",
+      "note": "No control's description or link title is about choosing or reporting error measures (confusion matrix, precision, recall). MetricFrame can compute them per group, but its title does not say so; see the gaps list.",
+      "questionsReaching": [
+        "Q-IP-01",
+        "Q-IP-03",
+        "Q-IP-04",
+        "Q-IP-18",
+        "Q-IP-13",
+        "Q-IP-15"
+      ]
+    },
+    "IP-05": {
+      "name": "Model Robustness Failure",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-13",
+          "C-15",
+          "C-18"
+        ],
+        "proposed": [
+          "C-18",
+          "C-16",
+          "C-21"
+        ]
+      },
+      "reason": "Replace C-13 and C-15 (fairness metrics, debiasing) with C-16 and C-21, and keep C-18, which now leads. IP-05's `mitigated` text is \"robustness testing, cross-validation across diverse conditions, and sensitivity analysis\". C-18's description is explainability, but its links include the Adversarial Robustness Toolbox, the tool Q-IP-08 and Q-IP-22 name, and permutation feature importance, which measures how far performance drops when one input is scrambled. C-16's links are scikit-learn's StratifiedKFold and GroupKFold; GroupKFold holds out whole groups, such as the \"held-out sites\" Q-IP-08 names. C-21 (drift detection) covers the shift in IP-05's own description. C-13 and C-15 stay reached through IP-01.",
+      "confidence": "medium",
+      "note": "All three fit through their links more than their names: the cards read \"Explainability Analysis\", \"Stratified Model Evaluation\" and \"Monitoring & Drift Detection\".",
+      "questionsReaching": [
+        "Q-IP-08",
+        "Q-IP-17",
+        "Q-IP-13",
+        "Q-IP-22",
+        "Q-IP-24"
+      ]
+    },
+    "IP-06": {
+      "name": "Reproducibility Failure",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-17",
+          "C-18",
+          "C-19"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      },
+      "reason": "Swap C-18 for C-28. IP-06's `mitigated` text is \"code versioning, experiment tracking, documentation standards, and model cards\". C-17 is the model card, and its links include DVC (data and model versioning), MLflow (experiment and model tracking) and Git, so it also carries code versioning and experiment tracking. C-28 documents dependencies and configuration. Explainability (C-18) has nothing to do with reproducing a result.",
+      "confidence": "high",
+      "note": "Versioning sits in C-17's links only. Its name and description are about the model card, so someone skimming the card may not see it; see \"Covered only by a control's links\".",
+      "questionsReaching": [
+        "Q-IP-10",
+        "Q-IP-12",
+        "Q-IP-21",
+        "Q-PO-11"
+      ]
+    },
+    "IP-07": {
+      "name": "Data Integrity Compromise",
+      "stage": "in-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-03",
+          "C-09",
+          "C-10"
+        ],
+        "proposed": [
+          "C-03",
+          "C-09"
+        ]
+      },
+      "reason": "Drop C-10. IP-07 is \"data corruption, unauthorized modification\". C-10 removes personal identifiers. One of its links, Python's hmac (\"keyed-hash message authentication\"), reads like an integrity check, but C-10's notebook uses it to make keyed pseudonyms, not to catch changed records. C-03 (complete and accurate data; links pandas' missing-data guide) and C-09 (rules for how data is \"collected, stored, accessed, and eventually retired\") match \"integrity checks, access controls\". C-10 stays reached through PP-06.",
+      "confidence": "medium",
+      "note": "No control's description or link title is a data-validation pipeline or audit log, which IP-07's text names. By title, the nearest is C-22's link to Google Cloud's MLOps automation pipelines.",
+      "questionsReaching": [
+        "Q-PP-16",
+        "Q-IP-11",
+        "Q-IP-22",
+        "Q-PO-11"
+      ]
+    },
+    "PO-01": {
+      "name": "Deployment Drift",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ],
+        "proposed": [
+          "C-21",
+          "C-22",
+          "C-23"
+        ]
+      },
+      "reason": "C-21 (drift detection), C-22 (retraining) and C-23 (staged rollout) are PO-01's \"continuous monitoring … scheduled retraining … drift detection\".",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-20",
+        "Q-IP-24",
+        "Q-PO-01",
+        "Q-PO-02",
+        "Q-PO-16",
+        "Q-PO-17",
+        "Q-PO-18",
+        "Q-PO-12",
+        "Q-PO-14",
+        "Q-PO-23"
+      ]
+    },
+    "PO-02": {
+      "name": "Lack of Human Oversight",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-21",
+          "C-24",
+          "C-25"
+        ],
+        "proposed": [
+          "C-21",
+          "C-24",
+          "C-25"
+        ]
+      },
+      "reason": "C-24 (a human can review, override or shut down) is PO-02's core; C-21 supports \"validation\" and C-25 the override route for people affected.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-PO-03",
+        "Q-PO-05",
+        "Q-PO-07",
+        "Q-PO-18",
+        "Q-PO-14",
+        "Q-PO-21"
+      ]
+    },
+    "PO-03": {
+      "name": "Accountability Gap",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-21",
+          "C-25",
+          "C-26"
+        ],
+        "proposed": [
+          "C-26",
+          "C-28",
+          "C-25"
+        ]
+      },
+      "reason": "Drop C-21, add C-28, and lead with C-26. PO-03's `mitigated` text is \"governance frameworks, accountability matrices, incident response plans, and documentation\". C-26 is the accountability matrix, and its links are NIST GOVERN 2.1 (roles and responsibilities) and ISO/IEC 42001 (AI management system). C-28's description ends \"what to do when things break\", and its one link is NIST MANAGE 4.1 (incident response, recovery and change management). C-25 (redress) stays third, for the part of an incident plan that tells and helps the people affected (Q-PO-05's good practice). Drift monitoring (C-21) is not ownership; it stays reached through PO-01, PO-02 and IP-05.",
+      "confidence": "high",
+      "note": "C-26 first means every question headed by PO-03 leads with the accountability matrix, which fixes the Q-PO-13 lead.",
+      "questionsReaching": [
+        "Q-PP-21",
+        "Q-PO-04",
+        "Q-PO-05",
+        "Q-PO-11",
+        "Q-PO-13",
+        "Q-PO-22",
+        "Q-PO-23"
+      ]
+    },
+    "PO-04": {
+      "name": "User Literacy Deficit",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "keep",
+      "controls": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ]
+      },
+      "reason": "C-27 (user training) is PO-04's \"user training programs\"; C-24 and C-25 cover knowing when to override and how to complain. C-25 is the weakest of the three.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-PO-06",
+        "Q-PO-07",
+        "Q-PO-15",
+        "Q-PO-21",
+        "Q-PO-24"
+      ]
+    },
+    "PO-05": {
+      "name": "Environmental Impact",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-02",
+          "C-26"
+        ],
+        "proposed": [
+          "C-02",
+          "C-01"
+        ]
+      },
+      "reason": "Swap C-26 for C-01. PO-05 is energy and carbon cost; C-26 (who is responsible) does not address it. C-02 lists CodeCarbon among its resources, and C-01 (would a simpler approach do) is PO-05's \"efficient model architectures\". C-26 stays reached through PO-03.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-PP-07",
+        "Q-PO-13"
+      ]
+    },
+    "PO-06": {
+      "name": "Feedback Loop Absence",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-24",
+          "C-25",
+          "C-27"
+        ],
+        "proposed": [
+          "C-24",
+          "C-25",
+          "C-20"
+        ]
+      },
+      "reason": "Swap C-27 for C-20. PO-06's `mitigated` text is \"feedback platforms, appeal mechanisms, community engagement, and regular stakeholder consultations\"; C-20 is multi-stakeholder consultation, while user training (C-27) belongs to PO-04, which still reaches it. This changes Q-PO-09, which the audit sample judged FITS with C-24, C-25 and C-27; it would get C-24, C-25 and C-20.",
+      "confidence": "medium",
+      "questionsReaching": [
+        "Q-PO-08",
+        "Q-PO-09",
+        "Q-PO-11",
+        "Q-PO-20"
+      ]
+    },
+    "PO-07": {
+      "name": "Documentation Deficit",
+      "stage": "post-processing",
+      "status": "proposed",
+      "change": "change",
+      "controls": {
+        "now": [
+          "C-17",
+          "C-19",
+          "C-26",
+          "C-28"
+        ],
+        "proposed": [
+          "C-17",
+          "C-19",
+          "C-28"
+        ]
+      },
+      "reason": "Drop C-26. PO-07's own description lists \"model cards, datasheets, codebooks, and deployment specifications\": exactly C-17, C-19 and C-28. An accountability matrix is not system documentation. C-26 stays reached through PO-03.",
+      "confidence": "high",
+      "questionsReaching": [
+        "Q-PP-08",
+        "Q-PP-16",
+        "Q-IP-12",
+        "Q-IP-20",
+        "Q-PO-10",
+        "Q-PO-11",
+        "Q-PO-15"
+      ]
+    }
+  },
+  "controls": {
+    "C-01": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Alternatives Analysis",
+        "type": "procedural",
+        "description": "Before building an AI system, ask whether a simpler approach (rules, heuristics, manual process) would work just as well.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook: MAP function",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
+            "type": "framework"
+          },
+          {
+            "title": "Canada Algorithmic Impact Assessment (AIA) Tool",
+            "url": "https://www.canada.ca/en/government/system/digital-government/digital-government-innovations/responsible-use-ai/algorithmic-impact-assessment.html",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-02": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Cost-Benefit & Impact Assessment",
+        "type": "procedural",
+        "description": "Weigh the expected benefits of deploying AI against its costs and potential harms to affected people.",
+        "resources": [
+          {
+            "title": "EU AI Act Art. 27: Fundamental Rights Impact Assessment",
+            "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+            "type": "framework"
+          },
+          {
+            "title": "WHO Ethics & Governance of AI for Health",
+            "url": "https://www.who.int/publications/i/item/9789240029200",
+            "type": "framework"
+          },
+          {
+            "title": "NIST AI RMF Playbook: MAP function",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
+            "type": "framework"
+          },
+          {
+            "title": "CodeCarbon: track the energy use and carbon emissions of computing",
+            "url": "https://docs.codecarbon.io/latest/",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-03": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Data Quality & Representativeness Audit",
+        "type": "technical",
+        "description": "Check whether your training data is complete, accurate, and actually represents the people the model will affect.",
+        "resources": [
+          {
+            "title": "pandas: working with missing data",
+            "url": "https://pandas.pydata.org/docs/user_guide/missing_data.html",
+            "type": "tool"
+          },
+          {
+            "title": "SciPy: chi-square test against expected counts (stats.chisquare)",
+            "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chisquare.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-04": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Bias Detection in Data",
+        "type": "technical",
+        "description": "Look for biases baked into the data: how it was collected, who labeled it, and what got measured.",
+        "resources": [
+          {
+            "title": "scikit-learn: mutual_info_classif",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.mutual_info_classif.html",
+            "type": "tool"
+          },
+          {
+            "title": "scikit-learn: cohen_kappa_score",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html",
+            "type": "tool"
+          },
+          {
+            "title": "statsmodels: fleiss_kappa",
+            "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-05": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Data Distribution Analysis",
+        "type": "technical",
+        "description": "Compare how different groups are represented in your data. Who is overrepresented? Who is missing?",
+        "resources": [
+          {
+            "title": "pandas: crosstab",
+            "url": "https://pandas.pydata.org/docs/reference/api/pandas.crosstab.html",
+            "type": "tool"
+          },
+          {
+            "title": "SciPy: statistics reference (scipy.stats)",
+            "url": "https://docs.scipy.org/doc/scipy/reference/stats.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-06": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Protected Group Identification",
+        "type": "procedural",
+        "description": "Who could be harmed by this system? Identify the protected and vulnerable groups in your specific deployment context.",
+        "resources": [
+          {
+            "title": "NIST SP 1270: Towards a Standard for Identifying and Managing Bias in AI",
+            "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf",
+            "type": "framework"
+          },
+          {
+            "title": "IBM AI Fairness 360 (AIF360): Bias Detection Toolkit",
+            "url": "https://aif360.readthedocs.io/en/stable/",
+            "type": "tool"
+          },
+          {
+            "title": "Microsoft Fairlearn: Fairness Assessment & Mitigation",
+            "url": "https://fairlearn.org/main/user_guide/index.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-07": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Stakeholder Impact Mapping",
+        "type": "procedural",
+        "description": "Identify everyone affected by the AI system (direct users, subjects of decisions, and communities) then map how each group could be helped or harmed.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook, MAP 5.1: impacts, beneficial and harmful",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
+            "type": "framework"
+          },
+          {
+            "title": "OECD AI Principles: Inclusive Growth & Stakeholder Engagement",
+            "url": "https://oecd.ai/en/ai-principles",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-08": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Sampling Strategy Design",
+        "type": "procedural",
+        "description": "Document how you will sample data to avoid over- or under-representing any group.",
+        "resources": [
+          {
+            "title": "scikit-learn: Cross-validation & Stratified Sampling",
+            "url": "https://scikit-learn.org/stable/modules/cross_validation.html",
+            "type": "tool"
+          },
+          {
+            "title": "NIST AI RMF Playbook, MAP 2.3: data collection and selection",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-09": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Data Governance Framework",
+        "type": "informational",
+        "description": "Set clear rules for how data is collected, stored, accessed, and eventually retired.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook: GOVERN function",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/govern/",
+            "type": "framework"
+          },
+          {
+            "title": "OECD AI Principles: Data Governance & Stewardship",
+            "url": "https://oecd.ai/en/ai-principles",
+            "type": "framework"
+          },
+          {
+            "title": "DAMA International: Data Management Body of Knowledge (DMBOK)",
+            "url": "https://www.dama.org/cpages/body-of-knowledge",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-10": {
+      "status": "proposed",
+      "change": "change",
+      "shown": {
+        "name": "Privacy & Anonymization Protocols",
+        "type": "technical",
+        "description": "Remove or mask personal identifiers so individuals cannot be re-identified from the data.",
+        "resources": [
+          {
+            "title": "pycanon: k-anonymity and l-diversity checks in Python",
+            "url": "https://pypi.org/project/pycanon/",
+            "type": "tool"
+          },
+          {
+            "title": "Python: hmac, keyed-hash message authentication",
+            "url": "https://docs.python.org/3/library/hmac.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "proposedFields": {
+        "name": "Privacy & Anonymisation Protocols"
+      },
+      "reason": "British spelling, matching Q-PP-14's \"anonymisation\" (5.1.0 spelling mix noted in the audit, B-content.md §8). Description unchanged."
+    },
+    "C-11": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Informed Consent Framework",
+        "type": "procedural",
+        "description": "People whose data you use should know what they are consenting to, in language they can understand.",
+        "resources": [
+          {
+            "title": "WHO Ethics & Governance of AI for Health: Consent Guidance",
+            "url": "https://www.who.int/publications/i/item/9789240029200",
+            "type": "framework"
+          },
+          {
+            "title": "UNESCO Recommendation on Ethics of AI: Informed Participation",
+            "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+            "type": "framework"
+          },
+          {
+            "title": "GDPR Articles 13-14: Information Requirements for Consent",
+            "url": "https://gdpr-info.eu/art-13-gdpr/",
+            "type": "framework"
+          },
+          {
+            "title": "Regulation (EU) 2016/679 (GDPR), official text",
+            "url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-12": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Labeling Quality Assurance",
+        "type": "procedural",
+        "description": "When humans label data, check that different labelers agree. Write clear guidelines and measure inter-rater reliability.",
+        "resources": [
+          {
+            "title": "scikit-learn: cohen_kappa_score",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html",
+            "type": "tool"
+          },
+          {
+            "title": "statsmodels: fleiss_kappa",
+            "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html",
+            "type": "tool"
+          },
+          {
+            "title": "Label Studio: Open-Source Data Annotation Platform",
+            "url": "https://labelstud.io/",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-13": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Subgroup Fairness Metrics",
+        "type": "technical",
+        "description": "Measure fairness (statistical parity, predictive parity, etc.) for each subgroup. Numbers that look fine overall can hide disparities.",
+        "resources": [
+          {
+            "title": "Fairlearn: assessing fairness with MetricFrame",
+            "url": "https://fairlearn.org/main/user_guide/assessment/index.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-14": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Disaggregated Performance Analysis",
+        "type": "technical",
+        "description": "Break down model performance by subgroup. A model that works well on average can fail specific populations.",
+        "resources": [
+          {
+            "title": "Fairlearn: MetricFrame",
+            "url": "https://fairlearn.org/main/api_reference/generated/fairlearn.metrics.MetricFrame.html",
+            "type": "tool"
+          },
+          {
+            "title": "scikit-learn: resample",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.utils.resample.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-15": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Bias Mitigation Techniques",
+        "type": "technical",
+        "description": "Use techniques like reweighting, adversarial debiasing, or fairness constraints to reduce bias during model training.",
+        "resources": [
+          {
+            "title": "Fairlearn: mitigation techniques (CorrelationRemover, ExponentiatedGradient, ThresholdOptimizer)",
+            "url": "https://fairlearn.org/main/user_guide/mitigation/index.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-16": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Stratified Model Evaluation",
+        "type": "technical",
+        "description": "Sometimes one model cannot serve everyone well. Check whether separate models or stratified approaches would be fairer.",
+        "resources": [
+          {
+            "title": "scikit-learn: StratifiedKFold",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html",
+            "type": "tool"
+          },
+          {
+            "title": "scikit-learn: GroupKFold",
+            "url": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupKFold.html",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-17": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Model Documentation (Model Card)",
+        "type": "procedural",
+        "description": "Write a model card: what the model does, how well it performs, where it fails, and who might be affected.",
+        "resources": [
+          {
+            "title": "Mitchell et al. (2019): Model Cards for Model Reporting",
+            "url": "https://doi.org/10.1145/3287560.3287596",
+            "type": "paper"
+          },
+          {
+            "title": "Google Model Card Toolkit",
+            "url": "https://github.com/tensorflow/model-card-toolkit",
+            "type": "tool"
+          },
+          {
+            "title": "Hugging Face: Model Card Guide",
+            "url": "https://huggingface.co/docs/hub/model-cards",
+            "type": "tool"
+          },
+          {
+            "title": "DVC: data and model versioning",
+            "url": "https://doc.dvc.org/",
+            "type": "tool"
+          },
+          {
+            "title": "MLflow: experiment and model tracking",
+            "url": "https://mlflow.org/docs/latest/ml/",
+            "type": "tool"
+          },
+          {
+            "title": "Git: reference documentation",
+            "url": "https://git-scm.com/docs",
+            "type": "tool"
+          },
+          {
+            "title": "EQUATOR Network: reporting guidelines library",
+            "url": "https://www.equator-network.org/reporting-guidelines/",
+            "type": "guidance"
+          },
+          {
+            "title": "TRIPOD+AI reporting guideline",
+            "url": "https://www.equator-network.org/reporting-guidelines/tripod-statement/",
+            "type": "guidance"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-18": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Explainability Analysis",
+        "type": "technical",
+        "description": "Use SHAP, LIME, or feature importance to understand why the model makes the decisions it does.",
+        "resources": [
+          {
+            "title": "SHAP documentation",
+            "url": "https://shap.readthedocs.io/en/latest/",
+            "type": "tool"
+          },
+          {
+            "title": "scikit-learn: permutation feature importance",
+            "url": "https://scikit-learn.org/stable/modules/permutation_importance.html",
+            "type": "tool"
+          },
+          {
+            "title": "Adversarial Robustness Toolbox (GitHub)",
+            "url": "https://github.com/Trusted-AI/adversarial-robustness-toolbox",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-19": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Dataset Documentation (Datasheet)",
+        "type": "procedural",
+        "description": "Write a datasheet: how the data was collected, what it contains, how it was processed, and what it should (and should not) be used for.",
+        "resources": [
+          {
+            "title": "Gebru et al. (2021): Datasheets for Datasets",
+            "url": "https://arxiv.org/abs/1803.09010",
+            "type": "paper"
+          },
+          {
+            "title": "Hugging Face: Dataset Card Guide",
+            "url": "https://huggingface.co/docs/hub/datasets-cards",
+            "type": "tool"
+          },
+          {
+            "title": "EQUATOR Network: reporting guidelines library",
+            "url": "https://www.equator-network.org/reporting-guidelines/",
+            "type": "guidance"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-20": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Multi-stakeholder Consultation",
+        "type": "procedural",
+        "description": "Bring affected communities and diverse voices into the design and evaluation process, not just at the end.",
+        "resources": [
+          {
+            "title": "UNESCO Recommendation on Ethics of AI: Multi-stakeholder Governance",
+            "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+            "type": "framework"
+          },
+          {
+            "title": "OECD AI Principles: Inclusive Growth & Sustainable Development",
+            "url": "https://oecd.ai/en/ai-principles",
+            "type": "framework"
+          },
+          {
+            "title": "AU Continental AI Strategy: Multi-stakeholder Governance",
+            "url": "https://au.int/en/documents/20240809/continental-artificial-intelligence-strategy",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-21": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Monitoring & Drift Detection",
+        "type": "technical",
+        "description": "Models degrade over time. Set up monitoring to catch performance drops and data drift before they cause harm.",
+        "resources": [
+          {
+            "title": "SciPy: two-sample Kolmogorov-Smirnov test (stats.ks_2samp)",
+            "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ks_2samp.html",
+            "type": "tool"
+          },
+          {
+            "title": "Evidently documentation",
+            "url": "https://docs.evidentlyai.com/introduction",
+            "type": "tool"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-22": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Scheduled Retraining Protocols",
+        "type": "procedural",
+        "description": "Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook: MANAGE function",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
+            "type": "framework"
+          },
+          {
+            "title": "Google Cloud: MLOps, continuous delivery and automation pipelines in machine learning",
+            "url": "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+            "type": "guidance"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-23": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "A/B Testing & Canary Deployment",
+        "type": "procedural",
+        "description": "Roll out gradually. Canary deployments and A/B tests catch problems before they reach everyone.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook, MANAGE 1.1: whether deployment should proceed",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
+            "type": "framework"
+          },
+          {
+            "title": "CONSORT-AI reporting guideline",
+            "url": "https://www.equator-network.org/reporting-guidelines/consort-artificial-intelligence/",
+            "type": "guidance"
+          },
+          {
+            "title": "SPIRIT-AI reporting guideline",
+            "url": "https://www.equator-network.org/reporting-guidelines/spirit-artificial-intelligence/",
+            "type": "guidance"
+          },
+          {
+            "title": "Google SRE Workbook: canarying releases",
+            "url": "https://sre.google/workbook/canarying-releases/",
+            "type": "guidance"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-24": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Human-in-the-Loop Design",
+        "type": "procedural",
+        "description": "Make sure a human can review, override, or shut down the AI when it gets things wrong.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook, MANAGE 2.4: supersede, disengage or deactivate a system",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
+            "type": "framework"
+          },
+          {
+            "title": "EU AI Act: Human Oversight Requirements for High-Risk AI",
+            "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-25": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Feedback & Redress Mechanisms",
+        "type": "procedural",
+        "description": "Give people a way to challenge AI decisions that affect them, and make the process accessible.",
+        "resources": [
+          {
+            "title": "EU AI Act Art. 86: Right to Explanation of AI Decisions",
+            "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+            "type": "framework"
+          },
+          {
+            "title": "UNESCO Recommendation: Contestability & Redress Mechanisms",
+            "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+            "type": "framework"
+          },
+          {
+            "title": "OECD AI Principles: Accountability & Transparency",
+            "url": "https://oecd.ai/en/ai-principles",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-26": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Governance & Accountability Matrix",
+        "type": "procedural",
+        "description": "Who is responsible when something goes wrong? Assign roles, responsibilities, and accountability up front.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook, GOVERN 2.1: roles and responsibilities",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/govern/",
+            "type": "framework"
+          },
+          {
+            "title": "ISO/IEC 42001: AI Management System Standard",
+            "url": "https://www.iso.org/standard/81230.html",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-27": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "User Training & Literacy Programs",
+        "type": "informational",
+        "description": "End-users need to understand what the AI does and does not do. Build training that covers both capabilities and limitations.",
+        "resources": [
+          {
+            "title": "OECD AI Policy Observatory: AI Literacy & Education",
+            "url": "https://oecd.ai/en/ai-principles",
+            "type": "framework"
+          },
+          {
+            "title": "UNESCO Recommendation: AI Education & Public Awareness",
+            "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+            "type": "framework"
+          },
+          {
+            "title": "Elements of AI: a free online introduction to artificial intelligence",
+            "url": "https://www.elementsofai.com/",
+            "type": "guidance"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    },
+    "C-28": {
+      "status": "proposed",
+      "change": "keep",
+      "shown": {
+        "name": "Codebook & Deployment Documentation",
+        "type": "procedural",
+        "description": "Document the deployment: architecture, dependencies, configuration, and what to do when things break.",
+        "resources": [
+          {
+            "title": "NIST AI RMF Playbook, MANAGE 4.1: incident response, recovery and change management",
+            "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
+            "type": "framework"
+          }
+        ]
+      },
+      "reason": "Text kept as shown. The resource links were not opened (no network); a reviewer should open each one."
+    }
+  },
+  "gapsNoControlCovers": [
+    {
+      "need": "Robustness and stress testing",
+      "where": "Q-IP-08, Q-IP-17, Q-IP-24, IP-05",
+      "note": "Partly: C-18 (Adversarial Robustness Toolbox, permutation importance), C-16 (GroupKFold) and C-21 (drift detection), all proposed for IP-05, test parts of it through their links. No control's name or description is robustness testing."
+    },
+    {
+      "need": "Calibration",
+      "where": "Q-IP-18; Q-IP-13 option \"Calibration analysis\"",
+      "note": "No description or link title mentions calibration."
+    },
+    {
+      "need": "Measuring error types",
+      "where": "Q-IP-03",
+      "note": "Nearest: C-13 and C-14 link Fairlearn's MetricFrame, which can report any metric per group; no title names error types."
+    },
+    {
+      "need": "Problem statement and success criteria",
+      "where": "Q-PP-02",
+      "note": "Nearest: C-01 and C-02 link the NIST AI RMF MAP function; the titles do not name problem definition."
+    },
+    {
+      "need": "Retiring a system",
+      "where": "Q-PO-13",
+      "note": "Nearest: C-09 (data \"eventually retired\") and C-24 (NIST MANAGE 2.4: \"supersede, disengage or deactivate a system\"). Neither is a retirement plan, and Q-PO-13 reaches neither."
+    },
+    {
+      "need": "Data-validation pipeline and audit log",
+      "where": "Q-IP-11, IP-07; Q-PO-11 option \"Audit trail/logging\"",
+      "note": "IP-07's `mitigated` text names both. Nearest: C-03 (pandas missing-data guide) and C-22 (Google Cloud MLOps automation pipelines). C-10's hmac link makes pseudonyms, not integrity checks."
+    }
+  ],
+  "coveredByLinksOnly": [
+    {
+      "need": "Version control and experiment tracking",
+      "where": "Q-IP-21, Q-IP-10, IP-06; Q-PO-11 option \"Version control for models and data\"",
+      "note": "C-17 (Model Documentation) links DVC, MLflow and Git. IP-06 reaches it."
+    },
+    {
+      "need": "Security and adversarial testing",
+      "where": "Q-IP-22, Q-IP-08",
+      "note": "C-18 (Explainability Analysis) links the Adversarial Robustness Toolbox, which both questions name. Under the proposal IP-05 reaches it."
+    },
+    {
+      "need": "Impact assessment (rights)",
+      "where": "Q-PP-05",
+      "note": "C-02's name says impact assessment, but only its link says rights: C-02 (Cost-Benefit & Impact Assessment) links the EU AI Act Art. 27 fundamental rights impact assessment, and C-01 links Canada's Algorithmic Impact Assessment tool. Under the proposal Q-PP-05 reaches both through PP-01."
+    }
+  ]
+}

@@ -496,11 +496,11 @@ test('FR-PUB-01 (helper): a text the content allow-list names exactly passes as 
 test('FR-PUB-01 FR-FUP-01 (helper): the mitigation status word passes inside .status-label only; elsewhere, or with other words, it is flagged', async ({ page }) => {
   const read = async (html: string) => { await page.setContent(`<!doctype html><title>t</title><main>${html}</main>`); return readWords(page, 'self-test'); };
   expect(claimsIn(await read('<p>Fine</p><span class="status-label">In progress</span> <span class="status-label">Planned</span>'))).toEqual([]);
-  expect(claimsIn(await read('<p>In progress</p>')).join(';')).toMatch(/"progress"/i);
-  expect(claimsIn(await read('<span class="status-label">Progress report ready</span>')).join(';')).toMatch(/progress/i);
-  // Exact match only: the status word inside a longer text is read as before (a substring or prefix match would skip the claim).
-  expect(claimsIn(await read('<span class="status-label">In progress: the stage has progressed</span>')).join(';')).toMatch(/progress/i);
-  expect(claimsIn(await read('<span class="status-label">Not In progress</span>')).join(';')).toMatch(/progress/i);
+  // "progress" is no longer a banned word (owner, 19 Nov 2026: "Allow progress display"), so the bare word is no claim anywhere.
+  expect(claimsIn(await read('<p>In progress</p>'))).toEqual([]);
+  // Exact match only: the status word inside a longer text is read as before, so a banned word beside it is still flagged.
+  expect(claimsIn(await read('<span class="status-label">In progress: the stage is complete</span>')).join(';')).toMatch(/complete/i);
+  expect(claimsIn(await read('<span class="status-label">Not In progress, 40% done</span>')).join(';')).toMatch(/%/);
 });
 
 test('FR-PUB-01 (helper): a cited figure in a source note (data-source-note) passes the claim check; a % in a question or an area description, or a claim word in a note, is flagged', async ({ page }) => {

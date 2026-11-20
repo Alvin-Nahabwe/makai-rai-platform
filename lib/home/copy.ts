@@ -1,3 +1,4 @@
+import { PROJECT_COPY } from '@/lib/project/copy';
 import { TERM_PRODUCT } from '@/lib/vocabulary/terms';
 import { HOME_UNSAVED_COPY } from '@/lib/home/unsaved/copy';
 
@@ -69,6 +70,8 @@ export const HOME_COPY = Object.freeze({
   viewerOpen: 'Still open',
   /** "A place where your team records its decisions about one AI system, and why." */
   firstTimeLead: TERM_PRODUCT.definition,
+  /** G5: the same sentence as the project page's, for a person with no project yet. */
+  whatYouGet: PROJECT_COPY.overview.whatYouGet,
   firstTimeCreate: 'Create a project',
   /** 9.1 verbatim. */
   firstTimeAsk: 'Ask an Owner, Admin or Assessor to create your project.',

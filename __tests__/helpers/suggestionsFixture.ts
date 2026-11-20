@@ -32,6 +32,8 @@ export function handBuiltContent(dir: string): LoadedContent {
     controls: new Map(aa.controls.map((k) => [k.id, k])),
     reasonCodes: rc.codes,
     documentHelp: dh,
+    stageApplicability: null,
+    controlSuggestionsApproved: false,
   };
 }
 

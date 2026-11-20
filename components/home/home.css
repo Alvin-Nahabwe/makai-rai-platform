@@ -608,3 +608,8 @@ h3.home-project__name {
 .home-new + .home-columns {
   padding-block-start: var(--space-4);
 }
+
+/* G5: what a person gets, under the lead sentence. */
+.home-first__gets {
+  line-height: 1.5;
+}

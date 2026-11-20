@@ -3142,5 +3142,45 @@
     "property": "A sealed review's change since its seal is still shown on S-10 and still links to the review that lists it; decisions and findings are now one count in the review's one line (owner's ruling of 15 Nov 2026 21:32), no longer two sentences.",
     "proof": "The replacing case gives a review 2 changed decisions and 3 changed findings and requires the text \"Review 1 · sealed 11 Nov 2026 · 5 changed since\" with the count a link to /reviews/r1 and one review-list__meta p; with findings only it requires \"1 changed since\" and that the page's first use of \"finding\" stays in the first stage with an open finding; with nothing changed no \"changed since\" shows. It failed before the change and passes after.",
     "task": "lane 8 I4 round 5 (owner 21:32: each review is one line)"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/document-resolve.test.ts::(module)",
+    "replacedBy": "__tests__/unit/document-resolve.test.ts::FR-DOC-05: the seals a document used are the chosen seal first, then the other sealed stages it read in STAGES order",
+    "property": "The hand-built sealed snapshot is unchanged in content; only the provenance discriminants the type now requires are added.",
+    "proof": "Two module lines change and none is added: sealedStage's seal literal gains kind: 'sealed' before sealId, and snapshot's returned object gains provenance: { kind: 'sealed' } before documentType. Both are the discriminants that DocumentSnapshot's draft provenance (ADR 0023) makes required, and both name the sealed arm, so every resolver takes the path it took before. Every case body is byte-identical to 5a34457e; the cases still assert sealIds, NOT_RECORDED_AT_ISSUE and the fingerprint line as before, and pass.",
+    "task": "path to outputs, Task 5"
+  },
+  {
+    "kind": "structure",
+    "changed": "__tests__/unit/document-render.test.ts::(module)",
+    "replacedBy": "__tests__/unit/document-render.test.ts::FR-PUB-01 FR-DOC-02 (SRS 7.5.3): the printed copy holds no claim word outside the allowed statement, and no form of \"fail\"",
+    "property": "Every case renders the same issued input; only the shape changes from {issuedAt, seals} to stamp: {kind: 'issued', issuedAt, seals}.",
+    "proof": "One module line changes and none is added: input()'s returned object takes stamp: { kind: 'issued', issuedAt, seals } where it took seals and issuedAt side by side. RenderInput (path to outputs, Task 8) now carries what the footer says the document is as one stamp, issued or draft, and this is the issued arm with the same two values. Every case body is byte-identical to its previous version, and the cases still assert the footer's issue time, the statement, the sealed note and the printed fields as before, and pass. working-report-pdf.test.ts also compares an issued data card and plan with their output captured before the change.",
+    "task": "path to outputs, Task 8"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/role-matrix.spec.ts::(module)",
+    "replacedBy": "e2e/role-matrix.spec.ts::dashboard, projects, projects/new, project detail and members render only the controls this role may use",
+    "property": "The project page's recording entry is a classified control that only a role holding decision:write sees, as before. Path to outputs (G5, owner-approved 19 Nov 2026, supersedes ruling C3 of 15 Nov) moves it: the page's one primary is now \"Open the working report\", which every role sees, and recording starts from each stage's own link, \"Next: Question N · Continue\". A role that cannot record sees the same link as \"Next: Question N · View\" (controller's ruling O1), so no role sees a control it cannot use.",
+    "proof": "PROJECT_DETAIL_CONTROLS drops the entry for \"Start recording\" (action decision:write) and gains three presence entries: \"Open the working report\" (action null, exact link name, so every role must see it); \" · Continue\" (action decision:write, the link /^Next: Question \\d+ · Continue$/ inside [data-stage=\"pre-processing\"]; present for Owner, Admin and Assessor, count 0 for Reviewer and Viewer, as the Start recording entry was for the same roles); and \"Next: Question\" (action null, /^Next: Question \\d+ · (Continue|View)$/ in the same stage, so every role must see one link of the pair, which also lets the owner's census meet the View label). The census matches names by includes, so the View label is covered by \"Next: Question\". That a role without decision:write sees View and never Continue is held by __tests__/unit/project-page.test.tsx 'G4 O1: ...' and e2e/project-continue.spec.ts 'C11 O1: a reviewer sees ...' and 'a viewer sees ...'. Every other line of the case is unchanged.",
+    "task": "path to outputs, Task 12"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/authz/v060-route-lists.test.ts::NFR-INT-02: RETRY_KEYED_WRITES holds rows 1 to 3, 5 to 13, 16 and 19 with every non-GET method of each, and besides them only rows 21 to 29",
+    "replacedBy": "__tests__/authz/v060-route-lists.test.ts::NFR-INT-02: RETRY_KEYED_WRITES holds rows 1 to 3, 5 to 13, 16 and 19 and the seal request (design G2) with every non-GET method of each, and besides them only rows 21 to 29",
+    "property": "Every retry-keyed write route lists every non-GET method it declares in ROUTE_ACTIONS, and RETRY_KEYED_WRITES holds no route besides the named rows and rows 21 to 29 (NFR-INT-02). Path to outputs (design G2, owner-approved 19 Nov 2026; SRS FR-DOC-09 clause 10) adds one keyed write, the seal request (POST .../reviews/seal-request, review:open), so the allowed set grows by exactly that route: its POST must be keyed, and no other new route may enter the list unnamed.",
+    "proof": "One line is added to the case's rows list, `${P}reviews/seal-request/route.ts`, with a comment citing design G2, and the title names the seal request; every other line of the case is unchanged, so each listed row still must hold exactly its non-GET methods and every other entry must be a row 21 to 29. The seal request's replay is proved by __tests__/integration/replay-cases/seal-request.case.ts run by __tests__/integration/retry-keyed-writes.test.ts (replay, changed request, 20 concurrent copies), and its per-stage idempotence by __tests__/integration/seal-request.test.ts 'Review Focus 4: ...'.",
+    "task": "path to outputs, Task 13"
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/integration/trigger-enumeration.test.ts::FR-PRJ-03 RF-4: only the project routes and the member service write in receipt mode, so a new receipt-mode writer must say whether it writes a record",
+    "replacedBy": "__tests__/integration/trigger-enumeration.test.ts::FR-PRJ-03 RF-4: only the project routes, the member service and the seal request write in receipt mode, so a new receipt-mode writer must say whether it writes a record",
+    "property": "The files that call idempotentWrite in receipt mode are exactly a named list, so a new receipt-mode writer must be added on purpose and, if it writes a record of a project, must call the archived gate (FR-PRJ-03 RF-4). Path to outputs (design G2; SRS FR-DOC-09 clause 10; controller's conflict 6 ruling) puts requestSeal in lib/data/reviews.ts on receipt mode: it may open a stage review, a record of a project, so the file joins the list and requestSeal calls assertProjectWritable first in its transaction.",
+    "proof": "One entry is added to RECEIPT_MODE, 'lib/data/reviews.ts', with a comment citing design G2, and the title names the seal request; every other line of the case is unchanged, so any other receipt-mode writer still fails it. The case above it ('every idempotent write path reads the archived gate') no longer holds either gate call in lib/data/reviews.ts: it requires gate calls >= write calls - receipt-mode writes, and reviews.ts now makes two idempotentWrite calls, one in receipt mode, so 1 of its 2 assertProjectWritable calls satisfies it (fix round 1: with either call deleted, that case still passed). Each call is held by a behavioural test instead, each seen to fail with its call deleted (fix round 1): openStageReview's by __tests__/integration/reviews-open.test.ts:169 'FR-PRJ-03 (helper): opening a review in an archived project answers 409 project_archived' (got [201, undefined]), and requestSeal's by __tests__/integration/seal-request.test.ts:123 'a Reviewer or Viewer gets 403 and nothing is written; an archived project answers 409 project_archived' (got [201, undefined]). Making the count case exact for reviews.ts (2 of 2) needs a further edit to this protected file, left to the controller.",
+    "task": "path to outputs, Task 13"
   }
 ]

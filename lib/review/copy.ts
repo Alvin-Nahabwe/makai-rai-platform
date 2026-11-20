@@ -141,6 +141,25 @@ export const REVIEW_COPY = Object.freeze({
     tooMany: (wait: string): string => `Too many checks. Try again in ${wait}.`,
   }),
 
+  /**
+   * The seal step under a stage page's heading (design G2 and §8; SRS FR-DOC-09 clause 10). `ask`, `waiting`, `seal` and
+   * `openAndSeal` are the design's words, verbatim. The refusals that name no button are the open form's (`open`).
+   */
+  sealStep: Object.freeze({
+    ask: 'Ask a reviewer to seal this stage',
+    waiting: 'Review opened · waiting for an Owner, Admin or Reviewer to seal',
+    seal: 'Seal this stage',
+    openAndSeal: 'Open and seal this stage',
+    sealed: 'This stage is sealed.',
+    /** The request is idempotent per stage (clause 10), so pressing again returns the review it may already have opened. */
+    lost: (button: string): string => `Not opened yet. We did not get a reply in time, so the review may already be open. Select ${button} again. It will not open twice.`,
+    server: (button: string): string => `Not opened. The server had a problem. Select ${button} again.`,
+    /** A number another open took on both of the service's tries (fix round 1): pressing again returns the review that open made. */
+    numberTaken: (button: string): string => `Not opened. Someone opened a review of this stage at the same moment. Select ${button} again.`,
+    /** The name of the (i) button beside the step's first use of "seal", as the project page's (lib/project/copy.ts whatMeans). */
+    whatMeans: (term: string): string => `What does "${term}" mean?`,
+  }),
+
   /** The components other pages mount (names and props frozen, ruling T18-c). */
   mounted: Object.freeze({
     sealMarker: (sealNumber: number, reviewName: string): string => `In seal ${sealNumber} of ${reviewName}`,

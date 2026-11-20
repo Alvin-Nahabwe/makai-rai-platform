@@ -51,15 +51,16 @@ const routesOf = (appDir: string): string[] =>
     .filter((r) => !r.split('/').some((segment) => segment.startsWith('@')))
     .sort();
 
-/** The 38 page addresses at the base of this task (c1c933b6), from screen-stages.mjs's walk of app/ that day. */
+/** The page addresses the group-gate lint expects: one entry per page file under app/ (the shell's @project mirrors are not addresses). It grows with each new route. */
 const ROUTES_AT_BASE = [
   '/', '/about', '/acceptances', '/account', '/admin/accounts', '/admin/organisations', '/admin/organisations/[id]',
   '/admin/organisations/new', '/change-password', '/explore/controls', '/explore/framework', '/forgot-password', '/help',
   '/invitations/[token]', '/legal/[kind]', '/legal/[kind]/[version]', '/login', '/orgs/[slug]/dashboard', '/orgs/[slug]/export',
   '/orgs/[slug]/projects', '/orgs/[slug]/projects/[id]', '/orgs/[slug]/projects/[id]/edit', '/orgs/[slug]/projects/[id]/export',
   '/orgs/[slug]/projects/[id]/findings', '/orgs/[slug]/projects/[id]/findings/[findingId]',
+  '/orgs/[slug]/projects/[id]/report',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]', '/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents',
-  '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal', '/orgs/[slug]/projects/[id]/reviews/new', '/orgs/[slug]/projects/[id]/stages/[stage]',
+  '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal', '/orgs/[slug]/projects/[id]/reviews/new', '/orgs/[slug]/projects/[id]/stages/[stage]', '/orgs/[slug]/projects/[id]/stages/[stage]/end',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history', '/orgs/[slug]/projects/new',
   '/orgs/[slug]/settings/members', '/orgs/[slug]/settings/organisation', '/privacy', '/reset-password', '/terms',

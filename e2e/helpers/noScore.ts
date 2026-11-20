@@ -15,7 +15,10 @@ import type { Stage } from '../../types/record';
  *   - a status mark is any `.ui-mark`, `.ui-mark__shape` or `[data-mark-kind]` element; a legacy status label is a
  *     `.status-label` element, read until its screen is rebuilt (expectStatusMarksInk);
  *   - an upload's own `<progress>` carries `data-upload-progress` itself or sits directly in an element that does, and
- *     is the one progress element allowed (never inside a route row); a route row's proportional fill is any element
+ *     is one of two progress elements allowed (never inside a route row); the other is a per-stage bar: a `<progress>`
+ *     or a proportional fill inside an element carrying `data-stage-bar`, on the project page only
+ *     (`/orgs/<slug>/projects/<id>`, an id and not "new"; owner, 19 Nov 2026: "Allow progress display"), whose count is in words beside
+ *     it ("N of M questions recorded"). A percentage inside it is still a finding. A route row's proportional fill is any element
  *     in `.ui-route-row` with an inline style value in per cent (a custom property too) or a `width` attribute in per
  *     cent, and is a progress element too (spec 7.2).
  * Computed values are read, not source. The status-mark check (expectStatusMarksInk) compares colours with the tokens
@@ -63,6 +66,9 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
     if (mains.length === 0) return null;
     const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
+    // The per-stage bar is allowed on the project page only: /orgs/<slug>/projects/<id> (an id, not "new").
+    const onProjectPage = /^\/orgs\/[^/]+\/projects\/(?!new\/?$)[^/]+\/?$/.test(window.location.pathname);
+    const inStageBar = (el: Element) => onProjectPage && el.closest('[data-stage-bar]') !== null;
     const texts: string[] = [];
     const percentTexts: string[] = [];
     const ariaLabels: string[] = [];
@@ -83,7 +89,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
         const tag = el.localName;
         const inRouteRow = el.closest('.ui-route-row') !== null;
         const kind =
-          tag === 'progress' ? ((el.matches('[data-upload-progress]') || el.parentElement?.matches('[data-upload-progress]')) && !inRouteRow ? null : '<progress>')
+          tag === 'progress' ? (((el.matches('[data-upload-progress]') || el.parentElement?.matches('[data-upload-progress]')) && !inRouteRow) || inStageBar(el) ? null : '<progress>')
           : tag === 'meter' ? '<meter>'
           : el.getAttribute('role') === 'progressbar' ? 'role=progressbar'
           : el.getAttribute('role') === 'meter' ? 'role=meter'
@@ -98,7 +104,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
           for (let i = 0; style && i < style.length; i += 1) {
             if (style.getPropertyValue(style[i]).includes('%')) percent = true;
           }
-          if (percent) shapes.push({ kind: 'proportional fill', html: el.outerHTML.slice(0, 90) });
+          if (percent && !inStageBar(el)) shapes.push({ kind: 'proportional fill', html: el.outerHTML.slice(0, 90) });
         }
       }
     }

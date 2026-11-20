@@ -6,15 +6,13 @@ import { API_COPY } from '@/lib/http/api/copy';
 import type { ApiErrorBody } from '@/types/api';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import { redactEmails } from '@/lib/redact';
+// A V8 stack frame and a plain class name, shared with the PDF render worker and its pool, which read stacks too.
+import { CLASS_NAME, FRAME } from '@/lib/http/stackFrames.mjs';
 import {
   UNAVAILABLE_ADAPTER_KINDS, UNAVAILABLE_ERRNO_CODES, UNAVAILABLE_PRISMA_CODES, logRequestFailure, stampReference,
 } from '@/lib/http/supportReference';
 
-const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const ERROR_CODE = /^(P\d{4}|[A-Z][A-Z0-9_]{1,40})$/;
-// A V8 stack frame: `at` and a location that ends in `:line:column`, either bare or in parentheses after a function
-// name. A line of a message that merely starts with `at` does not end so, and is never taken as a frame.
-const FRAME = /^\s+at (?:.+ \()?[^\s()]+:\d+:\d+\)?$/;
 
 /** What the REQUEST_FAILED line of an unmapped 500 says about the error (lib/http/supportReference.ts). */
 type UnmappedErrorInfo = { name: string; code?: string; frames: string[] };
@@ -104,7 +102,9 @@ export function toResponse(e: unknown): NextResponse {
     // the same reason (round 9c): the value in the body is the one in the log line, whatever a caller passed.
     if (e.status >= 500) {
       const reference = stampReference(e);
-      logRequestFailure({ reference, status: e.status, code: e.code });
+      // `logCause`: a fixed word a subclass may carry for the log line only (logRequestFailure keeps it only where it allows it).
+      const logCause = (e as { logCause?: unknown }).logCause;
+      logRequestFailure({ reference, status: e.status, code: e.code, cause: typeof logCause === 'string' ? logCause : undefined });
       return NextResponse.json({ ...e.extra, error: e.message, code: e.code, reference }, { status: e.status });
     }
     return NextResponse.json({ ...e.extra, error: e.message, code: e.code }, { status: e.status });

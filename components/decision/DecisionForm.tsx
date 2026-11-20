@@ -21,6 +21,7 @@ import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, STATUS_OPTIONS, problemSummary } fro
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { stageEndHref } from '@/lib/question/stageEndHref';
 import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSION_OF_A_DECISION } from '@/lib/vocabulary/terms';
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
@@ -208,15 +209,34 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
       : <Link className="decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
   }
   if (stageHref === undefined) return null;
-  // Review A I-1: on the stage's last question, All questions is held as Next is.
+  // Review A I-1: on the stage's last question, All questions is held as Next is. Design G3: so is the way to the stage's end screen.
   return (
     <p className="decision-next decision-next--last">
       {QUESTION_COPY.foot.last}{' '}
       {held
         ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.nav.allQuestions}</span>
         : <Link href={stageHref} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.nav.allQuestions}</Link>}
+      {' '}
+      {held
+        ? <span className="decision-next--held" data-next-held>{QUESTION_COPY.end.link}</span>
+        : <Link href={stageEndHref(stageHref)} prefetch={false} {...{ [HELD_ON_SAVE]: '' }}>{QUESTION_COPY.end.link}</Link>}
     </p>
   );
+}
+
+/** What a saved outcome carries that the person must see: its status line, the files the save left out, and text typed while it was out. */
+export type SavedCarries = { statusId: string; leftOut: readonly string[]; typedDuringSave: boolean };
+
+/**
+ * Design G3 and the controller's ruling on risk b: where a save leaves the person. After the stage's last question is saved the
+ * person goes to the stage's end screen, where the working report leads, but only on a clean "Saved" (M-03) that carries no other
+ * message. "Saved without <file>... save again", text typed while the save was out (CR-1, UX-25: the kept copy must be shown) and
+ * "already saved" (M-04) are read on the question, which then links to the end screen. After any other question the card stays
+ * open with the new answer (R2). Null: stay. Also null when the card was given no stage address.
+ */
+export function endHrefAfterSave(next: NextQuestion | null, stageHref: string | undefined, saved: SavedCarries): string | null {
+  if (next !== null || stageHref === undefined) return null;
+  return saved.statusId === 'M-03' && saved.leftOut.length === 0 && !saved.typedDuringSave ? stageEndHref(stageHref) : null;
 }
 
 /**
@@ -528,7 +548,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       setLeftOut(omitted);
       setConflict(null);
       setStatus(next);
-      if (JSON.stringify(latest.current.value) !== JSON.stringify(d)) {
+      const typedDuringSave = JSON.stringify(latest.current.value) !== JSON.stringify(d);
+      if (typedDuringSave) {
         // Typed while the save was out (7.4.1: typing still works): that answer is kept on the device on the new base, and
         // the form keeps it when the new version arrives (CR-1).
         keep({ baseVersionNumber: saved, value: latest.current.value, savedAt: new Date().toISOString(), savePressedAt: null, retry: NO_RETRY });
@@ -538,7 +559,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
       }
-      router.refresh();
+      // Design G3: the last question of a stage lands on that stage's end screen; the server renders it from what was just saved.
+      // Only a clean "Saved" goes: a message the person must read keeps them here, with the end screen one link away.
+      const end = endHrefAfterSave(nextQuestion, stageHref, { statusId: next.id, leftOut: omitted, typedDuringSave });
+      if (end === null) router.refresh(); else router.push(end);
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
@@ -585,7 +609,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       if (current !== null) setConflict(current);
     }
     setStatus(next);
-  }, [data, key, keep, router, leaveHeldLink]);
+  }, [data, key, keep, router, leaveHeldLink, nextQuestion, stageHref]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {

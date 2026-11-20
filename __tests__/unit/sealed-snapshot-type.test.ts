@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+import type { DocumentSnapshot, SealedSnapshot } from '@/lib/documents/resolve';
+
+/**
+ * Anti-goal 5 at the type level: the issue path (`lib/data/documents.ts` `build`, `issueDocument`) takes a `SealedSnapshot`, and a
+ * snapshot whose provenance is a draft cannot be passed to it. The real assertion of this file is `npx tsc --noEmit`: if a draft
+ * became assignable, the `@ts-expect-error` below would be unused and tsc would fail. The run-time expectation only keeps vitest
+ * from reporting an empty case.
+ */
+describe('SealedSnapshot', () => {
+  it('a draft snapshot is not a SealedSnapshot (anti-goal 5, type level)', () => {
+    // Sealed in every part but its provenance, so the refusal below can only come from `SealedSnapshot`'s provenance narrowing (review M0:
+    // a fixture whose stages are drafts is also refused on `chosen`, and would keep the directive used without the narrowing).
+    const sealed = {} as SealedSnapshot;
+    const draft = { ...sealed, provenance: { kind: 'draft' as const, takenAt: '2026-11-19T14:05:09.000Z', omittedAnswers: 0, recordedQuestionWords: new Map() } } satisfies DocumentSnapshot;
+    // @ts-expect-error a draft cannot reach the issue path
+    const issued: SealedSnapshot = draft;
+    expect(issued.provenance.kind).toBe('draft');
+  });
+});

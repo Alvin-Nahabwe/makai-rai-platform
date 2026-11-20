@@ -1,4 +1,5 @@
 import type { Stage } from '@/types/record';
+import { WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 
 /**
  * The words of the project screens (audit B, as plan 1A Task 17 rules them): Projects (S-32), the project page (S-10)
@@ -17,7 +18,25 @@ const ARCHIVED_BANNER = Object.freeze({
 });
 
 export const PROJECT_COPY = Object.freeze({
-  titles: Object.freeze({ project: 'Project', editProject: 'Edit project' }),
+  titles: Object.freeze({ project: 'Project', editProject: 'Edit project', workingReport: 'Working report' }),
+  /**
+   * The working report page and its rail entry (path to outputs, Task 10; design G1). The page's other words are the PDF's
+   * (lib/documents/copy.ts: WORKING_REPORT_PAGE, draftLine, DOCUMENT_TITLES), so the screen and the download say the same things.
+   * "Working report" in the rail is fixed copy.
+   */
+  workingReport: Object.freeze({
+    railLink: 'Working report',
+    downloadHeading: 'Download as PDF',
+    downloadAll: 'Download the whole working report (PDF)',
+    /** Names the list of one-part links. */
+    partsHeading: 'Or download one part',
+    /** One part's link: its name, then the kind. The size is not known until the PDF is made, so none is printed. */
+    partLink: (name: string): string => `${name} (PDF)`,
+    /** The heading of a stage's draft plan, and the name of its link. */
+    planTitle: (planName: string, stageName: string): string => `${planName}, ${stageName}`,
+    /** Where an open item sits: page 1's one wording (lib/documents/copy.ts), shared with the PDF. */
+    placeOf: WORKING_REPORT_PAGE.placeOf,
+  }),
   /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
   continue: 'Continue recording',
   start: 'Start recording',
@@ -99,6 +118,16 @@ export const PROJECT_COPY = Object.freeze({
     anyOrder: 'You can work on the stages in any order.',
     downloadRecords: 'Download records',
     jumpTo: 'Jump to a stage',
+    /** G5 (owner-approved 19 Nov 2026; wording to be checked with the content approver): said at the top of the project page and on Home. */
+    whatYouGet: 'Answer the questions that apply. At any point you can open a working report: next steps by risk area, plus draft data card, model card and mitigation plan. About 5 minutes a question.',
+    /** G5: the project page's one primary action. */
+    openReport: 'Open the working report',
+    /** G4: "N of M questions recorded", the words beside each stage's bar and the bar's accessible name and value text. */
+    progressName: (n: number, m: number): string => `${n} of ${m} questions recorded`,
+    /** G4: the link to the stage's first question with no decision; "View" for a role that cannot record (the same target, read only). */
+    nextQuestion: (n: number, canRecord: boolean): string => `Next: Question ${n} · ${canRecord ? 'Continue' : 'View'}`,
+    /** G7: a stage the project's development stage leaves out. It stays openable. */
+    doesNotApply: "Doesn't apply to this project yet",
     shareLine: 'To share your record outside the team, seal a stage review and create a document from it.',
   }),
   /** Every page of an archived project (coordinator Q5 (a): no link, the banner's props stay as they are). */

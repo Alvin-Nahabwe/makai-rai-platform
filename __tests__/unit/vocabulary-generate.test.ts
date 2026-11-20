@@ -54,7 +54,7 @@ const NO_OVERRIDES = { terms: { spec: {}, extract: {}, labels: {}, fromConcept: 
 const PLAN_DEFINE_ON_FIRST_USE = [
   'finding', 'mitigation', 'accepted-risk', 'stage-review', 'seal', 'control', 'risk-area', 'fingerprint',
   'version-of-a-decision', 'stage-1', 'stage-2', 'stage-3', 'done', 'partly', 'not-yet', 'not-applicable',
-  'does-not-apply', 'personal-data-question-scope-question', 'data-card', 'model-card', 'mitigation-plan',
+  'does-not-apply', 'personal-data-question-scope-question', 'data-card', 'model-card', 'mitigation-plan', 'working-report',
   'owner', 'admin', 'assessor', 'reviewer', 'viewer',
 ];
 const fails = (fn: () => unknown, ...needles: string[]) => {
@@ -65,10 +65,10 @@ const fails = (fn: () => unknown, ...needles: string[]) => {
 };
 
 describe('the committed vocabulary (no source needed)', () => {
-  it('spec 6: 115 concepts (114 rows plus legal-name), ids unique, legal-name and the historical flag present', () => {
+  it('spec 6: 116 concepts (114 rows plus legal-name and working-report), ids unique, legal-name and the historical flag present', () => {
     const ids = (COMMITTED.concepts as Concept[]).map((c) => c.id);
-    expect(ids).toHaveLength(115);
-    expect(new Set(ids).size).toBe(115);
+    expect(ids).toHaveLength(116);
+    expect(new Set(ids).size).toBe(116);
     expect(byId('legal-name').term).toBe('legal name');
     expect(byId('organisation-agreement').historical).toBe(true);
     expect(byId('organisation-agreement-record-of-signing').historical).toBe(true);
@@ -135,7 +135,7 @@ describe('the committed vocabulary (no source needed)', () => {
   it('exactly the ids listed under defineOnFirstUse are true; plain words are false', () => {
     const listed: string[] = PLAN_DEFINE_ON_FIRST_USE;
     expect(OVERRIDES.defineOnFirstUse).toEqual(listed);
-    expect(listed).toHaveLength(26);
+    expect(listed).toHaveLength(27);
     const trues = (COMMITTED.concepts as Concept[]).filter((c) => c.defineOnFirstUse).map((c) => c.id).sort();
     expect(trues).toEqual([...listed].sort());
     for (const id of ['project', 'organisation', 'question', 'decision', 'member', 'team', 'download-all-records-team-export']) {
@@ -296,13 +296,13 @@ describe('the generator, on fixtures (no source needed)', () => {
 describe('against the source file', () => {
   const src = () => read(SOURCE as string);
 
-  it.skipIf(!SOURCE)('one concept per CONSOLIDATED section 2 row (114) plus overrides.additions (1): 115, ids unique (needs the source file)', () => {
+  it.skipIf(!SOURCE)('one concept per CONSOLIDATED section 2 row (114) plus overrides.additions (2): 116, ids unique (needs the source file)', () => {
     const rows = parseSection2(src());
     expect(rows).toHaveLength(114);
     expect(new Set(rows.map((r: { id: string }) => r.id)).size).toBe(114);
     const v = generate(src(), OVERRIDES, completeRules(src()), { properNames: COMMITTED.properNames });
-    expect(v.concepts).toHaveLength(115);
-    expect(new Set(v.concepts.map((c: Concept) => c.id)).size).toBe(115);
+    expect(v.concepts).toHaveLength(116);
+    expect(new Set(v.concepts.map((c: Concept) => c.id)).size).toBe(116);
   });
 
   it.skipIf(!SOURCE)('the committed files equal a fresh generation, and the recorded hash is the source hash (needs the source file)', () => {

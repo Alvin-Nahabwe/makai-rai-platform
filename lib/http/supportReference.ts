@@ -22,6 +22,8 @@ export const UNAVAILABLE_ERRNO_CODES = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT
 
 /** The thirteen names a `cause` may take. Fixed words, so no host, port or message can reach the log through one. */
 const CAUSES: ReadonlySet<string> = new Set([...UNAVAILABLE_PRISMA_CODES, ...UNAVAILABLE_ADAPTER_KINDS, ...UNAVAILABLE_ERRNO_CODES]);
+/** Why a working-report download answered 503 `report_busy` (lib/data/workingReportPdf.ts WorkingReportBusyError). */
+export const REPORT_BUSY_CAUSES: ReadonlySet<string> = new Set(['queue', 'serialization', 'tx_timeout']);
 
 /** Eight lowercase hexadecimal characters from `crypto.randomBytes(4)`. */
 export function newSupportReference(): string {
@@ -110,6 +112,8 @@ export function logRequestFailure(
   if (a.status === 503 && a.code === 'database_unavailable' && a.cause !== undefined && CAUSES.has(a.cause)) {
     line.cause = a.cause;
   }
+  // A shed working-report download says which of three conditions shed it (fix wave review I1): a fixed word, never error text.
+  if (a.status === 503 && a.code === 'report_busy' && a.cause !== undefined && REPORT_BUSY_CAUSES.has(a.cause)) line.cause = a.cause;
   if (a.status === 500 && a.code === 'internal_error' && a.error !== undefined) line.error = a.error;
   line.at = new Date().toISOString();
   console.error(JSON.stringify(line));

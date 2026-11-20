@@ -104,6 +104,26 @@ test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fai
   await expectNoScoreShapes(page, 'upload progress');
 });
 
+test('FR-RM-01 FR-RM-04 (amended 2026-11): a data-stage-bar progress element on the project page passes; the same element on another page fails; a % inside it fails', async ({ page }) => {
+  // Owner, 19 Nov 2026: "Allow progress display". The page URL matters, so each synthetic page is served at a real path.
+  const serve = async (path: string, body: string) => {
+    await page.route(`**${path}`, (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body>${body}</body></html>` }));
+    await page.goto(path);
+  };
+  const bar = '<span data-stage-bar><progress value="3" max="12"></progress> 3 of 12 questions recorded</span>';
+  await serve('/orgs/fixture-org/projects/prj-1', `<main>${bar}</main>`);
+  await expectNoScoreShapes(page, 'project page');
+
+  await serve('/orgs/fixture-org/dashboard', `<main>${bar}</main>`);
+  await expect(expectNoScoreShapes(page, 'another page')).rejects.toThrow(/<progress>/);
+
+  await serve('/orgs/fixture-org/projects/new', `<main>${bar}</main>`);
+  await expect(expectNoScoreShapes(page, 'new-project page')).rejects.toThrow(/<progress>/);
+
+  await serve('/orgs/fixture-org/projects/prj-2', '<main><span data-stage-bar><progress value="3" max="12"></progress> 25% of questions</span></main>');
+  await expect(expectNoScoreShapes(page, 'percentage in the bar')).rejects.toThrow(/%/);
+});
+
 test('FR-RM-04 (helper): counts must be whole numbers in text, per stage, with no percentage and no total', async ({ page }) => {
   await page.setContent(THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision'));
   await expectCountsAsWholeNumbersPerStage(page, SENTINELS);

@@ -1,4 +1,5 @@
 import { type CONTENT_BUNDLE_FILES, hashBundleFiles } from '@/lib/content/bundleHash';
+import type { DevelopmentStage } from '@prisma/client';
 import { readContentBytes, readContentIndex } from '@/lib/content/root';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { AppError } from '@/lib/http/errors';
@@ -27,6 +28,9 @@ const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-proce
 const CONDITION_VALUE = 'yes' as const satisfies ScopeAnswer;
 /** Every question type the contract names; typed as a record so a type added to or removed from `QuestionType` fails the build. */
 const QUESTION_TYPES = { 'likert-5': true, checklist: true, gate: true } as const satisfies Record<QuestionType, true>;
+/** The `DevelopmentStage` enum's values; typed as a record so a value added to or removed from the enum fails the build. */
+const DEVELOPMENT_STAGE_SET = { concept: true, development: true, testing: true, deployed: true, retired: true } as const satisfies Record<DevelopmentStage, true>;
+const DEVELOPMENT_STAGES = Object.keys(DEVELOPMENT_STAGE_SET) as DevelopmentStage[];
 const REASON_STATUSES = ['not_applicable', 'not_yet'] as const satisfies readonly ReasonCodeEntry['status'][];
 
 const cache = new Map<ContentSemver, LoadedContent>();
@@ -152,6 +156,31 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
     if (typeof line !== 'string') fail(`documentHelp.json ${type} is not text`);
   }
 
+  const config = record(parse('projectConfig.json'), 'projectConfig.json');
+  // A misspelt switch would load as absent and silently leave G6/G7 off, ignoring the expert sign-off it stands for (silent-failure
+  // audit M5), so an unknown key fails the load, named.
+  for (const key of Object.keys(config)) if (!PROJECT_CONFIG_KEYS.includes(key)) fail(`projectConfig.json has an unknown key ${key}`);
+  let stageApplicability: LoadedContent['stageApplicability'] = null;
+  if (Object.hasOwn(config, 'stageApplicability')) {
+    const table = record(config.stageApplicability, 'projectConfig.json stageApplicability');
+    for (const key of Object.keys(table)) if (!(DEVELOPMENT_STAGES as string[]).includes(key)) fail(`projectConfig.json stageApplicability has an unknown development stage ${key}`);
+    const out = {} as Record<DevelopmentStage, readonly Stage[]>;
+    for (const d of DEVELOPMENT_STAGES) {
+      if (!Object.hasOwn(table, d)) fail(`projectConfig.json stageApplicability has no development stage ${d}`);
+      const applies = list(table[d], `projectConfig.json stageApplicability ${d}`);
+      if (applies.length === 0) fail(`projectConfig.json stageApplicability ${d} is empty`);
+      for (const s of applies) {
+        if (!STAGES.includes(s as Stage)) fail(`projectConfig.json stageApplicability ${d} has an unknown stage ${JSON.stringify(s)}`);
+      }
+      if (new Set(applies).size !== applies.length) fail(`projectConfig.json stageApplicability ${d} repeats a stage`);
+      out[d as DevelopmentStage] = applies as Stage[];
+    }
+    stageApplicability = out;
+  }
+  if (Object.hasOwn(config, 'controlSuggestionsApproved') && config.controlSuggestionsApproved !== true) {
+    fail('projectConfig.json controlSuggestionsApproved is not true (leave it out to keep controls hidden)');
+  }
+
   return deepFreeze({
     semver,
     contentHash,
@@ -160,8 +189,15 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
     controls,
     reasonCodes: codes as ReasonCodeEntry[],
     documentHelp: documentHelp as DocumentHelpFile,
+    stageApplicability,
+    controlSuggestionsApproved: config.controlSuggestionsApproved === true,
   });
 }
+
+/** Every key projectConfig.json may hold: the six descriptive ones every bundle carries, and the two switches (G7, G6). */
+const PROJECT_CONFIG_KEYS: readonly string[] = [
+  'projectName', 'version', 'institution', 'description', 'principlesSource', 'principlesSourceUrl', 'stageApplicability', 'controlSuggestionsApproved',
+];
 
 const refused = (): AppError => new AppError(500, 'unknown_content_version');
 const isSemver = (v: unknown): v is ContentSemver => typeof v === 'string' && SEMVER_RE.test(v);

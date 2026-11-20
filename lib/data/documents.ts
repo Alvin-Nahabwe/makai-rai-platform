@@ -1,7 +1,7 @@
 import type { OrgRole, Prisma } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
-import type { Actor, CalendarDate, DecisionVersionRow, DocumentType, FieldError, OutsideRole, Stage, StoredDecisionStatus, ScopeAnswer, DeclaredPrecision, WithdrawalCode, WriteOutcome } from '@/types/record';
+import type { Actor, CalendarDate, DecisionVersionRow, DocumentType, FieldError, OutsideRole, Stage, StoredDecisionStatus, ScopeAnswer, DeclaredPrecision, UtcInstant, WithdrawalCode, WriteOutcome } from '@/types/record';
 import { DOCUMENT_TYPES, STAGES } from '@/types/record';
 import type {
   AcceptedRiskView, ContentRef, DeciderView, DocumentPreview, EvidenceItemView, FindingEventView, FindingView, IssuedDocumentView,
@@ -16,21 +16,25 @@ import { idempotentWrite, isRequestId } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { isSerializationFailure, isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
-import { RENDERERS, type RenderInput, type Renderer } from '@/lib/documents/render';
+// Types only: the renderer (React PDF, fonts) is loaded on the issue path alone (`rendererFor`), so a page that reads drafts never pulls it in (conflict 3 a).
+import type { RenderInput, Renderer } from '@/lib/documents/render';
 import { ethicsFieldIds, resolveFields, typedEntries } from '@/lib/documents/resolve';
-import { contentRefById } from '@/lib/data/framework';
+import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
-import { loadContent, runningContent } from '@/lib/content/loader';
+import { loadContent, questionsInStage, runningContent } from '@/lib/content/loader';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
-import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
+import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import {
   DOCUMENTS_COPY, ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_DOCUMENT_CHECK_FAILED, MSG_OTHER_SEAL_CHECK_FAILED, MSG_SEAL_CHECK_FAILED, DOCUMENT_TITLES, formatUtcDay,
 } from '@/lib/documents/copy';
-import { readStageRows } from '@/lib/seal/manifest';
-import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
+import { readStageRows, stagePlan } from '@/lib/seal/manifest';
+import { currentOrg } from '@/lib/seal/reads';
+import type {
+  DocumentSnapshot, DraftReviewRef, SealedDecision, SealedFinding, SealedSnapshot, SealedStage, SnapshotProvenance, SnapshotStage, StageDraft, StageSeal,
+} from '@/lib/documents/resolve';
 
 // ─── The snapshot (NFR-INT-10) ───────────────────────────────────────────────────────────────────
 
@@ -68,10 +72,26 @@ type EventRow = Prisma.FindingEventGetPayload<{ select: typeof EVENT_SELECT }>;
 type MitigationRow = Prisma.MitigationVersionGetPayload<{ select: typeof MITIGATION_SELECT }>;
 type RiskRow = Prisma.AcceptedRiskGetPayload<{ select: typeof RISK_SELECT }>;
 
-/** The rows one seal's manifest names, as stored (nothing saved after the seal is read: the ids come from the manifest). */
+/** In-memory rows a draft's manifest is built with, standing where a seal and its review would: never written (Task 6). */
+export type DraftHeader = { sealRow: Record<string, unknown>; reviewRow: Record<string, unknown> };
+
+/** Where a stage's manifest came from: a stored seal, or the stage's rows as they are now with an in-memory header (ADR 0023). */
+type StageOrigin =
+  | { kind: 'sealed'; row: SealRow }
+  | { kind: 'draft'; takenAt: Date; header: DraftHeader; openReview: DraftReviewRef | null; lastSealedReview: DraftReviewRef | null };
+
+/** The rows one manifest names, as stored (nothing saved after the manifest was made is read: the ids come from the manifest). */
 interface RawStage {
-  seal: SealRow; manifest: SealManifestV1; derived: Map<string, string>;
+  stage: Stage; origin: StageOrigin; manifest: SealManifestV1; derived: Map<string, string>;
   decisions: DecisionRow[]; findings: FindingRow[]; events: EventRow[]; mitigations: MitigationRow[]; risks: RiskRow[];
+}
+
+/** How an error names a stage's manifest: its seal's id, or `draft:<stage>`. Ids only (NFR-PRIV-03). */
+function originName(stage: Stage, origin: StageOrigin): string {
+  switch (origin.kind) {
+    case 'sealed': return `seal ${origin.row.id}`;
+    case 'draft': return `draft:${stage}`;
+  }
 }
 
 /** A boolean as 'true' or 'false', an enum as its name, a number in decimal, a date as YYYY-MM-DD; null stays null (contract G068). */
@@ -95,7 +115,8 @@ function trusted(seal: SealRow, chosen: boolean): SealManifestV1 | null {
   return null;
 }
 
-async function readRawStage(tx: TenantTx, seal: SealRow, manifest: SealManifestV1): Promise<RawStage> {
+/** The rows a manifest names, read by their ids for either origin, so a draft and a seal are hydrated by the same code (anti-goal 2). */
+async function readRawStage(tx: TenantTx, stage: Stage, origin: StageOrigin, manifest: SealManifestV1): Promise<RawStage> {
   const ids = manifestIds(manifest);
   const decisionIds = manifest.decisions.flatMap((d) => ('id' in d ? [d.id] : []));
   const [decisions, findings, events, mitigations, risks] = [
@@ -105,14 +126,15 @@ async function readRawStage(tx: TenantTx, seal: SealRow, manifest: SealManifestV
     await tx.mitigationVersion.findMany({ where: { id: { in: [...ids.mitigationVersions] } }, select: MITIGATION_SELECT, orderBy: { findingSeq: 'asc' } }),
     await tx.acceptedRisk.findMany({ where: { id: { in: [...ids.acceptedRisks] } }, select: RISK_SELECT }),
   ];
-  // A sealed id with no row is a broken database, not a user's mistake: ids only in the message (NFR-PRIV-03).
-  if (decisions.length !== decisionIds.length) throw new Error(`documents: seal ${seal.id} names decision versions that have no row`);
-  if (findings.length !== ids.findings.length) throw new Error(`documents: seal ${seal.id} names findings that have no row`);
+  // A named id with no row is a broken database, not a user's mistake: ids only in the message (NFR-PRIV-03).
+  const of = originName(stage, origin);
+  if (decisions.length !== decisionIds.length) throw new Error(`documents: ${of} names decision versions that have no row`);
+  if (findings.length !== ids.findings.length) throw new Error(`documents: ${of} names findings that have no row`);
   if (events.length !== ids.findingEvents.length || mitigations.length !== ids.mitigationVersions.length || risks.length !== ids.acceptedRisks.length) {
-    throw new Error(`documents: seal ${seal.id} names events, mitigation versions or accepted risks that have no row`);
+    throw new Error(`documents: ${of} names events, mitigation versions or accepted risks that have no row`);
   }
   const derived = new Map(manifest.decisions.flatMap((d) => ('derived' in d ? [[d.question, d.from] as [string, string]] : [])));
-  return { seal, manifest, derived, decisions, findings, events, mitigations, risks };
+  return { stage, origin, manifest, derived, decisions, findings, events, mitigations, risks };
 }
 
 function toDecisionRow(r: DecisionRow): DecisionVersionRow {
@@ -138,59 +160,35 @@ async function erasureDates(tx: TenantTx, table: string, ids: readonly string[])
   return out;
 }
 
+/** The review a sealed origin names; a draft origin names none (it reads reviews only for their names and states, ADR 0023). */
+function sealedReviewOf(origin: StageOrigin): SealRow['stageReview'] | null {
+  switch (origin.kind) {
+    case 'sealed': return origin.row.stageReview;
+    case 'draft': return null;
+  }
+}
+
 /**
- * Reads everything a document of the chosen seal contains, in the caller's transaction, which must be `RepeatableRead`
- * (NFR-INT-10): the chosen seal and the latest seal of each other stage first, then the rows each manifest names. The review
- * stage comes from the chosen seal, every other stage from its latest seal (FR-DOC-05); decisions are the sealed versions,
- * never a later one. `hooks.afterSeals` lets a test commit another connection's work between the reads.
- *
- * A path id that is not in the organisation's project is `NotFoundError`; a seal that is not this review's is 422 on `sealId`
- * with fixed text, never echoing the id; a seal that does not exist for this organisation is `NotFoundError` (AUTHZ ruling:
- * `body.sealId` of another organisation answers 404, no oracle). A seal whose stored bytes cannot vouch for it is refused (422)
- * when it is the chosen one and answers 500 `integrity_failure` when it is another stage's latest.
+ * The snapshot stages, contents and erasures of the raw stages, in the caller's transaction: one hydration for both origins
+ * (anti-goal 2). A sealed origin brings its sealer and its review's erased note; a draft origin brings neither (no sealer, no
+ * review read beyond its name and state).
  */
-export async function readDocumentSnapshot(
-  tx: TenantTx, a: { projectId: string; reviewId: string; sealId: string; documentType: DocumentType },
-  hooks?: { afterSeals?: (tx: TenantTx) => Promise<void> },
-): Promise<DocumentSnapshot> {
-  const review = await tx.stageReview.findFirst({ where: { id: a.reviewId, projectId: a.projectId }, select: { id: true, stage: true } });
-  if (review === null) throw new NotFoundError();
-  const chosenRow = await tx.seal.findFirst({ where: { id: a.sealId }, select: SEAL_SELECT });
-  if (chosenRow === null) throw new NotFoundError();
-  if (chosenRow.stageReviewId !== review.id || chosenRow.stageReview.projectId !== a.projectId) {
-    throw new ValidationFailed([{ field: 'sealId', message: DOCUMENTS_COPY.fieldMessages.sealNotOfReview }]);
-  }
-  const chosenManifest = trusted(chosenRow, true);
-  if (chosenManifest === null) throw new ValidationFailed([{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }]);
-  const reviewStage = chosenRow.stageReview.stage as Stage;
-
-  const sealed = new Map<Stage, { row: SealRow; manifest: SealManifestV1 }>([[reviewStage, { row: chosenRow, manifest: chosenManifest }]]);
-  for (const stage of STAGES) {
-    if (stage === reviewStage) continue;
-    const row = await tx.seal.findFirst({
-      where: { stageReview: { projectId: a.projectId, stage } }, orderBy: [{ sealedAt: 'desc' }, { sealNumber: 'desc' }], select: SEAL_SELECT,
-    });
-    if (row === null) continue;
-    const manifest = trusted(row, false);
-    // Skipping it would print "Not recorded at the time of issue" for a stage that was sealed (D3): a false statement on a document that cannot be recalled.
-    if (manifest === null) throw new AppError(500, 'integrity_failure', MSG_OTHER_SEAL_CHECK_FAILED);
-    sealed.set(stage, { row, manifest });
-  }
-
-  await hooks?.afterSeals?.(tx);
-
-  const raw = new Map<Stage, RawStage>();
-  for (const [stage, s] of sealed) raw.set(stage, await readRawStage(tx, s.row, s.manifest));
-
+async function hydrateStages(tx: TenantTx, raw: ReadonlyMap<Stage, RawStage>, today: CalendarDate): Promise<{
+  stages: Record<Stage, SnapshotStage | null>; contents: Map<string, LoadedContent>; erasures: DocumentSnapshot['erasures'];
+}> {
   // Lookups for every stage at once.
   const all = [...raw.values()];
-  const people = all.flatMap((r) => [
-    r.seal.sealedById,
-    ...r.decisions.flatMap((d) => (d.decidedByUserId === null ? [d.enteredById] : [d.enteredById, d.decidedByUserId])),
-    ...r.findings.map((f) => f.raisedById), ...r.events.map((e) => e.byId),
-    ...r.mitigations.flatMap((m) => [m.ownerUserId, m.enteredById]),
-    ...r.risks.flatMap((x) => (x.acceptedByUserId === null ? [x.enteredById] : [x.enteredById, x.acceptedByUserId])),
-  ]);
+  const sealers = all.flatMap((r) => { switch (r.origin.kind) { case 'sealed': return [r.origin.row.sealedById]; case 'draft': return []; } });
+  const reviewIds = all.flatMap((r) => sealedReviewOf(r.origin)?.id ?? []);
+  const people = [
+    ...sealers,
+    ...all.flatMap((r) => [
+      ...r.decisions.flatMap((d) => (d.decidedByUserId === null ? [d.enteredById] : [d.enteredById, d.decidedByUserId])),
+      ...r.findings.map((f) => f.raisedById), ...r.events.map((e) => e.byId),
+      ...r.mitigations.flatMap((m) => [m.ownerUserId, m.enteredById]),
+      ...r.risks.flatMap((x) => (x.acceptedByUserId === null ? [x.enteredById] : [x.enteredById, x.acceptedByUserId])),
+    ]),
+  ];
   const evidenceIds = all.flatMap((r) => [...r.decisions.flatMap((d) => d.evidence.map((e) => e.evidenceId)), ...r.mitigations.flatMap((m) => m.evidence.map((e) => e.evidenceId))]);
   const [refs, evidence, erasedDecisions, erasedMitigations, erasedRisks, erasedReviews, erasedFindings, erasedEvidence] = [
     await userRefs(tx, people),
@@ -198,7 +196,7 @@ export async function readDocumentSnapshot(
     await erasedFields(tx, 'decision_versions', all.flatMap((r) => r.decisions.map((d) => d.id))),
     await erasedFields(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
     await erasedFields(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
-    await erasedFields(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
+    await erasedFields(tx, 'stage_reviews', reviewIds),
     await erasureDates(tx, 'findings', all.flatMap((r) => r.findings.map((f) => f.id))),
     await erasureDates(tx, 'evidence', evidenceIds),
   ];
@@ -222,8 +220,7 @@ export async function readDocumentSnapshot(
     contents.set(id, loadContent(ref.semver));
   }
 
-  const today = eatDate(new Date());
-  const stages: Record<Stage, SealedStage | null> = { 'pre-processing': null, 'in-processing': null, 'post-processing': null };
+  const stages: Record<Stage, SnapshotStage | null> = { 'pre-processing': null, 'in-processing': null, 'post-processing': null };
   for (const [stage, r] of raw) {
     const decisions = new Map<string, SealedDecision>();
     for (const row of r.decisions.map(toDecisionRow)) {
@@ -256,7 +253,7 @@ export async function readDocumentSnapshot(
           };
         });
         const riskRow = r.risks.find((x: RiskRow) => x.id === listed.acceptedRisk?.id);
-        if (listed.acceptedRisk !== null && riskRow === undefined) throw new Error(`documents: seal ${r.seal.id} names accepted risk ${listed.acceptedRisk.id}, which has no row`);
+        if (listed.acceptedRisk !== null && riskRow === undefined) throw new Error(`documents: ${originName(stage, r.origin)} names accepted risk ${listed.acceptedRisk.id}, which has no row`);
         let acceptedRisk: AcceptedRiskView | null = null;
         if (riskRow !== undefined) {
           const e = erasedRisks.get(riskRow.id);
@@ -286,39 +283,305 @@ export async function readDocumentSnapshot(
         return { finding: view, mitigations, acceptedRisk, events };
       });
 
-    const review = r.seal.stageReview;
-    const erasedNote = erasedReviews.get(review.id)?.fields.includes('preparedFor') === true;
-    stages[stage] = {
-      stage,
-      seal: {
-        sealId: r.seal.id, sealNumber: r.seal.sealNumber, reviewId: review.id, reviewName: stageReviewName(stage, review.numberInStage),
-        fingerprint: r.seal.fingerprint, sealedAt: r.seal.sealedAt.toISOString(), sealedBy: person(r.seal.id, r.seal.sealedById),
-        sealedByRole: r.seal.sealedByRole, enteredByPeople: new Set([...decisions.values()].map((d) => d.row.enteredById)).size,
-      },
-      preparedFor: erasedNote ? null : review.preparedFor,
-      manifest: r.manifest, decisions, derived: r.derived, findings,
-    };
+    const enteredByPeople = new Set([...decisions.values()].map((d) => d.row.enteredById)).size;
+    let seal: StageSeal | StageDraft;
+    let preparedFor: string | null;
+    switch (r.origin.kind) {
+      case 'sealed': {
+        const row = r.origin.row;
+        const review = row.stageReview;
+        const erasedNote = erasedReviews.get(review.id)?.fields.includes('preparedFor') === true;
+        seal = {
+          kind: 'sealed', sealId: row.id, sealNumber: row.sealNumber, reviewId: review.id, reviewName: stageReviewName(stage, review.numberInStage),
+          fingerprint: row.fingerprint, sealedAt: row.sealedAt.toISOString(), sealedBy: person(row.id, row.sealedById),
+          sealedByRole: row.sealedByRole, enteredByPeople,
+        };
+        preparedFor = erasedNote ? null : review.preparedFor;
+        break;
+      }
+      case 'draft':
+        seal = {
+          kind: 'draft', key: `draft:${stage}`, takenAt: r.origin.takenAt.toISOString(), enteredByPeople,
+          openReview: r.origin.openReview, lastSealedReview: r.origin.lastSealedReview,
+        };
+        // A draft prints no review note: MP-01 names the review and its state only (ADR 0023).
+        preparedFor = null;
+        break;
+    }
+    stages[stage] = { stage, seal, preparedFor, manifest: r.manifest, decisions, derived: r.derived, findings };
   }
 
-  const project = await tx.project.findFirst({ where: { id: a.projectId }, select: { name: true, description: true } });
+  return {
+    stages, contents,
+    erasures: {
+      evidence: erasedEvidence, findings: erasedFindings,
+      stage_reviews: await erasureDates(tx, 'stage_reviews', reviewIds),
+      mitigation_versions: await erasureDates(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
+      accepted_risks: await erasureDates(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
+    },
+  };
+}
+
+/** The project's name, description and metadata (contract G068's text forms) and the organisation's name; a project not in the organisation is `NotFoundError`. */
+async function readProjectHeader(tx: TenantTx, projectId: string): Promise<{ project: DocumentSnapshot['project']; organisationName: string }> {
+  const project = await tx.project.findFirst({ where: { id: projectId }, select: { name: true, description: true } });
   if (project === null) throw new NotFoundError();
-  const meta = await tx.projectMetadata.findFirst({ where: { projectId: a.projectId } });
+  const meta = await tx.projectMetadata.findFirst({ where: { projectId } });
   const metadata = Object.fromEntries(METADATA_KEYS.map((k) => [k, metadataText(meta === null ? null : (meta as Record<string, unknown>)[k])]));
   const orgRows = await tx.$queryRaw<{ name: string }[]>`
     SELECT "name" FROM "organizations" WHERE "id" = NULLIF(current_setting('app.current_org_id', true), '')`;
   // M10 is defensive and unreachable through the services: a context's organisation exists (membership references it), so no test can make this fail.
   if (orgRows.length !== 1) throw new Error('documents: the organisation of the current context has no row');
-  const organisationName = orgRows[0].name;
+  return { project: { ...project, metadata }, organisationName: orgRows[0].name };
+}
 
+/**
+ * Reads everything a document of the chosen seal contains, in the caller's transaction, which must be `RepeatableRead`
+ * (NFR-INT-10): the chosen seal and the latest seal of each other stage first, then the rows each manifest names. The review
+ * stage comes from the chosen seal, every other stage from its latest seal (FR-DOC-05); decisions are the sealed versions,
+ * never a later one. `hooks.afterSeals` lets a test commit another connection's work between the reads.
+ *
+ * A path id that is not in the organisation's project is `NotFoundError`; a seal that is not this review's is 422 on `sealId`
+ * with fixed text, never echoing the id; a seal that does not exist for this organisation is `NotFoundError` (AUTHZ ruling:
+ * `body.sealId` of another organisation answers 404, no oracle). A seal whose stored bytes cannot vouch for it is refused (422)
+ * when it is the chosen one and answers 500 `integrity_failure` when it is another stage's latest.
+ */
+export async function readDocumentSnapshot(
+  tx: TenantTx, a: { projectId: string; reviewId: string; sealId: string; documentType: DocumentType },
+  hooks?: { afterSeals?: (tx: TenantTx) => Promise<void> },
+): Promise<SealedSnapshot> {
+  const review = await tx.stageReview.findFirst({ where: { id: a.reviewId, projectId: a.projectId }, select: { id: true, stage: true } });
+  if (review === null) throw new NotFoundError();
+  const chosenRow = await tx.seal.findFirst({ where: { id: a.sealId }, select: SEAL_SELECT });
+  if (chosenRow === null) throw new NotFoundError();
+  if (chosenRow.stageReviewId !== review.id || chosenRow.stageReview.projectId !== a.projectId) {
+    throw new ValidationFailed([{ field: 'sealId', message: DOCUMENTS_COPY.fieldMessages.sealNotOfReview }]);
+  }
+  const chosenManifest = trusted(chosenRow, true);
+  if (chosenManifest === null) throw new ValidationFailed([{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }]);
+  const reviewStage = chosenRow.stageReview.stage as Stage;
+
+  const sealed = new Map<Stage, { row: SealRow; manifest: SealManifestV1 }>([[reviewStage, { row: chosenRow, manifest: chosenManifest }]]);
+  for (const stage of STAGES) {
+    if (stage === reviewStage) continue;
+    const row = await tx.seal.findFirst({
+      where: { stageReview: { projectId: a.projectId, stage } }, orderBy: [{ sealedAt: 'desc' }, { sealNumber: 'desc' }], select: SEAL_SELECT,
+    });
+    if (row === null) continue;
+    const manifest = trusted(row, false);
+    // Skipping it would print "Not recorded at the time of issue" for a stage that was sealed (D3): a false statement on a document that cannot be recalled.
+    if (manifest === null) throw new AppError(500, 'integrity_failure', MSG_OTHER_SEAL_CHECK_FAILED);
+    sealed.set(stage, { row, manifest });
+  }
+
+  await hooks?.afterSeals?.(tx);
+
+  const raw = new Map<Stage, RawStage>();
+  for (const [stage, s] of sealed) raw.set(stage, await readRawStage(tx, stage, { kind: 'sealed', row: s.row }, s.manifest));
+  const today = eatDate(new Date());
+  const { stages, contents, erasures } = await hydrateStages(tx, raw, today);
+  const { project, organisationName } = await readProjectHeader(tx, a.projectId);
+  // Every raw stage above has a sealed origin, so every hydrated stage is a `SealedStage`.
+  const sealedStages = stages as Record<Stage, SealedStage | null>;
   return {
-    documentType: a.documentType, reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents, project: { ...project, metadata },
-    organisationName, today,
-    erasures: {
-      evidence: erasedEvidence, findings: erasedFindings,
-      stage_reviews: await erasureDates(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
-      mitigation_versions: await erasureDates(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
-      accepted_risks: await erasureDates(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
-    },
+    provenance: { kind: 'sealed' }, documentType: a.documentType, reviewStage, chosen: sealedStages[reviewStage] as SealedStage, stages: sealedStages, contents, project,
+    organisationName, today, erasures,
+  };
+}
+
+// ─── The draft record (path to outputs, Task 6; ADR 0023) ───────────────────────────────────────────
+
+type Row = Readonly<Record<string, unknown>>;
+const textCol = (r: Row, k: string): string => {
+  const v = r[k];
+  if (typeof v !== 'string') throw new TypeError(`liveDecisionRows: decision_versions.${k} is not text`);
+  return v;
+};
+const intCol = (r: Row, k: string): number => {
+  const v = r[k];
+  if (typeof v !== 'number' || !Number.isInteger(v)) throw new TypeError(`liveDecisionRows: decision_versions.${k} is not an integer`);
+  return v;
+};
+
+/**
+ * The stage rows with every version of each question whose current version the running content does not hold in that stage
+ * removed (conflict 23): the planner refuses such a question (`stagePlan`, R-45), and a draft must not answer 500 for it. The
+ * predicate is the planner's own: the highest `versionNumber` of each (stage, question), and the content's questions of that
+ * stage, so a question moved to another stage is cut as well as one removed. `orphans` holds each cut current version's id, a
+ * withdrawal included, for the caller to log; `omittedAnswers` counts those that are not withdrawals, the answers the report
+ * leaves out. A row without the columns read throws, as the planner does.
+ */
+export function liveDecisionRows(rows: SealSourceRows, content: LoadedContent): { rows: SealSourceRows; orphans: string[]; omittedAnswers: number } {
+  const key = (r: Row) => `${textCol(r, 'stage')}\u0000${textCol(r, 'questionId')}`;
+  const current = new Map<string, Row>();
+  for (const r of rows.decision_versions) {
+    const k = key(r);
+    const cur = current.get(k);
+    if (cur === undefined || intCol(r, 'versionNumber') > intCol(cur, 'versionNumber')) current.set(k, r);
+  }
+  const held = new Map<string, ReadonlySet<string>>();
+  const holds = (stage: string, question: string): boolean => {
+    let ids = held.get(stage);
+    if (ids === undefined) {
+      ids = new Set(questionsInStage(content, stage as Stage).map((q) => q.id));
+      held.set(stage, ids);
+    }
+    return ids.has(question);
+  };
+  const cut = new Set<string>();
+  const orphans: string[] = [];
+  let omittedAnswers = 0;
+  for (const [k, r] of current) {
+    if (holds(textCol(r, 'stage'), textCol(r, 'questionId'))) continue;
+    cut.add(k);
+    orphans.push(textCol(r, 'id'));
+    if (r.status !== 'withdrawn') omittedAnswers += 1;
+  }
+  if (cut.size === 0) return { rows, orphans: [], omittedAnswers: 0 };
+  return { rows: { ...rows, decision_versions: rows.decision_versions.filter((r) => !cut.has(key(r))) }, orphans: orphans.sort(), omittedAnswers };
+}
+
+/** What the working report is built from: every stage as its rows are now, read in one snapshot (ADR 0023). Nothing here is stored. */
+export interface DraftRecord {
+  takenAt: UtcInstant;
+  /** Every stage, never null: a stage with no answers is an empty stage. */
+  stages: Record<Stage, SnapshotStage>;
+  /** The stages with at least one current decision that is not a withdrawal, in STAGES order. */
+  stagesWithAnswers: Stage[];
+  contents: ReadonlyMap<string, LoadedContent>;
+  project: DocumentSnapshot['project'];
+  organisationName: string;
+  today: CalendarDate;
+  erasures: DocumentSnapshot['erasures'];
+  developmentStage: string | null;
+  /** Current answers left out because the running content no longer holds their question (conflict 23); Task 7's page 1 is to print a line for them. */
+  omittedAnswers: number;
+  /** The same, per stage: a stage's plan and its end screen say how many of their own stage's answers are left out (fix wave item 10). */
+  omittedByStage: Readonly<Record<Stage, number>>;
+  /** See `SnapshotProvenance`: the recorded wording of each title-less shortfall finding's question the running content lacks (fix I1). */
+  recordedQuestionWords: ReadonlyMap<string, string | null>;
+}
+
+/**
+ * A draft-read warning, said once per id per process (final review M12; silent-failure audit M3). Every report view, download and
+ * end screen reads the draft record, so a per-read line would repeat the same id all day and drown the signal. The ids already
+ * said live on `globalThis`: Next bundles this module into more than one chunk, and module state would be one set per chunk.
+ */
+const DRAFT_WARNED = Symbol.for('makrai.documents.draftWarned');
+function warnOncePerProcess(event: 'DRAFT_ORPHAN_DECISION' | 'DRAFT_CONTENT_VERSION_UNLISTED', id: string, details: Record<string, unknown>): void {
+  const store = globalThis as unknown as { [DRAFT_WARNED]?: Set<string> };
+  const said = (store[DRAFT_WARNED] ??= new Set<string>());
+  const key = `${event}:${id}`;
+  if (said.has(key)) return;
+  said.add(key);
+  logSecurityEvent(event, 'warn', { details });
+}
+
+/**
+ * For each title-less shortfall finding of the stages whose question the running content does not hold, that question's words in the
+ * content version its raising decision was recorded against, or null when this deployment does not list that version
+ * (`unknown_content_version`), the version lacks the question, or the finding names no decision (Task 6 fix I1). A draft prints such a
+ * finding from this, so a question a release removed never makes the draft throw and its finding is never dropped.
+ */
+async function recordedQuestionWordsOf(tx: TenantTx, stages: Iterable<SnapshotStage>, content: LoadedContent): Promise<Map<string, string | null>> {
+  const wanted = [...stages].flatMap((s) => s.findings.map((sf) => sf.finding))
+    .filter((f) => f.source === 'shortfall' && f.title === null && f.questionId !== null && !content.questions.has(f.questionId));
+  const out = new Map<string, string | null>();
+  if (wanted.length === 0) return out;
+  const versionIds = [...new Set(wanted.flatMap((f) => (f.decisionVersionId === null ? [] : [f.decisionVersionId])))];
+  const rows = await tx.decisionVersion.findMany({ where: { id: { in: versionIds } }, select: { id: true, contentVersionId: true } });
+  const recordedIn = new Map(rows.map((r) => [r.id, r.contentVersionId]));
+  const loaded = new Map<string, LoadedContent | null>();
+  for (const contentVersionId of new Set(rows.map((r) => r.contentVersionId))) {
+    try {
+      loaded.set(contentVersionId, loadContent((await contentRefById(tx, contentVersionId)).semver));
+    } catch (e) {
+      if (!(e instanceof AppError && e.code === 'unknown_content_version')) throw e;
+      // A packaging fault: an answer was recorded against a bundle this deployment does not hold (silent-failure audit M1).
+      warnOncePerProcess('DRAFT_CONTENT_VERSION_UNLISTED', contentVersionId, { contentVersionId });
+      loaded.set(contentVersionId, null);
+    }
+  }
+  for (const f of wanted) {
+    const cv = f.decisionVersionId === null ? undefined : recordedIn.get(f.decisionVersionId);
+    const recorded = cv === undefined ? null : loaded.get(cv) ?? null;
+    out.set(f.id, recorded?.questions.get(f.questionId as string)?.text ?? null);
+  }
+  return out;
+}
+
+/**
+ * The draft record of a project (Task 6), in the caller's transaction, which must be a REPEATABLE READ `withOrg` (NFR-INT-10):
+ * for each stage, the rows a seal of it taken now would name (`readStageRows`, `stagePlan` on the running content,
+ * `manifestFromRows` with an in-memory header), then those rows by id and the same hydration as a sealed document. It reads no
+ * seal row, manifest or sealed answer: the stage's reviews are read only for their names and whether a seal exists for each
+ * (a relation filter that selects no seal column). There is no `assertProjectWritable` and no authorisation here: a reader of an
+ * archived project gets the record, and the caller holds the read gate (Task 9). A project not in the organisation is `NotFoundError`.
+ */
+export async function readDraftRecord(tx: TenantTx, projectId: string, viewer: Actor): Promise<DraftRecord> {
+  const { project, organisationName } = await readProjectHeader(tx, projectId);
+  const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT date_trunc('milliseconds', transaction_timestamp()) AS at`;
+  // The control switch and the planned questions come from the running content only, never from a version an answer was recorded against.
+  const running = await resolveRunningContentVersion(tx);
+  const content = loadContent(running.semver);
+  const orgId = await currentOrg(tx);
+  await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'UTC'`);
+  // Tombstones of the same snapshot: an erased field enters the manifest as its tombstone digest, as a seal taken now would hold it.
+  const tombstones = (await tx.$queryRawUnsafe<{ r: TombstoneRow }[]>(SEAL_SOURCE_SQL.tombstones, orgId)).map((x) => x.r);
+
+  const reviewSelect = { id: true, stage: true, numberInStage: true } as const;
+  const newestOf = (rows: Array<{ id: string; stage: string; numberInStage: number }>, stage: Stage): DraftReviewRef | null => {
+    const newest = rows.filter((x) => x.stage === stage).sort((x, y) => y.numberInStage - x.numberInStage)[0];
+    return newest === undefined ? null : { reviewId: newest.id, reviewName: stageReviewName(stage, newest.numberInStage) };
+  };
+  const unsealed = await tx.stageReview.findMany({ where: { projectId, seals: { none: {} } }, select: reviewSelect });
+  const sealedReviews = await tx.stageReview.findMany({ where: { projectId, seals: { some: {} } }, select: reviewSelect });
+
+  const raw = new Map<Stage, RawStage>();
+  let omittedAnswers = 0;
+  const omittedByStage = Object.fromEntries(STAGES.map((st) => [st, 0])) as Record<Stage, number>;
+  for (const stage of STAGES) {
+    const live = liveDecisionRows(await readStageRows(tx, projectId, stage), content);
+    for (const decisionVersionId of live.orphans) warnOncePerProcess('DRAFT_ORPHAN_DECISION', decisionVersionId, { decisionVersionId, stage });
+    omittedAnswers += live.omittedAnswers;
+    omittedByStage[stage] = live.omittedAnswers;
+    const plan = stagePlan(live.rows, { stage, content });
+    const header: DraftHeader = {
+      sealRow: {
+        id: `draft:${stage}`, orgId, stageReviewId: `draft-review:${stage}`, sealNumber: 0, contentVersionId: running.contentVersionId,
+        sealedById: viewer.userId, sealedByRole: viewer.role, sealedAt: at.toISOString(),
+      },
+      reviewRow: { id: `draft-review:${stage}`, orgId, projectId, stage, numberInStage: 0, preparedFor: null, preparedForSalt: null },
+    };
+    const manifest = manifestFromRows(
+      { ...live.rows, seals: [header.sealRow], stage_reviews: [...live.rows.stage_reviews, header.reviewRow] },
+      { sealId: `draft:${stage}`, ...plan }, tombstones,
+    );
+    raw.set(stage, await readRawStage(tx, stage, {
+      kind: 'draft', takenAt: at, header, openReview: newestOf(unsealed, stage), lastSealedReview: newestOf(sealedReviews, stage),
+    }, manifest));
+  }
+
+  const today = eatDate(at);
+  const { stages, contents, erasures } = await hydrateStages(tx, raw, today);
+  const every = Object.fromEntries(STAGES.map((st) => {
+    const s = stages[st];
+    if (s === null) throw new Error(`documents: the draft record has no ${st} stage`);
+    return [st, s];
+  })) as Record<Stage, SnapshotStage>;
+  return {
+    takenAt: at.toISOString(), stages: every,
+    stagesWithAnswers: STAGES.filter((st) => every[st].manifest.decisions.some((d) => 'id' in d)),
+    contents, project, organisationName, today, erasures, developmentStage: project.metadata.developmentStage ?? null, omittedAnswers, omittedByStage,
+    recordedQuestionWords: await recordedQuestionWordsOf(tx, Object.values(every), content),
+  };
+}
+
+/** The draft snapshot of one document of a draft record (pure): the one resolver reads it as it reads an issued one (ADR 0023). */
+export function draftSnapshot(r: DraftRecord, documentType: DocumentType, reviewStage: Stage): DocumentSnapshot {
+  return {
+    provenance: { kind: 'draft', takenAt: r.takenAt, omittedAnswers: r.omittedAnswers, recordedQuestionWords: r.recordedQuestionWords }, documentType, reviewStage, chosen: r.stages[reviewStage],
+    stages: r.stages, contents: r.contents, project: r.project, organisationName: r.organisationName, today: r.today, erasures: r.erasures,
   };
 }
 
@@ -508,7 +771,7 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<Rea
     tombstoneIds: new Set(read.tombstones.map((t) => String((t as { id: unknown }).id))),
   };
 }
-interface ReadForDocument { snap: DocumentSnapshot; issuedAt: Date; tombstoneIds: ReadonlySet<string> }
+interface ReadForDocument { snap: SealedSnapshot; issuedAt: Date; tombstoneIds: ReadonlySet<string> }
 
 /**
  * M13 (FR-REV-06, FR-REV-08): before anything is rendered, every seal the document uses is compared with the rows it names, as "Check
@@ -517,7 +780,7 @@ interface ReadForDocument { snap: DocumentSnapshot; issuedAt: Date; tombstoneIds
  * check, and another stage's seal answers 500 `integrity_failure`.
  */
 function checkSealsAgainstRows(
-  snap: DocumentSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, stageRows: Partial<Record<Stage, SealSourceRows>>,
+  snap: SealedSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, stageRows: Partial<Record<Stage, SealSourceRows>>,
   sealRows: unknown[], tombstones: unknown[],
 ): void {
   for (const st of STAGES) {
@@ -539,24 +802,46 @@ function checkSealsAgainstRows(
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
 const READ_TIMEOUT_MS = 15_000;
 
-const sealsOf = (snap: DocumentSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.map((id) => {
+const sealsOf = (snap: SealedSnapshot, ids: readonly string[]): Extract<RenderInput['stamp'], { kind: 'issued' }>['seals'] => ids.map((id) => {
   const stage = STAGES.map((s) => snap.stages[s]).find((s) => s?.seal.sealId === id);
   if (stage === undefined || stage === null) throw new Error(`documents: the document used seal ${id}, which is not in its snapshot`);
   return { sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint };
 });
 
+/** A draft snapshot reached the issue path, past the `SealedSnapshot` type through a cast (anti-goal 5: a draft is never issued). */
+class DraftSnapshotRefused extends Error {
+  override readonly name = 'DraftSnapshotRefused';
+  constructor() {
+    super('documents: a draft snapshot reached the issue path; a draft is never issued (ADR 0023)');
+  }
+}
+
+/**
+ * Anti-goal 5 at run time. The type keeps a draft off this path, but a cast gets past a type, and a draft cast to `SealedSnapshot`
+ * would resolve ("Not sealed", no seal ids) and be stored in `issued_documents`. So `build` refuses it before resolving anything.
+ */
+function assertSealedProvenance(provenance: SnapshotProvenance): void {
+  switch (provenance.kind) {
+    case 'sealed': return;
+    case 'draft': throw new DraftSnapshotRefused();
+  }
+}
+
 /** Resolves and renders outside every transaction (NFR-PERF-04: CPU in the one Node process). */
-async function build(type: DocumentType, renderer: Renderer, snap: DocumentSnapshot, typed: Record<string, string>, issuedAt: Date) {
+async function build(type: DocumentType, renderer: Renderer, snap: SealedSnapshot, typed: Record<string, string>, issuedAt: Date) {
+  assertSealedProvenance(snap.provenance);
   const map = loadFieldMap(type);
   const resolved = resolveFields(map, snap, typed);
   const input: RenderInput = {
-    map, fields: resolved.fields, seals: sealsOf(snap, resolved.sealIds), issuedAt: issuedAt.toISOString(),
+    map, fields: resolved.fields, stamp: { kind: 'issued', issuedAt: issuedAt.toISOString(), seals: sealsOf(snap, resolved.sealIds) },
     organisationName: snap.organisationName, projectName: snap.project.name,
   };
   return { map, resolved, rendered: await renderer(input) };
 }
 
-function rendererFor(type: DocumentType): Renderer {
+/** The renderer of a type, loaded here and only here (conflict 3 a): the draft pages read documents without pulling React PDF in. */
+async function rendererFor(type: DocumentType): Promise<Renderer> {
+  const { RENDERERS } = await import('@/lib/documents/render');
   const renderer = RENDERERS[type];
   if (renderer === null) throw new NotImplementedError('DOC-b');
   return renderer;
@@ -566,7 +851,7 @@ function rendererFor(type: DocumentType): Renderer {
 export async function previewDocument(ctx: OrgContext, actor: Actor, a: DocumentRequest): Promise<DocumentPreview> {
   assertCan(ctx, 'document:generate');
   const type = checkType(a.documentType);
-  const renderer = rendererFor(type);
+  const renderer = await rendererFor(type);
   const typed = checkTyped(loadFieldMap(type), a.typedFields);
   const { snap, issuedAt } = await readForDocument(ctx, { ...a, documentType: type });
   const { resolved, rendered } = await build(type, renderer, snap, typed, issuedAt);
@@ -628,7 +913,7 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
   assertCan(ctx, 'document:generate');
   if (!isRequestId(a.requestId)) throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
   const type = checkType(a.documentType);
-  const renderer = rendererFor(type);
+  const renderer = await rendererFor(type);
   const typed = checkTyped(loadFieldMap(type), a.typedFields);
 
   const replay = (tx: TenantTx, rowId: string) => documentViews(tx, [rowId]).then((m) => {
@@ -740,6 +1025,7 @@ export async function documentSummaries(
   ctx: OrgContext, a: { projectId: string; reviewId: string; sealId: string }, drafts: Readonly<Record<DocumentType, Record<string, string>>>,
 ): Promise<Record<DocumentType, { fields: number; questions: number; notRecorded: number; neverSealedStages: Stage[] } | null>> {
   assertCan(ctx, 'record:read');
+  const { RENDERERS } = await import('@/lib/documents/render');
   const types = DOCUMENT_TYPES.filter((t) => RENDERERS[t] !== null);
   const snap = await withOrg(ctx, (tx) => readDocumentSnapshot(tx, { ...a, documentType: types[0] }), { isolationLevel: 'RepeatableRead', timeoutMs: READ_TIMEOUT_MS });
   const out = { data_card: null, model_card: null, mitigation_plan: null } as Record<DocumentType, { fields: number; questions: number; notRecorded: number; neverSealedStages: Stage[] } | null>;

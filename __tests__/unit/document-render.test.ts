@@ -35,7 +35,7 @@ function input(type: DocumentType, over: { text?: (f: ResolvedField, i: number) 
     text: `Seal 2 of Pre-processing review 1: sealed 3 Nov 2026 09:00:00 UTC by Amina (owner); decisions entered by 2 people. Fingerprint ${formatFingerprint(FINGERPRINT, 'full')}`,
     provenance: '',
   });
-  return { map, fields, seals, issuedAt: '2026-11-03T10:42:07.000Z', organisationName: 'Org', projectName: 'Project' };
+  return { map, fields, stamp: { kind: 'issued', issuedAt: '2026-11-03T10:42:07.000Z', seals }, organisationName: 'Org', projectName: 'Project' };
 }
 const inputWithText = (type: DocumentType, text: string) => input(type, { text: () => text });
 

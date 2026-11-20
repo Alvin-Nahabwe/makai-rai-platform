@@ -10,7 +10,8 @@
 //   - `.next/standalone` holds a `__tests__` path outside `node_modules`, any `.env*` file, or a `.ts`
 //     or `.tsx` file under `app/`, `lib/` or `components/`; or
 //   - a file the server loads at run time without importing it is missing: the password hash worker
-//     (lib/auth/passwordHash.ts starts it by path) and the bcryptjs it requires (next.config.ts traces both); or
+//     (lib/auth/passwordHash.ts starts it by path) and the bcryptjs it requires (next.config.ts traces both), or the
+//     working report's render worker (lib/documents/render/pdfWorkerPool.ts) and what it imports; or
 //   - the log or the standalone tree is not there, because a check of nothing must not pass.
 //
 // Exit 0 prints `check-standalone: clean`. Exit 1 prints one stderr line per finding.
@@ -23,7 +24,16 @@ const standalone = join('.next', 'standalone');
 const findings = [];
 // umd/package.json says {"type":"commonjs"}: without it the root package's "type":"module" makes umd/index.js load as
 // ESM, and every job answers `bcrypt.compareSync is not a function` (C4 pool re-review m2).
-const RUNTIME_FILES = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json'];
+// The working report's render worker (lib/documents/render/pdfWorkerPool.ts starts it by path) and what it imports outside the trace.
+const RUNTIME_FILES = [
+  'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json',
+  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'lib/http/stackFrames.mjs', 'node_modules/@react-pdf/renderer/package.json',
+  'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
+  // The files the PDF worker's own imports resolve to in the image, not stand-ins for them (Task 16 review M6): traced by running
+  // pdfWorker.mjs from an isolated copy of .next/standalone with a resolve hook. The other ~110 files that trace showed (react-pdf's
+  // own dependencies) are not listed here.
+  'node_modules/react/index.js', 'node_modules/react/cjs/react.production.js', 'node_modules/@react-pdf/renderer/lib/react-pdf.js',
+];
 
 if (!logPath) {
   findings.push('no build log given (usage: node scripts/check-standalone.mjs <build-log>)');

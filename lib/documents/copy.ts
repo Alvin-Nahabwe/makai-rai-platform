@@ -4,9 +4,10 @@
  * re-exports them, so the tests and the renderers name them there.
  */
 
-import { formatDay } from '@/lib/format/dates';
+import { formatDay, formatTime } from '@/lib/format/dates';
+import { PLATFORM_ZONE } from '@/lib/format/zone';
 import { TERM_DATA_CARD, TERM_MITIGATION_PLAN, TERM_MODEL_CARD, TERM_STAGE_1, TERM_STAGE_2, TERM_STAGE_3 } from '@/lib/vocabulary/terms';
-import type { DocumentType, Stage } from '@/types/record';
+import type { DocumentType, Stage, UtcInstant } from '@/types/record';
 
 /** The owner's decision (C8 #21, audit C#270) over FR-DOC-02's SRS line 1025. */
 export const STATEMENT = 'Made from this team\'s own records in the MAK-AI RAI Platform. It is not an ethics approval, audit, certification or compliance statement.';
@@ -20,6 +21,36 @@ export const sealedNote = (count: number): string =>
   (count === 1 ? SEALED_NOTE : 'The platform keeps the seals this document is made from. No outside body has time-stamped them.');
 export const NOT_RECORDED = 'Not recorded';                                           // FR-DOC-02, D1
 export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when the document was issued'; // FR-DOC-05, D3; C#273
+
+// A draft document (path to outputs; ADR 0023). The design (§7) and the controller's rulings fix these words.
+/** D3 in a draft: a stage with no answers yet. */
+export const NOT_RECORDED_YET = 'Not recorded yet';
+/**
+ * What a field with no text prints, one rule for the screen and the PDF (fix wave item 11; final review M1): a draft says it is not
+ * recorded yet, an issued document says not recorded, as it always did.
+ */
+export const emptyFieldText = (kind: 'draft' | 'issued'): string => (kind === 'draft' ? NOT_RECORDED_YET : NOT_RECORDED);
+/** A typed field in a draft, with no value beside it: typed fields are written when the document is issued. */
+export const TYPED_AT_ISSUE = 'Added when the document is issued';
+/** A project value in a draft, in place of PROJECT_MARK: a draft never calls itself a sealed record (anti-goal 1; controller's wording). */
+export const DRAFT_PROJECT_MARK = 'Made from the answers as they were at the time shown. This is a draft, not a sealed record.';
+/** The seals field of a draft (MP-10, DC-33, MC-31). */
+export const NOT_SEALED = 'Not sealed';
+/** MP-04 in a draft while the running content's risk-area mapping is not approved (anti-goal 3; controller's call on open item 2). */
+export const CONTROLS_AFTER_APPROVAL =
+  "Suggested controls are on each question's page. They are listed here once experts approve the new risk-area mapping, and the list may change then.";
+/**
+ * MP-01 in a draft: the stage, then its review's state. An open review not yet sealed is named first; else the last sealed review;
+ * "no review yet" only when the stage has no review at all (rulings 8 and O2, conflict 15).
+ */
+export const draftReviewLine = (stageName: string, openReviewName: string | null, lastSealedReviewName: string | null): string => {
+  if (openReviewName !== null) return `${stageName} · draft, ${openReviewName} open, not sealed yet`;
+  if (lastSealedReviewName !== null) return `${stageName} · draft; last sealed review: ${lastSealedReviewName}`;
+  return `${stageName} · draft, no review yet`;
+};
+/** The line on every page of a draft: when its answers were read, in the platform's zone, which formatTime names. */
+export const draftLine = (takenAt: UtcInstant): string =>
+  `Draft · from answers as of ${formatDay(takenAt, PLATFORM_ZONE)}, ${formatTime(takenAt, PLATFORM_ZONE)}`;
 /** A question with no decision inside a field that has another value (the owner's decision of 14 November 2026, walk finding S1). */
 export const noDecisionLine = (questionId: string): string => `No decision is recorded for question ${questionId}.`;
 export const PROJECT_MARK = 'From the project details on the day of issue. Not part of the sealed record.'; // FR-DOC-02; C#274
@@ -92,6 +123,43 @@ export const questionSource = (questionId: string, version?: number): string =>
   `question ${questionId}${version === undefined ? '' : ` (decision version ${version})`}`;
 /** A finding raised with no title (a shortfall): its question's words, then its code (lane 6 rows C1, C2; voice rule 8). */
 export const findingOnQuestion = (words: string, questionId: string): string => `Finding on the question: ${words} (${questionId})`;
+/** A draft's title-less shortfall finding whose question no content version this deployment lists still holds (Task 6 fix I1). */
+export const findingOnRemovedQuestion = (questionId: string): string => `${questionId} · question no longer in the framework`;
+/** Page 1 of the working report: the heading of open items that have no risk area (the controller's call 7). */
+export const NO_RISK_AREA_GROUP = 'Raised by the team, no risk area';
+/** Page 1: the heading of open items whose question a release has since removed, so no area can be named for them. */
+export const REMOVED_QUESTION_GROUP = 'On questions no longer in the framework';
+/** The name of the whole draft PDF and of page 1 on its own (the document title and the footer's first line). */
+export const WORKING_REPORT_TITLE = 'Working report';
+/** Page 1 of the working report as a PDF (path to outputs, Task 8): its headings follow the design (G1), the rest is plain labels. */
+/** 503 `report_busy` on a working-report download (lib/data/workingReportPdf.ts), and the report page's line when one comes back. */
+export const WORKING_REPORT_BUSY_MESSAGE = 'Many reports are being prepared right now. Try again in a few seconds.';
+/** 422 on `?part=` of a working-report download, and the report page's line when one comes back. */
+export const PART_MESSAGE = 'Choose the whole report, the summary, the data card, the model card, or the mitigation plan of one stage.';
+
+export const WORKING_REPORT_PAGE = Object.freeze({
+  title: 'Where this project stands',
+  nextSteps: 'Next steps',
+  riskAccepted: 'Risk accepted by the team',
+  inPlace: 'Already in place',
+  doesNotApply: "Doesn't apply",
+  nothingOpen: 'Nothing is open.',
+  nothingInPlace: 'No question is recorded as done yet.',
+  nothingNotApplicable: 'No question is recorded as not applying.',
+  question: 'Question',
+  answer: 'Answer',
+  alsoTouches: 'Also touches',
+  controls: 'Suggested controls',
+  /** A control's notebook on page 1, on screen and in the PDF alike (fix wave item 11; final review M2). */
+  hasNotebook: 'notebook available',
+  /** Where an open item sits on page 1, on screen and in the PDF alike: its stage, and its question when it has one (final review M2). */
+  placeOf: (stageName: string, questionId: string | null): string => (questionId === null ? stageName : `${stageName}, question ${questionId}`),
+  reason: 'Reason',
+  /** Printed only when some current answers could not be shown because the running content no longer holds their question (conflict 23). */
+  omitted: (n: number): string => (n === 1
+    ? '1 recorded answer is not shown here, because its question is no longer in the framework.'
+    : `${n} recorded answers are not shown here, because their questions are no longer in the framework.`),
+});
 /** A named item with a code, words first and the code after (voice rule 8): "Techno-solutionist Bias (PP-01)" (lane 6 row C12). */
 export const wordsThenCode = (words: string, code: string): string => `${words} (${code})`;
 /** A gate decision's answer (FR-DOC-02 B38). */

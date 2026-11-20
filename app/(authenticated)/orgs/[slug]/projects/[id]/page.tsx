@@ -26,8 +26,9 @@ const load = cache(async (slug: string, id: string) => {
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
   const data = await loadProjectOverview(ctx, { orgSlug: slug, projectId: id, today: eatDate(new Date()) });
   if (data === null) notFound();
-  // Only after the project is known visible, under the same `ctx`: the page's one primary action (plan 1C C11), for the
-  // signed-in person, and each stage's marks and questions with no decision (one tenant-scoped read per stage).
+  // Only after the project is known visible, under the same `ctx`: each stage's marks and questions with no decision (one
+  // tenant-scoped read per stage), and Home's continue target for the signed-in person, so the stage holding it links to the
+  // question Home names (I1). The page's one primary action is the working report's (G5), not the continue target.
   const [continueTo, routes] = await Promise.all([
     loadContinueTarget(ctx, identity.userId, { id: data.project.id, archived: data.project.archived }),
     loadProjectRoutes(ctx, { orgSlug: slug, projectId: data.project.id }),

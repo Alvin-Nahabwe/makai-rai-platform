@@ -2,11 +2,13 @@ import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage, type StoredDecisionStatus } from '@/types/record';
 import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
 import { descriptiveLine } from '@/lib/projects/metadataValues';
-import { projectActions, type ProjectActions } from '@/lib/projects/can';
+import { projectActions, projectCanRecord, type ProjectActions } from '@/lib/projects/can';
 import { listStageReviews } from '@/lib/data/reviews';
 import { ConflictError } from '@/lib/http/errors';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
+import { stagesThatApply } from '@/lib/project/applicability';
+import type { LoadedContent } from '@/types/content';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
 import { projectFollowUp, type StageFollowUpCounts } from '@/lib/data/followup';
@@ -194,6 +196,10 @@ export type ProjectOverviewData = {
   orgSlug: string; orgName: string;
   project: { id: string; name: string; descriptiveLine: string; archived: boolean };
   counts: Record<Stage, StageCounts>;
+  /** Which stages apply at the project's development stage (G7). Absent means every stage applies; answers in a stage that does not apply still count. */
+  applies?: Record<Stage, boolean>;
+  /** Whether the person may record decisions here (decision:write, project not archived): the next link in each stage reads Continue, or View. Absent means they may. */
+  canRecord?: boolean;
   followUp: StageFollowUps;
   reviews: Record<Stage, StageReviewView[]>;
   can: ProjectActions;
@@ -213,7 +219,7 @@ export async function listProjectRows(ctx: OrgContext): Promise<{ active: Projec
  * those whose owner cannot (FR-FUP-05).
  */
 export async function loadProjectOverview(
-  ctx: OrgContext, opts: { orgSlug: string; projectId: string; today: CalendarDate },
+  ctx: OrgContext, opts: { orgSlug: string; projectId: string; today: CalendarDate; content?: LoadedContent },
 ): Promise<ProjectOverviewData | null> {
   const found = await withOrg(ctx, async (tx) => ({
     project: await tx.project.findUnique({ where: { id: opts.projectId }, include: { metadata: true } }),
@@ -234,8 +240,10 @@ export async function loadProjectOverview(
   }])) as StageFollowUps;
   const reviewsByStage = Object.fromEntries(STAGES.map((s) => [s, reviews.filter((r) => r.stage === s)])) as Record<Stage, StageReviewView[]>;
   const archived = found.project.archivedAt !== null;
+  const reach = stagesThatApply(opts.content ?? runningContent(), found.project.metadata?.developmentStage ?? null);
+  const applies = Object.fromEntries(STAGES.map((s) => [s, reach.has(s)])) as Record<Stage, boolean>;
   return {
-    orgSlug: opts.orgSlug, orgName: found.org.name,
+    orgSlug: opts.orgSlug, orgName: found.org.name, applies, canRecord: projectCanRecord(ctx.role, archived),
     project: { id: found.project.id, name: found.project.name, descriptiveLine: descriptiveLine(found.project.metadata), archived },
     counts, followUp, reviews: reviewsByStage, can: projectActions(ctx.role, archived),
   };

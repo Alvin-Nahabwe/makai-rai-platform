@@ -344,7 +344,10 @@ describe('sign-offs and completeness', () => {
       [(d) => areas(d, (f) => { f.controls[0].resources = [null]; }), /control \S+: resources\[0\] is not a link/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'http://plain.example/x' }]; }), /control \S+: resource link "http:\/\/plain\.example\/x" is not https/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'javascript:alert(1)' }]; }), /resource link "javascript:alert\(1\)" is not https/],
-      [(d) => writeFileSync(join(d, 'projectConfig.json'), '{'), /projectConfig\.json is not valid JSON/],
+      [(d) => writeFileSync(join(d, 'projectConfig.json'), '{'), /projectConfig\.json is not valid UTF-8 JSON/],
+      // The two optional keys of projectConfig.json (G7, G6): a malformed one is a line, never read as absent.
+      [(d) => writeFileSync(join(d, 'projectConfig.json'), JSON.stringify({ controlSuggestionsApproved: false })), /controlSuggestionsApproved is not true/],
+      [(d) => writeFileSync(join(d, 'projectConfig.json'), JSON.stringify({ stageApplicability: { concept: [] } })), /stageApplicability/],
       // An area's stage decides the stage S-26 shows it under: not a stage at all, or not its 4.0.0 stage (SRS 10.1.1).
       [(d) => areas(d, (f) => { f.areas[0].stage = 'pre_processing'; }), /risk area PP-01: stage "pre_processing" is not one of pre-processing, in-processing, post-processing/],
       [(d) => areas(d, (f) => { f.areas[0].stage = 'in-processing'; }), /risk area PP-01: stage in-processing is not its 4\.0\.0 stage pre-processing/],
@@ -410,6 +413,76 @@ describe('sign-offs and completeness', () => {
     const v = readFileSync('lib/content/validate.ts', 'utf8');
     expect(v).toMatch(/import \{[^}]*\bSIGN_OFF_BATCHES\b[^}]*\} from '@\/lib\/content\/signoffs'/);
     expect(v).not.toMatch(/const BATCHES\b/);
+  });
+
+  it('G6: the risk-mapping payload covers all 67 questions and 21 areas of 5.1.0, changes when one gap changes, and holds no version string', () => {
+    const copy = (name: string) => { const d = join(tempDir(), name); cpSync(join('data', 'content', '5.1.0'), d, { recursive: true }); return d; };
+    const dir = copy('5.1.0');
+    const p = signOffPayload(loadDir(dir), 'risk-mapping') as Extract<ReturnType<typeof signOffPayload>, { batch: 'risk-mapping' }>;
+    expect(p.batch).toBe('risk-mapping');
+    expect(p.questions).toHaveLength(67);
+    expect(p.areas).toHaveLength(21);
+    const withOptions = p.questions.filter((q) => q.optionAreas !== null).map((q) => q.id).sort();
+    expect(withOptions).toEqual(['Q-IP-06', 'Q-IP-13', 'Q-PO-11', 'Q-PP-16', 'Q-PP-17']);
+    for (const q of p.questions) for (const areas of Object.values(q.optionAreas ?? {})) for (const a of areas) expect(typeof a).toBe('string');
+    expect(JSON.stringify(p)).not.toMatch(/\d+\.\d+\.\d+/);
+    const hash = signOffHash(p);
+    expect(signOffItems(p).length).toBeGreaterThan(0);
+    // stable across semvers: the same files under another directory name hash the same
+    expect(signOffHash(signOffPayload(loadDir(copy('9.9.9')), 'risk-mapping'))).toBe(hash);
+    // one changed gap changes the hash
+    const first = [...loadDir(dir).questions.values()].find((q) => q.gaps.length > 0)!;
+    editQuestion(dir, first.id, (q) => ({ ...q, gaps: [...q.gaps].reverse().concat('X-NEW') }));
+    expect(signOffHash(signOffPayload(loadDir(dir), 'risk-mapping'))).not.toBe(hash);
+  });
+
+  it('G6: validateContentVersion refuses controlSuggestionsApproved without a matching risk-mapping sign-off', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    const cfgPath = join(dir, 'projectConfig.json');
+    write(cfgPath, { ...json(cfgPath), controlSuggestionsApproved: true });
+    expect(check(dir)).toEqual([expect.stringContaining('risk-mapping')]);
+    const sign = (hashOf: string | null) => {
+      const pl = signOffPayload(loadDir(dir), 'risk-mapping');
+      const f = json(join(dir, 'signoffs.json'));
+      f.records.push({ batch: 'risk-mapping', approver: 'Owner', at: AT, sha256: hashOf ?? signOffHash(pl), items: signOffItems(pl) });
+      write(join(dir, 'signoffs.json'), f);
+    };
+    sign('0'.repeat(64));                                  // a record whose hash does not match
+    expect(check(dir).join('\n')).toMatch(/risk-mapping.*sha256/);
+    const f = json(join(dir, 'signoffs.json')); f.records.pop(); write(join(dir, 'signoffs.json'), f);
+    sign(null);
+    expect(check(dir)).toEqual([]);
+    // a gap changed after the sign-off leaves the batch unsigned
+    editQuestion(dir, questionsOf(json(join(dir, 'questionBank.json')))[0].id, (q) => ({ ...q, gaps: [...q.gaps, 'X-NEW'] }));
+    expect(check(dir).join('\n')).toMatch(/risk-mapping.*sha256/);
+  });
+
+  it('G6: a control text or resource url changed after the risk-mapping sign-off changes the hash and is refused', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    const cfgPath = join(dir, 'projectConfig.json');
+    write(cfgPath, { ...json(cfgPath), controlSuggestionsApproved: true });
+    const pl = signOffPayload(loadDir(dir), 'risk-mapping');
+    const f = json(join(dir, 'signoffs.json'));
+    f.records.push({ batch: 'risk-mapping', approver: 'Owner', at: AT, sha256: signOffHash(pl), items: signOffItems(pl) });
+    write(join(dir, 'signoffs.json'), f);
+    expect(check(dir)).toEqual([]);
+    const areasPath = join(dir, 'assessmentAreas.json');
+    const original = json(areasPath);
+    const used = original.controls.find((k: Json) => original.areas.some((a: Json) => (a.controls ?? []).includes(k.id)) && (k.resources ?? []).length > 0);
+    expect(used).toBeDefined();
+    for (const edit of [(k: Json) => { k.description += ' More.'; }, (k: Json) => { k.resources[0].url += '/x'; }, (k: Json) => { k.name += '!'; }]) {
+      const copy = JSON.parse(JSON.stringify(original));
+      edit(copy.controls.find((k: Json) => k.id === used.id));
+      write(areasPath, copy);
+      expect(signOffHash(signOffPayload(loadDir(dir), 'risk-mapping'))).not.toBe(signOffHash(pl));
+      expect(check(dir).join('\n')).toMatch(/risk-mapping.*sha256/);
+    }
+  });
+
+  it('G6: a version without the switch needs no risk-mapping record', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    expect(check(dir)).toEqual([]);
+    expect((json(join(dir, 'signoffs.json')).records as Json[]).some((r) => r.batch === 'risk-mapping')).toBe(false);
   });
 
   it('FR-CNT-01: the committed 5.0.0 starting files are valid without completeness', () => {

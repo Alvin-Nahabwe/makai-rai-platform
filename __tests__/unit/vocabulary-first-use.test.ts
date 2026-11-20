@@ -183,7 +183,7 @@ describe('firstUseViolations', () => {
 
   it('finds every first-use term of the vocabulary in a sentence that uses it', () => {
     const checked = Object.values(terms).filter((c) => c.defineOnFirstUse);
-    expect(checked).toHaveLength(26);
+    expect(checked).toHaveLength(27);
     for (const c of checked) {
       const role = (ROLE_IDS as readonly string[]).includes(c.id);
       const version = (DECISION_VERSION_IDS as readonly string[]).includes(c.id);

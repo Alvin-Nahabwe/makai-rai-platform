@@ -39,7 +39,7 @@ function snap(docType: DocumentSnapshot['documentType'], stage: Stage, s: Spec):
   const chosen: SealedStage = {
     stage,
     seal: {
-      sealId: 'seal-1', sealNumber: 1, reviewId: 'review-1', reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
+      kind: 'sealed', sealId: 'seal-1', sealNumber: 1, reviewId: 'review-1', reviewName: 'Review 1', fingerprint: 'c0ffee00'.repeat(8),
       sealedAt: '2026-11-01T09:30:15.000Z', sealedBy: user('Sealer S.'), sealedByRole: 'owner', enteredByPeople: 2,
     },
     preparedFor: null, manifest: { format: 'makrai.seal/1', content: { semver: '0.0.1-fixture', contentHash: 'h' }, decisions: [] } as never,
@@ -49,7 +49,7 @@ function snap(docType: DocumentSnapshot['documentType'], stage: Stage, s: Spec):
   const stages = Object.fromEntries(STAGES.map((x) => [x, x === stage ? chosen : null])) as DocumentSnapshot['stages'];
   const tombstones = new Map(s.erasedOn === undefined ? [] : [['mv-1', new Map([['what', s.erasedOn]])]]);
   return {
-    documentType: docType, reviewStage: stage, chosen, stages, contents: new Map([['cv1', content]]),
+    provenance: { kind: 'sealed' }, documentType: docType, reviewStage: stage, chosen, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: '2026-11-03',
     erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: tombstones, accepted_risks: new Map(), stage_reviews: new Map() },
   } as DocumentSnapshot;

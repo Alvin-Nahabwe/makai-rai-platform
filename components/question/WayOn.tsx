@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 import { QUESTION_COPY } from '@/lib/question/copy';
+import { stageEndHref } from '@/lib/question/stageEndHref';
 import type { Neighbour } from '@/components/question/neighbour';
 
 const Q = QUESTION_COPY;
@@ -18,6 +19,7 @@ export function WayOn({ next, stageHref }: { next: Pick<Neighbour, 'href' | 'tex
         ? <Link href={next.href}>{Q.foot.next(next.text)}</Link>
         : <span>{Q.foot.last}</span>}
       <Link href={stageHref}>{Q.nav.allQuestions}</Link>
+      {next === null ? <Link href={stageEndHref(stageHref)} prefetch={false}>{Q.end.link}</Link> : null}
     </p>
   );
 }

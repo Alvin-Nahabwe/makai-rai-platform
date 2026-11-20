@@ -42,7 +42,7 @@ function sealedStage(stage: Stage, n: number, decisions: Map<string, SealedDecis
   return {
     stage,
     seal: {
-      sealId: `seal-${stage}`, sealNumber: n, reviewId: `review-${stage}`, reviewName: `${stage} review 1`,
+      kind: 'sealed', sealId: `seal-${stage}`, sealNumber: n, reviewId: `review-${stage}`, reviewName: `${stage} review 1`,
       fingerprint: 'c0ffee00'.repeat(8), sealedAt: '2026-11-01T09:30:15.000Z', sealedBy: user('Sealer S.'), sealedByRole: role, enteredByPeople: 2,
     },
     preparedFor: null, manifest: {} as never, decisions, derived: new Map(), findings: [],
@@ -56,7 +56,7 @@ function snapshot(decisions: Record<string, Spec>, over: { metadata?: Record<str
   const stages = Object.fromEntries(STAGES.map((s, i) => [s, sealed.includes(s) ? sealedStage(s, i + 1, byStage.get(s) as Map<string, SealedDecision>, over.role ?? 'owner') : null])) as DocumentSnapshot['stages'];
   const reviewStage = over.reviewStage ?? 'pre-processing';
   return {
-    documentType: 'data_card', reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents: new Map([['cv1', content]]),
+    provenance: { kind: 'sealed' }, documentType: 'data_card', reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: over.metadata ?? {} }, organisationName: 'Org', today: '2026-11-05',
     erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map() },
   };

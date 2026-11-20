@@ -8,7 +8,7 @@ import type { LoadedContent, LoadedQuestion } from '@/types/content';
 import type { FieldMap, FieldMapEntry, FieldSource, RecordPart, SourceStage } from '@/types/documents';
 import type { SealManifestV1, SealRef } from '@/types/seal';
 import { loadContent, runningContent } from '@/lib/content/loader';
-import { controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup } from '@/lib/content/suggestions';
+import { controlSuggestionsOn, controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup } from '@/lib/content/suggestions';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { AppError } from '@/lib/http/errors';
 import { isOverdue } from '@/lib/followup/overdue';
@@ -18,10 +18,10 @@ import { PROJECT_FORM_COPY } from '@/lib/project/form/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import {
-  CLOSED_NO_LONGER_APPLIES, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
+  CLOSED_NO_LONGER_APPLIES, CONTROLS_AFTER_APPROVAL, ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, FINDING_CLOSED, GATE_DERIVED_NA, assignedToLine, closedByLine,
   noDecisionLine, checkAgainLine, decidedByLine, decidedInLine, decisionSource,
-  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
-  questionSource, reviewLineText, docTextErasedLine, utcSecond, wordsThenCode,
+  doneEvidenceLine, evidenceFileLine, fileErasedLine, findingOnQuestion, findingOnRemovedQuestion, findingStatusLine, formatUtcDay, fromQuestion, lastCheckNoteLine, outsideOtherBodyLine, outsideRoleLine, personalDataAnswerLine,
+  questionSource, reviewLineText, docTextErasedLine, draftReviewLine, utcSecond, wordsThenCode,
 } from './copy';
 import type { ResolvedField } from './render';
 
@@ -34,7 +34,7 @@ export {
   STATEMENT, SEALED_NOTE, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE, formatUtcDay, utcSecond,
 } from './copy';
 import {
-  NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE,
+  DRAFT_PROJECT_MARK, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, NOT_RECORDED_YET, NOT_SEALED, PROJECT_MARK, TYPED_AT_ISSUE, TYPED_MARK, NO_EVIDENCE,
 } from './copy';
 
 /** One decision version of a seal's manifest with the people, evidence and erasure marks of its row (contract G068, exact text). */
@@ -45,9 +45,21 @@ export interface SealedDecision {
 export interface SealedFinding {
   finding: FindingView; mitigations: MitigationVersionView[]; acceptedRisk: AcceptedRiskView | null; events: FindingEventView[];
 }
-export interface SealedStage {
+/** A stage as a seal holds it: the seal's own facts (G069). */
+export type StageSeal = SealRef & { kind: 'sealed'; fingerprint: string; sealedAt: UtcInstant; sealedBy: UserRef; sealedByRole: OrgRole; enteredByPeople: number };
+/** A review of a stage as a draft names it: never its seal, manifest or sealed answers (path to outputs, ADR 0023). */
+export interface DraftReviewRef { reviewId: string; reviewName: string }
+/**
+ * A stage as a draft holds it: its current answers at `takenAt`, in place of a seal (ADR 0023). `openReview` is the stage's review
+ * that is open and not sealed, if any; `lastSealedReview` the latest sealed one, if any. Both null: the stage has no review at all.
+ */
+export type StageDraft = {
+  kind: 'draft'; key: `draft:${Stage}`; takenAt: UtcInstant; enteredByPeople: number;
+  openReview: DraftReviewRef | null; lastSealedReview: DraftReviewRef | null;
+};
+export interface SnapshotStage {
   stage: Stage;
-  seal: SealRef & { fingerprint: string; sealedAt: UtcInstant; sealedBy: UserRef; sealedByRole: OrgRole; enteredByPeople: number };
+  seal: StageSeal | StageDraft;
   preparedFor: string | null;
   manifest: SealManifestV1;
   decisions: ReadonlyMap<string, SealedDecision>;   // question id -> the sealed current version (manifest entries carrying an id)
@@ -55,11 +67,30 @@ export interface SealedStage {
   derived: ReadonlyMap<string, string>;
   findings: readonly SealedFinding[];               // every finding of the manifest, its current mitigation versions and accepted risk
 }
+export type SealedStage = SnapshotStage & { seal: StageSeal };
+/**
+ * Where a snapshot's rows come from: seals (an issued document), or the current answers at `takenAt` (a draft; ADR 0023).
+ * `omittedAnswers` counts the current answers a draft left out because the running content no longer holds their question
+ * (conflict 23): the working report's page 1 is to print a line for them (Task 7), so nothing is dropped without a word.
+ */
+export type SnapshotProvenance =
+  | { kind: 'sealed' }
+  | {
+    kind: 'draft'; takenAt: UtcInstant; omittedAnswers: number;
+    /**
+     * Finding id -> its question's words in the content version its raising decision was recorded against, for each title-less
+     * shortfall finding whose question the running content no longer holds; null when that version is not listed or lacks the
+     * question (Task 6 fix I1). Such a finding prints from here, never from the running content, and is never dropped.
+     */
+    recordedQuestionWords: ReadonlyMap<string, string | null>;
+  };
 export interface DocumentSnapshot {
+  provenance: SnapshotProvenance;
   documentType: DocumentType;
   reviewStage: Stage;
-  chosen: SealedStage;
-  stages: Readonly<Record<Stage, SealedStage | null>>;   // stages[reviewStage] is chosen; null: that stage was never sealed (D3)
+  chosen: SnapshotStage;
+  /** stages[reviewStage] is chosen. Sealed: null means that stage was never sealed (D3). Draft: never null; a stage with no answers is empty. */
+  stages: Readonly<Record<Stage, SnapshotStage | null>>;
   contents: ReadonlyMap<string, LoadedContent>;         // by contentVersionId, every version a sealed decision was answered against
   project: { name: string; description: string | null; metadata: Readonly<Record<string, string | null>> };
   organisationName: string;
@@ -67,6 +98,10 @@ export interface DocumentSnapshot {
   /** The tombstones of the rows the snapshot holds: table -> row id -> erased field (digest name) -> the UTC date of its erasure. */
   erasures: Readonly<Record<'evidence' | 'findings' | 'mitigation_versions' | 'accepted_risks' | 'stage_reviews', ReadonlyMap<string, ReadonlyMap<string, CalendarDate>>>>;
 }
+/** The only snapshot the issue path takes (anti-goal 5: a draft is never issued). */
+export type SealedSnapshot = DocumentSnapshot & {
+  provenance: { kind: 'sealed' }; chosen: SealedStage; stages: Readonly<Record<Stage, SealedStage | null>>;
+};
 
 // ─── Field resolution (FR-DOC-02, FR-DOC-03, FR-DOC-05; SRS 10.3.1 D1 to D9) ─────────────────────────────────
 
@@ -74,14 +109,14 @@ export interface DocumentSnapshot {
 export const OTHER_COMPANIONS: Readonly<Record<string, string>> = { aiSystemType: 'aiSystemTypeOther', deploymentSector: 'deploymentSectorOther', datasetType: 'datasetTypeOther' };
 
 type RowRef = { sourceTable: string; sourceId: string; field: string | null };
-export interface ResolvedPart { text: string | null; provenance: string; sources: RowRef[]; sealIds: string[]; /** Decision versions whose extract this part printed. */ decisionIds: string[] }
+export interface ResolvedPart { text: string | null; provenance: string; sources: RowRef[]; /** The stages it read, by `stageKey`. */ stageKeys: string[]; /** Decision versions whose extract this part printed. */ decisionIds: string[] }
 export type SourceResolver<K extends FieldSource['kind']> = (
   source: Extract<FieldSource, { kind: K }>, snap: DocumentSnapshot, typed: Readonly<Record<string, string>>, entry: FieldMapEntry, seen: Map<string, string>,
 ) => ResolvedPart;
 
-const part = (p: Partial<ResolvedPart> = {}): ResolvedPart => ({ text: null, provenance: '', sources: [], sealIds: [], decisionIds: [], ...p });
+const part = (p: Partial<ResolvedPart> = {}): ResolvedPart => ({ text: null, provenance: '', sources: [], stageKeys: [], decisionIds: [], ...p });
 
-const STATUS_WORD: Readonly<Record<string, string>> = { done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' };
+export const STATUS_WORD: Readonly<Record<string, string>> = { done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' };
 const SCOPE_WORD: Readonly<Record<ScopeAnswer, string>> = { yes: 'Yes', no: 'No', not_sure: 'Not sure' };
 /** FR-DEC-01's outside roles (SRS line 737), first letter capitalised. */
 export const ROLE_LABEL: Readonly<Record<OutsideRole, string>> = {
@@ -107,7 +142,7 @@ function erasedAt(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasure
  * A text the row holds, else the SRS 7.5.6 line for erased text, else a thrown error: a null with no tombstone is a broken row, and
  * "erased" is never printed for a text that was not (silent-failure review H1, M8).
  */
-function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'], id: string, field: string, value: string | null): string {
+export function textOf(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'], id: string, field: string, value: string | null): string {
   if (value !== null) return value;
   const on = erasedAt(snap, table, id, field);
   if (on === null) throw new Error(`documents: ${table} ${id} has no ${field} and no tombstone for it`);
@@ -133,8 +168,61 @@ function runningQuestion(snap: DocumentSnapshot, questionId: string): LoadedQues
   return q;
 }
 
-function stageSource(stage: SourceStage, snap: DocumentSnapshot): SealedStage | null {
+function stageSource(stage: SourceStage, snap: DocumentSnapshot): SnapshotStage | null {
   return snap.stages[stage === 'review' ? snap.reviewStage : stage];
+}
+
+/** A stage's key in `ResolvedPart.stageKeys`: its seal's id, or `draft:<stage>`. */
+function stageKey(s: SnapshotStage): string {
+  switch (s.seal.kind) {
+    case 'sealed': return s.seal.sealId;
+    case 'draft': return s.seal.key;
+  }
+}
+
+/**
+ * The gap line of a stage a field reads, or null when the stage has rows to print (D3 as amended for drafts, ADR 0023). Sealed: a
+ * stage never sealed is null and reads `NOT_RECORDED_AT_ISSUE`. Draft: every stage is present, and one with no current decision,
+ * gate-derived entry or finding reads `NOT_RECORDED_YET`. A sealed stage with no decisions is not a gap: it prints as it always did.
+ */
+function stageGap(snap: DocumentSnapshot, s: SnapshotStage | null): string | null {
+  switch (snap.provenance.kind) {
+    case 'sealed': return s === null ? NOT_RECORDED_AT_ISSUE : null;
+    case 'draft':
+      if (s === null) throw new Error('documents: a draft snapshot holds every stage, and one is missing');
+      return s.decisions.size === 0 && s.derived.size === 0 && s.findings.length === 0 ? NOT_RECORDED_YET : null;
+  }
+}
+
+/** Whether the snapshot is a draft: the rules that differ for a draft (typed values, the typed gap) read this. */
+function isDraft(snap: DocumentSnapshot): boolean {
+  switch (snap.provenance.kind) {
+    case 'sealed': return false;
+    case 'draft': return true;
+  }
+}
+
+/** The line under a project value: the issued document's PROJECT_MARK, or in a draft one that never calls it a sealed record (anti-goal 1). */
+function projectMark(snap: DocumentSnapshot): string {
+  switch (snap.provenance.kind) {
+    case 'sealed': return PROJECT_MARK;
+    case 'draft': return DRAFT_PROJECT_MARK;
+  }
+}
+
+/** The gap lines: a field that prints one is not recorded (FR-DOC-08), and the line prints once in it. */
+const isGap = (t: string | null): boolean => t === NOT_RECORDED_AT_ISSUE || t === NOT_RECORDED_YET;
+
+/**
+ * Every stage of a snapshot comes from where its provenance says: a draft never holds a seal (it would read a seal's rows, ADR 0023),
+ * and a sealed snapshot never holds a draft stage (it would issue one, anti-goal 5). A snapshot that mixes them is a defect and throws.
+ */
+function assertOneProvenance(snap: DocumentSnapshot): void {
+  for (const s of [snap.chosen, ...STAGES.map((st) => snap.stages[st])]) {
+    if (s !== null && s.seal.kind !== snap.provenance.kind) {
+      throw new Error(`documents: a ${snap.provenance.kind} snapshot holds a ${s.seal.kind} stage (${s.stage}); its provenance is mixed`);
+    }
+  }
 }
 
 /**
@@ -195,7 +283,7 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 }
 
 /** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
-function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
+export function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
   const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
@@ -254,23 +342,24 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
 /** D1, D3, D4 in that order, then the extract. */
 function recordPart(questionId: string, parts: ReadonlySet<PartName>, option: string | undefined, snap: DocumentSnapshot, entry: FieldMapEntry, seen: Map<string, string>): ResolvedPart {
   const sealed = snap.stages[runningQuestion(snap, questionId).stage];
-  if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });                         // D3
-  const sealIds = [sealed.seal.sealId];
+  const gap = stageGap(snap, sealed);
+  if (gap !== null || sealed === null) return part({ text: gap });                            // D3, as amended for drafts
+  const stageKeys = [stageKey(sealed)];
   const d = sealed.decisions.get(questionId);
   const first = seen.get(questionId);
   const gate = sealed.derived.get(questionId);
   if (d === undefined && gate !== undefined) {
     // The gate answered "no": the seal records this question as not applicable because of it (SRS 7.5.6, FR-CNT-04).
-    if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });
+    if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, stageKeys });
     const from = [...sealed.decisions.values()].find((x) => x.row.id === gate);
     if (from === undefined) throw new Error(`documents: question ${questionId} is derived from decision version ${gate}, which the seal does not hold`);
-    return part({ text: GATE_DERIVED_NA, provenance: `${fromQuestion(from.row.questionId, from.row.versionNumber)}.`, sealIds });
+    return part({ text: GATE_DERIVED_NA, provenance: `${fromQuestion(from.row.questionId, from.row.versionNumber)}.`, stageKeys });
   }
-  if (d === undefined || d.row.status === 'withdrawn') return part({ sealIds });              // D1
-  if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, sealIds });   // D4, later field
+  if (d === undefined || d.row.status === 'withdrawn') return part({ stageKeys });            // D1
+  if (first !== undefined && first !== entry.fieldId) return part({ text: `See ${first}`, stageKeys });   // D4, later field
   const wholeDecision = first === entry.fieldId;                                              // D4, first field of several
   const e = extract(d, snap, wholeDecision ? ALL_PARTS : parts, wholeDecision ? undefined : option);
-  return { ...e, sealIds };
+  return { ...e, stageKeys };
 }
 
 // Project, typed and structured fields ----------------------------------------------------------------------
@@ -338,7 +427,7 @@ function areaText(snap: DocumentSnapshot, id: string | null): string {
  * content's words are printed:
  * the question's current wording, beside its code (lane 6 rows C1, C2). Any other failure to read content is a fault and is thrown.
  */
-function sealedQuestionWords(sealed: SealedStage, snap: DocumentSnapshot, questionId: string): string {
+function sealedQuestionWords(sealed: SnapshotStage, snap: DocumentSnapshot, questionId: string): string {
   // A stored seal's manifest always names its content (trustedManifest checks it); a snapshot built by hand may not, and reads as unlisted.
   const semver = (sealed.manifest as Partial<SealManifestV1>).content?.semver;
   let content: LoadedContent | null = null;
@@ -354,9 +443,19 @@ function sealedQuestionWords(sealed: SealedStage, snap: DocumentSnapshot, questi
  * A finding's title: a shortfall finding is raised with none, so it is named by its question's words and code (lane 6 rows C1, C2); a null on
  * any other is an erasure. `sealed` is the stage whose seal lists the finding.
  */
-function findingTitle(f: FindingView, sealed: SealedStage, snap: DocumentSnapshot): string {
+export function findingTitle(f: FindingView, sealed: SnapshotStage, snap: DocumentSnapshot): string {
   if (f.title !== null) return f.title;
-  if (f.source === 'shortfall' && f.questionId !== null) return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+  if (f.source === 'shortfall' && f.questionId !== null) {
+    switch (snap.provenance.kind) {
+      case 'sealed': return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+      case 'draft': {
+        // A draft's manifest names the running content, so a question it still holds reads as before (a moved one included).
+        if (running(snap).questions.has(f.questionId)) return findingOnQuestion(sealedQuestionWords(sealed, snap, f.questionId), f.questionId);
+        const words = snap.provenance.recordedQuestionWords.get(f.id) ?? null;
+        return words === null ? findingOnRemovedQuestion(f.questionId) : findingOnQuestion(words, f.questionId);
+      }
+    }
+  }
   return textOf(snap, 'findings', f.id, 'title', null);
 }
 
@@ -365,14 +464,14 @@ function findingTitle(f: FindingView, sealed: SealedStage, snap: DocumentSnapsho
  * status line says so (a real one closed it); the others are counted as "Closed", an item added only when there is one (the lane
  * lead's reading 5 of the coordinator's ruling of 14 November 2026), so a document with none prints what it always printed.
  */
-function findingCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+function findingCounts(sealed: SnapshotStage, snap: DocumentSnapshot): ResolvedPart {
   const words = sealed.findings.map((sf) => findingStateWord(sf, snap));
   const n = (w: string) => words.filter((x) => x === w).length;
   const byMitigation = FINDING_STATE_WORD.closed_mitigation;
   const closed = n(FINDING_CLOSED);
   return part({
     text: `Open findings: ${n(FINDING_STATE_WORD.open)}. Closed by a mitigation: ${n(byMitigation)}. Closed by an accepted risk: ${n(FINDING_STATE_WORD.closed_accepted_risk)}.${closed === 0 ? '' : ` ${FINDING_CLOSED}: ${closed}.`}`,
-    sealIds: [sealed.seal.sealId],
+    stageKeys: [stageKey(sealed)],
   });
 }
 
@@ -447,7 +546,8 @@ function closingLines(sf: SealedFinding, snap: DocumentSnapshot): string[] {
 
 function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, snap: DocumentSnapshot): ResolvedPart {
   const sealed = stageSource(source.stage, snap);
-  if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
+  const gap = stageGap(snap, sealed);
+  if (gap !== null || sealed === null) return part({ text: gap });
   if (source.filter === 'counts') return findingCounts(sealed, snap);
   const versions = new Map([...sealed.decisions.values()].map((d) => [d.row.id, d.row.versionNumber]));
   const wanted = (state: FindingView['state']): boolean => {
@@ -469,7 +569,7 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
       ...(source.filter === 'open' ? [`Raised on: ${formatUtcDay(f.raisedAt)}`] : []),
       findingStatusLine(findingStateWord(sf, snap)), ...closingLines(sf, snap)].join('\n');
   }).join('\n\n');
-  return part({ text, sources, sealIds: [sealed.seal.sealId] });
+  return part({ text, sources, stageKeys: [stageKey(sealed)] });
 }
 
 const MITIGATION_STATUS_WORD: Readonly<Record<string, string>> = { planned: 'Planned', in_progress: 'In progress', done: 'Done', cancelled: 'Cancelled' };
@@ -503,7 +603,7 @@ function mitigationLines(m: MitigationVersionView, snap: DocumentSnapshot, sourc
 }
 
 /** The current mitigation versions of the sealed stage, counted by status; those of withdrawn findings are not counted. */
-function mitigationCounts(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+function mitigationCounts(sealed: SnapshotStage, snap: DocumentSnapshot): ResolvedPart {
   const counted = sealed.findings.filter(({ finding }) => finding.state !== 'withdrawn');
   // A closing record is not a mitigation, so it is not counted (the coordinator's ruling of 14 November 2026).
   const all = counted.flatMap(({ finding, mitigations }) => mitigations.filter((m) => !isClosingRecord(m, snap)).map((m) => ({ m, state: finding.state })));
@@ -511,14 +611,14 @@ function mitigationCounts(sealed: SealedStage, snap: DocumentSnapshot): Resolved
   const overdue = all.filter(({ m, state }) => isOverdue({ status: m.status, dueDate: m.dueDate }, state, snap.today)).length;
   return part({
     text: `Mitigations planned: ${n('planned')}, in progress: ${n('in_progress')}, done: ${n('done')}, cancelled: ${n('cancelled')}, overdue: ${overdue}.`,
-    sealIds: [sealed.seal.sealId],
+    stageKeys: [stageKey(sealed)],
   });
 }
 
 /** MP-03: each open finding's mitigations, from the sealed manifest's versions (NFR-INT-10); nothing when no finding is open. */
-function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): ResolvedPart {
+function currentMitigations(sealed: SnapshotStage, snap: DocumentSnapshot): ResolvedPart {
   const open = sealed.findings.filter(({ finding }) => finding.state === 'open');
-  if (open.length === 0) return part({ sealIds: [sealed.seal.sealId] });
+  if (open.length === 0) return part({ stageKeys: [stageKey(sealed)] });
   const sources: RowRef[] = [];
   const text = open.map(({ finding, mitigations }, i) => {
     sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
@@ -532,12 +632,13 @@ function currentMitigations(sealed: SealedStage, snap: DocumentSnapshot): Resolv
     });
     return [`${i + 1}. ${findingTitle(finding, sealed, snap)}`, ...(blocks.length === 0 ? ['Mitigations: None'] : blocks)].join('\n');
   }).join('\n\n');
-  return part({ text, sources, sealIds: [sealed.seal.sealId] });
+  return part({ text, sources, stageKeys: [stageKey(sealed)] });
 }
 
 function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }>, snap: DocumentSnapshot): ResolvedPart {
   const sealed = stageSource(source.stage, snap);
-  if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
+  const gap = stageGap(snap, sealed);
+  if (gap !== null || sealed === null) return part({ text: gap });
   if (source.filter === 'counts') return mitigationCounts(sealed, snap);
   if (source.filter === 'current') return currentMitigations(sealed, snap);
   // A mitigation plan lists the done mitigations of the findings it calls closed by a mitigation, each with its finding; the cards list every done one.
@@ -549,7 +650,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
   const sources: RowRef[] = listed.filter(({ m }) => isClosingRecord(m, snap)).map(({ m }) => ({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'what' }));
   const done = listed.filter(({ m }) => !isClosingRecord(m, snap));
   // The plan's findings list above already says None or holds the findings; an empty list under the same field prints nothing.
-  if (done.length === 0 && plan) return part({ sources, sealIds: [sealed.seal.sealId] });
+  if (done.length === 0 && plan) return part({ sources, stageKeys: [stageKey(sealed)] });
   const text = done.length === 0 ? NONE : done.map(({ finding, m }, i) => {
     const [what, ...rest] = mitigationLines(m, snap, sources);
     const lines = [`${i + 1}. ${what}`, ...(plan ? [`Finding: ${findingTitle(finding, sealed, snap)}`] : []), ...rest];
@@ -564,12 +665,13 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
     }
     return lines.join('\n');
   }).join('\n\n');
-  return part({ text, sources, sealIds: [sealed.seal.sealId] });
+  return part({ text, sources, stageKeys: [stageKey(sealed)] });
 }
 
 function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_risks' }>, snap: DocumentSnapshot): ResolvedPart {
   const sealed = stageSource(source.stage, snap);
-  if (sealed === null) return part({ text: NOT_RECORDED_AT_ISSUE });
+  const gap = stageGap(snap, sealed);
+  if (gap !== null || sealed === null) return part({ text: gap });
   const risks = sealed.findings.filter((f) => f.acceptedRisk !== null);
   const sources: RowRef[] = [];
   const text = risks.length === 0 ? NONE : risks.map(({ finding, acceptedRisk }, i) => {
@@ -589,27 +691,43 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
     }
     return lines.join('\n');
   }).join('\n\n');
-  return part({ text, sources, sealIds: [sealed.seal.sealId] });
+  return part({ text, sources, stageKeys: [stageKey(sealed)] });
 }
 
 // Meta -------------------------------------------------------------------------------------------------------
 
-/** The chosen seal first, then the other sealed stages in STAGES order (G069). */
-function sealsOf(snap: DocumentSnapshot): SealedStage[] {
-  return [snap.chosen, ...STAGES.filter((s) => s !== snap.reviewStage).flatMap((s) => (snap.stages[s] === null ? [] : [snap.stages[s] as SealedStage]))];
+/** The chosen stage first, then the other stages present in STAGES order (G069): the seals of an issued document. */
+function sealsOf(snap: DocumentSnapshot): SnapshotStage[] {
+  return [snap.chosen, ...STAGES.filter((s) => s !== snap.reviewStage).flatMap((s) => { const st = snap.stages[s]; return st === null ? [] : [st]; })];
 }
 
-function sealLine(s: SealedStage): string {
-  const at = utcSecond(s.seal.sealedAt);
-  const n = s.seal.enteredByPeople;
-  return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${word(REVIEW_COPY.roleWords, s.seal.sealedByRole, 'role')}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
+/** The seal of a stage of a sealed snapshot; a draft stage there is a mixed provenance, refused by `assertOneProvenance`. */
+function sealOf(s: SnapshotStage): StageSeal {
+  switch (s.seal.kind) {
+    case 'sealed': return s.seal;
+    case 'draft': throw new Error(`documents: the ${s.stage} stage is a draft and has no seal`);
+  }
+}
+
+function sealLine(seal: StageSeal): string {
+  const at = utcSecond(seal.sealedAt);
+  const n = seal.enteredByPeople;
+  return `Seal ${seal.sealNumber} of ${seal.reviewName}: sealed ${at} by ${seal.sealedBy.name} (${word(REVIEW_COPY.roleWords, seal.sealedByRole, 'role')}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(seal.fingerprint, 'full')}`;
+}
+
+/** The seals field: each seal the document used, or in a draft `NOT_SEALED` (MP-10, DC-33, MC-31) with no fingerprint or stage key (design §7). */
+function sealsPart(snap: DocumentSnapshot): ResolvedPart {
+  switch (snap.provenance.kind) {
+    case 'sealed': {
+      const seals = sealsOf(snap).map(sealOf);
+      return part({ text: seals.map(sealLine).join('\n'), stageKeys: seals.map((x) => x.sealId) });
+    }
+    case 'draft': return part({ text: NOT_SEALED });
+  }
 }
 
 function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: DocumentSnapshot): ResolvedPart {
-  if (source.item === 'seals') {
-    const seals = sealsOf(snap);
-    return part({ text: seals.map(sealLine).join('\n'), sealIds: seals.map((s) => s.seal.sealId) });
-  }
+  if (source.item === 'seals') return sealsPart(snap);
   if (source.item === 'deciders') {
     const names = new Set<string>();
     for (const s of sealsOf(snap)) for (const d of s.decisions.values()) { const who = deciderText(d); if (who !== null) names.add(who); }
@@ -622,14 +740,25 @@ function resolveMeta(source: Extract<FieldSource, { kind: 'meta' }>, snap: Docum
 
 /**
  * MP-01: the stage, the review's name and its "Prepared for" note, which is omitted when empty (SRS 10.3.4). A note the operator erased
- * prints the SRS 7.5.6 erasure line in its place (the snapshot holds it as null with a tombstone on the review).
+ * prints the SRS 7.5.6 erasure line in its place (the snapshot holds it as null with a tombstone on the review). A draft names the
+ * stage's review and its state, never its seal: open and not sealed, the last one sealed, or none (ADR 0023; rulings 8, O2).
  */
-function reviewLine(s: SealedStage, snap: DocumentSnapshot): ResolvedPart {
-  const erasedOn = erasedAt(snap, 'stage_reviews', s.seal.reviewId, 'preparedFor');
-  const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? docTextErasedLine(erasedOn) : null;
-  // The note is team text that an operator may erase, so its row is a source of this document (D13).
-  const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: s.seal.reviewId, field: 'preparedFor' }];
-  return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], s.seal.reviewName, note), sources, sealIds: [s.seal.sealId] });
+function reviewLine(s: SnapshotStage, snap: DocumentSnapshot): ResolvedPart {
+  const seal = s.seal;
+  switch (seal.kind) {
+    case 'sealed': {
+      const erasedOn = erasedAt(snap, 'stage_reviews', seal.reviewId, 'preparedFor');
+      const note = s.preparedFor !== null && s.preparedFor.trim() !== '' ? s.preparedFor : erasedOn !== null ? docTextErasedLine(erasedOn) : null;
+      // The note is team text that an operator may erase, so its row is a source of this document (D13).
+      const sources: RowRef[] = note === null ? [] : [{ sourceTable: 'stage_reviews', sourceId: seal.reviewId, field: 'preparedFor' }];
+      return part({ text: reviewLineText(FINDINGS_COPY.stages[s.stage], seal.reviewName, note), sources, stageKeys: [seal.sealId] });
+    }
+    case 'draft':
+      return part({
+        text: draftReviewLine(FINDINGS_COPY.stages[s.stage], seal.openReview?.reviewName ?? null, seal.lastSealedReview?.reviewName ?? null),
+        stageKeys: [seal.key],
+      });
+  }
 }
 
 /** MP-07: the chosen seal's questions that hold no decision, each with its stem from the content the seal was made on (as MP-04 reads it). */
@@ -642,7 +771,7 @@ function noDecisionList(snap: DocumentSnapshot): ResolvedPart {
     if (text === undefined) throw new Error(`documents: question ${q} is not in content ${s.manifest.content.semver}`);
     return text;
   };
-  return part({ text: ids.length === 0 ? NONE : ids.map((q) => `${q}: ${stem(q)}`).join('\n'), sealIds: [s.seal.sealId] });
+  return part({ text: ids.length === 0 ? NONE : ids.map((q) => `${q}: ${stem(q)}`).join('\n'), stageKeys: [stageKey(s)] });
 }
 
 /** MP-08: the chosen seal's not applicable questions with the code's label and the reason, then those the scope answer made not applicable (SRS 7.5.6). */
@@ -666,20 +795,35 @@ function notApplicableList(snap: DocumentSnapshot): ResolvedPart {
     provenance.push(`${fromQuestion(from.row.questionId, from.row.versionNumber)}.`);
   }
   return part({
-    text: lines.length === 0 ? NONE : lines.join('\n'), provenance: provenance.join('\n'), sources, sealIds: [s.seal.sealId],
+    text: lines.length === 0 ? NONE : lines.join('\n'), provenance: provenance.join('\n'), sources, stageKeys: [stageKey(s)],
     decisionIds: decided.map((d) => d.row.id),
   });
 }
 
 /**
+ * The content MP-04 reads its controls from, or null when it may suggest none. An issued plan reads the content its seal was made on,
+ * as it always has. A draft reads the running content, and only once experts have approved its mapping (anti-goal 3; Task 3's switch).
+ */
+function controlsContent(snap: DocumentSnapshot): LoadedContent | null {
+  switch (snap.provenance.kind) {
+    case 'sealed': return loadContent(snap.chosen.manifest.content.semver);
+    case 'draft': {
+      const c = running(snap);
+      return controlSuggestionsOn(c) ? c : null;
+    }
+  }
+}
+
+/**
  * MP-04: the controls the framework suggests for the risk areas of each open finding, read from the content the seal was made on
- * (SRS 10.3.4). A finding with a risk area lists that area's controls. One without, but on a question (every finding raised from a
+ * (SRS 10.3.4), or in a draft from the running content once its mapping is approved. A finding with a risk area lists that area's controls. One without, but on a question (every finding raised from a
  * decision, FR-FND-01), lists its question's risk areas and the controls they reach: the set its question page suggests, every
  * control once (FR-SUG-01; workshop walk 2, N3). A finding with neither is not listed.
  */
 function mappedControls(snap: DocumentSnapshot): ResolvedPart {
   const s = snap.chosen;
-  const c = loadContent(s.manifest.content.semver);
+  const c = controlsContent(snap);
+  if (c === null) return part({ text: CONTROLS_AFTER_APPROVAL, stageKeys: [stageKey(s)] });
   const sources: RowRef[] = [];
   const listed = ({ finding }: SealedFinding) => finding.state === 'open' && (finding.riskArea !== null || finding.questionId !== null);
   const blocks = s.findings.filter(listed).map(({ finding }) => {
@@ -695,7 +839,7 @@ function mappedControls(snap: DocumentSnapshot): ResolvedPart {
     return [findingTitle(finding, s, snap), `Risk areas of question ${q}: ${listOf(areas)}`, `Controls: ${listOf(names([...first, ...rest]))}`];
   });
   const text = blocks.length === 0 ? NONE : blocks.map((b, i) => [`${i + 1}. ${b[0]}`, ...b.slice(1)].join('\n')).join('\n\n');
-  return part({ text, sources, sealIds: [s.seal.sealId] });
+  return part({ text, sources, stageKeys: [stageKey(s)] });
 }
 
 export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> } = {
@@ -703,7 +847,7 @@ export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> }
   record_option: (s, snap, _typed, entry, seen) => recordPart(s.questionId, new Set<PartName>(['reason', 'options']), s.option, snap, entry, seen),
   project: (s, snap) => {
     const v = projectValue(snap, s.field);
-    return v === null || v.trim() === '' ? part() : part({ text: `${v}\n${PROJECT_MARK}` });
+    return v === null || v.trim() === '' ? part() : part({ text: `${v}\n${projectMark(snap)}` });
   },
   typed: (s, _snap, typed, entry) => typedPart(entry, s.structured, typed),
   findings: (s, snap) => resolveFindings(s, snap),
@@ -718,40 +862,46 @@ export const SOURCE_RESOLVERS: { [K in FieldSource['kind']]: SourceResolver<K> }
 const rowKey = (r: RowRef) => `${r.sourceTable}|${r.sourceId}|${r.field ?? ''}`;
 const isDeferred = (s: FieldSource) => s.kind === 'meta' && (s.item === 'seals' || s.item === 'deciders');
 
-/** The snapshot as the seals and deciders fields see it: only the seals the other fields read, and only the decisions they printed. */
-function narrowed(snap: DocumentSnapshot, usedSeals: ReadonlySet<string>, printed: ReadonlySet<string>): DocumentSnapshot {
-  const keep = (s: SealedStage | null): SealedStage | null => {
-    if (s === null || (s.seal.sealId !== snap.chosen.seal.sealId && !usedSeals.has(s.seal.sealId))) return null;
+/** The snapshot as the seals and deciders fields see it: only the stages the other fields read, and only the decisions they printed. */
+function narrowed(snap: DocumentSnapshot, used: ReadonlySet<string>, printed: ReadonlySet<string>): DocumentSnapshot {
+  const chosenKey = stageKey(snap.chosen);
+  const keep = (s: SnapshotStage | null): SnapshotStage | null => {
+    if (s === null || (stageKey(s) !== chosenKey && !used.has(stageKey(s)))) return null;
     return { ...s, decisions: new Map([...s.decisions].filter(([, d]) => printed.has(d.row.id))) };
   };
   const stages = Object.fromEntries(STAGES.map((s) => [s, keep(snap.stages[s])])) as DocumentSnapshot['stages'];
-  return { ...snap, stages, chosen: stages[snap.reviewStage] as SealedStage };
+  return { ...snap, stages, chosen: stages[snap.reviewStage] as SnapshotStage };
 }
 
 /**
  * Fills a field map from a snapshot and the team's typed values (FR-DOC-02). The `seen` map is filled once, before any resolver
  * runs: a question that more than one entry of the map names is printed whole in the first of them in map order and as
  * `See <that id>` in the rest (D4). The seals and deciders fields run last, over the seals the other fields read and the decisions
- * they printed, because they list what the document used. `sealIds` is the chosen seal first, then the others in STAGES order.
+ * they printed, because they list what the document used. `sealIds` is the chosen seal first, then the others in STAGES order; a
+ * draft has none. A draft never reads the typed values (ADR 0023): a typed source with no value beside it prints `TYPED_AT_ISSUE`,
+ * and a typed addition resolves as the issued field does with nothing typed.
  */
 export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Readonly<Record<string, string>>): {
   fields: ResolvedField[]; notRecordedFields: string[]; typedFieldIds: string[];
   sources: Array<{ sourceTable: string; sourceId: string; field: string | null }>; sealIds: string[];
 } {
+  assertOneProvenance(snap);
+  const draft = isDraft(snap);
+  const values: Readonly<Record<string, string>> = draft ? {} : typed;
   const named = new Map<string, string[]>();
   for (const e of map.fields) {
     for (const q of new Set(e.sources.flatMap((s) => (s.kind === 'record' || s.kind === 'record_option' ? [s.questionId] : [])))) named.set(q, [...(named.get(q) ?? []), e.fieldId]);
   }
   const seen = new Map<string, string>([...named].filter(([, ids]) => ids.length > 1).map(([q, ids]) => [q, ids[0]]));
 
-  const parts = map.fields.map((e) => e.sources.map((s) => (isDeferred(s) ? null : SOURCE_RESOLVERS[s.kind as 'record'](s as never, snap, typed, e, seen))));
-  const typedAdditions = map.fields.map((e) => (e.typedAddition ? typedPart(e, undefined, typed) : null));
+  const parts = map.fields.map((e) => e.sources.map((s) => (isDeferred(s) ? null : SOURCE_RESOLVERS[s.kind as 'record'](s as never, snap, values, e, seen))));
+  const typedAdditions = map.fields.map((e) => (e.typedAddition ? typedPart(e, undefined, values) : null));
 
-  const usedSeals = new Set(parts.flat().flatMap((p) => p?.sealIds ?? []));
+  const usedStages = new Set(parts.flat().flatMap((p) => p?.stageKeys ?? []));
   const printed = new Set(parts.flat().flatMap((p) => p?.decisionIds ?? []));
-  const narrow = narrowed(snap, usedSeals, printed);
+  const narrow = narrowed(snap, usedStages, printed);
   map.fields.forEach((e, i) => e.sources.forEach((s, j) => {
-    if (isDeferred(s)) parts[i][j] = SOURCE_RESOLVERS.meta(s as Extract<FieldSource, { kind: 'meta' }>, narrow, typed, e, seen);
+    if (isDeferred(s)) parts[i][j] = SOURCE_RESOLVERS.meta(s as Extract<FieldSource, { kind: 'meta' }>, narrow, values, e, seen);
   }));
 
   const sources = new Map<string, RowRef>();
@@ -766,27 +916,29 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
     ];
     // A "place" part stands for one thing of the record or the project; the others (findings, mitigations, meta, mapping) print as they are.
     const isPlace = (s: { kind: string }) => s.kind === 'record' || s.kind === 'record_option' || s.kind === 'project' || s.kind === 'typed';
-    const isValue = (p: ResolvedPart) => p.text !== null && p.text !== NOT_RECORDED_AT_ISSUE;
+    const isValue = (p: ResolvedPart) => p.text !== null && !isGap(p.text);
     const places = slots.filter((s) => isPlace(s.source));
     // The owner's decision of 14 November 2026 (walk finding S1), for a field with several parts: beside a value, an empty typed or
     // project part prints nothing and a question with no decision prints the sentence naming it; with no value in any place part,
     // the place parts print "Not recorded" once (or the never-sealed line once, in its stead). A single part is printed as it is.
+    // In a draft, a field with a typed source and no value prints TYPED_AT_ISSUE once in their stead, the typed part alone or not.
     const several = all.length > 1;
+    const typedPending = draft && e.sources.some((x) => x.kind === 'typed');
     const hasValue = places.some((s) => isValue(s.p));
     const firstPlace = places.length === 0 ? null : places[0];
-    const placeGap = places.some((s) => s.p.text === NOT_RECORDED_AT_ISSUE) ? NOT_RECORDED_AT_ISSUE : NOT_RECORDED;
+    const placeGap = typedPending ? TYPED_AT_ISSUE : places.find((s) => isGap(s.p.text))?.p.text ?? NOT_RECORDED;
     if (places.length > 0 && !hasValue) incomplete.add(e.fieldId);
-    let atIssue = false;
-    // The never-sealed line prints once in a field, whichever part brings it.
+    let gapPrinted = false;
+    // A gap line (never sealed, or not recorded yet) prints once in a field, whichever part brings it.
     const once = (t: string): string[] => {
-      if (t !== NOT_RECORDED_AT_ISSUE) return [t];
-      if (atIssue) return [];
-      atIssue = true;
+      if (!isGap(t)) return [t];
+      if (gapPrinted) return [];
+      gapPrinted = true;
       return [t];
     };
     const texts = slots.flatMap((slot): string[] => {
       const { p, source } = slot;
-      if (several && isPlace(source) && !hasValue) return slot === firstPlace ? once(placeGap) : [];
+      if ((several || typedPending) && isPlace(source) && !hasValue) return slot === firstPlace ? once(placeGap) : [];
       if (p.text === null) {
         if (!several || !isPlace(source)) return [];
         if (source.kind === 'record' || source.kind === 'record_option') { incomplete.add(e.fieldId); return [noDecisionLine(source.questionId)]; }
@@ -794,7 +946,7 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
       }
       return once(p.text);
     });
-    if (texts.includes(NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
+    if (texts.some(isGap)) incomplete.add(e.fieldId);
     for (const p of all) for (const r of p.sources) sources.set(rowKey(r), r);
     return {
       fieldId: e.fieldId, label: e.label, section: e.section, text: texts.length === 0 ? null : texts.join('\n'),
@@ -802,10 +954,15 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
     };
   });
 
-  const sealIds = sealsOf(narrow).map((s) => s.seal.sealId);
+  const sealIds = sealsOf(narrow).flatMap((s) => {
+    switch (s.seal.kind) {
+      case 'sealed': return [s.seal.sealId];
+      case 'draft': return [];
+    }
+  });
   return {
     fields,
-    notRecordedFields: fields.filter((f) => f.text === null || f.text === NOT_RECORDED_AT_ISSUE || incomplete.has(f.fieldId)).map((f) => f.fieldId),
+    notRecordedFields: fields.filter((f) => f.text === null || isGap(f.text) || incomplete.has(f.fieldId)).map((f) => f.fieldId),
     typedFieldIds: typedEntries(map).map((e) => e.fieldId),
     sources: [...sources.values()], sealIds,
   };

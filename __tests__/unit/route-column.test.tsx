@@ -29,7 +29,7 @@ const KIND_MARK: Record<StageRow['kind'], StatusMarkKind> = {
 const data = (rows: StageRow[], over: Partial<StagePageData> = {}): StagePageData => ({
   orgSlug: 'org-a', orgId: 'o1', projectId: 'p1', projectName: 'Project A', projectArchived: false, stage: 'pre-processing', viewerId: 'u1',
   rows, nothingRecorded: false, changed: null, review: null, followUp: { openFindings: 0, overdueMitigations: 0 },
-  marks: Object.fromEntries(rows.map((r) => [r.questionId, KIND_MARK[r.kind]])), scopeAnswer: null, ...over,
+  marks: Object.fromEntries(rows.map((r) => [r.questionId, KIND_MARK[r.kind]])), scopeAnswer: null, sealStep: { kind: 'hidden' }, ...over,
 });
 
 const ROWS = [
