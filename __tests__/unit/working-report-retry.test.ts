@@ -91,3 +91,52 @@ describe('workingReportPdf: contention in the read answers report_busy', () => {
     await withStubLanes(() => expect(workingReportPdf(ctx, actor, 'p', 'all')).rejects.toBe(other));
   });
 });
+
+/**
+ * Fix round 1 (fix wave review I1): three conditions answer 503 `report_busy`, and the one log line toResponse writes must still say
+ * which: `queue` (the limiter shed it), `serialization` (a second 40001) or `tx_timeout` (Prisma P2028). A fixed word only: no message
+ * and no stack of the underlying error reaches the line.
+ */
+describe('report_busy keeps its cause in the log line', () => {
+  const LANES = Symbol.for('makrai.workingReportPdf.lanes');
+  const store = globalThis as unknown as Record<symbol, unknown>;
+  async function loggedFor(fail: unknown[] | 'queue'): Promise<{ line: Record<string, unknown>; raw: string }> {
+    const saved = store[LANES];
+    const { createLimiter } = await import('@/lib/concurrency/limiter');
+    const { toResponse } = await import('@/lib/http/toResponse');
+    const limiter = createLimiter(1, { maxWaiting: 0 });
+    let release = () => {};
+    if (fail === 'queue') void limiter.run(() => new Promise<void>((r) => { release = r; }));
+    else failures = fail;
+    store[LANES] = { limiter, pool: { render: async () => Buffer.from('%PDF-'), close: async () => {} } };
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+    try {
+      const e = await workingReportPdf(ctx, actor, 'p', 'all').then(() => null, (err: unknown) => err);
+      expect(e).toBeInstanceOf(WorkingReportBusyError);
+      const res = toResponse(e);
+      expect([res.status, (await res.json()).code]).toEqual([503, 'report_busy']);
+    } finally {
+      spy.mockRestore();
+      release();
+      store[LANES] = saved;
+    }
+    const raw = lines.find((l) => l.includes('REQUEST_FAILED'))!;
+    return { line: JSON.parse(raw), raw };
+  }
+
+  it('queue: the limiter shed the download', async () => {
+    const { line } = await loggedFor('queue');
+    expect(line).toMatchObject({ status: 503, code: 'report_busy', cause: 'queue' });
+  });
+  it('serialization: a second serialisation failure, with no message or stack in the line', async () => {
+    const { line, raw } = await loggedFor([serialisation(), serialisation()]);
+    expect(line).toMatchObject({ status: 503, code: 'report_busy', cause: 'serialization' });
+    expect(raw).not.toMatch(/could not serialize|stack|at /);
+  });
+  it('tx_timeout: a transaction that could not start or expired (P2028), with no message or stack in the line', async () => {
+    const { line, raw } = await loggedFor([Object.assign(new Error('Transaction API error: secret'), { code: 'P2028' })]);
+    expect(line).toMatchObject({ status: 503, code: 'report_busy', cause: 'tx_timeout' });
+    expect(raw).not.toMatch(/Transaction API|secret|stack|at /);
+  });
+});

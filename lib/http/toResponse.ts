@@ -102,7 +102,9 @@ export function toResponse(e: unknown): NextResponse {
     // the same reason (round 9c): the value in the body is the one in the log line, whatever a caller passed.
     if (e.status >= 500) {
       const reference = stampReference(e);
-      logRequestFailure({ reference, status: e.status, code: e.code });
+      // `logCause`: a fixed word a subclass may carry for the log line only (logRequestFailure keeps it only where it allows it).
+      const logCause = (e as { logCause?: unknown }).logCause;
+      logRequestFailure({ reference, status: e.status, code: e.code, cause: typeof logCause === 'string' ? logCause : undefined });
       return NextResponse.json({ ...e.extra, error: e.message, code: e.code, reference }, { status: e.status });
     }
     return NextResponse.json({ ...e.extra, error: e.message, code: e.code }, { status: e.status });

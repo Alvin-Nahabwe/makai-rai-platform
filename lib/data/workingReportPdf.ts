@@ -35,9 +35,14 @@ export { WORKING_REPORT_BUSY_MESSAGE, PART_MESSAGE } from '@/lib/documents/copy'
 import { WORKING_REPORT_BUSY_MESSAGE, PART_MESSAGE } from '@/lib/documents/copy';
 
 /** 503 `report_busy`: no render lane came free in time, or too many downloads were already waiting. The route adds `Retry-After`. */
+export type WorkingReportBusyCause = 'queue' | 'serialization' | 'tx_timeout';
 export class WorkingReportBusyError extends AppError {
   readonly retryAfterSeconds = WORKING_REPORT_QUEUE.retryAfterSeconds;
-  constructor() {
+  /**
+   * Which condition shed the download, for the REQUEST_FAILED line only (fix wave review I1): `queue` (the limiter: queue full or the
+   * 25 s wait), `serialization` (a second 40001) or `tx_timeout` (Prisma P2028). The body and status are the same for all three.
+   */
+  constructor(readonly logCause: WorkingReportBusyCause) {
     super(503, 'report_busy', WORKING_REPORT_BUSY_MESSAGE, { retryAfterSeconds: WORKING_REPORT_QUEUE.retryAfterSeconds });
   }
 }
@@ -85,7 +90,9 @@ export async function workingReportPdf(
     // A full queue, a second serialisation failure of the read (readWorkingReport retries the first), or a transaction that could
     // not start or ran out of time (P2028) is contention under a burst, not a bug: "try again", never the generic 500 (fix wave
     // item 15; silent-failure audit M4).
-    if (e instanceof LimiterRefusedError || isSerializationFailure(e) || isTransactionTimeout(e)) throw new WorkingReportBusyError();
+    if (e instanceof LimiterRefusedError) throw new WorkingReportBusyError('queue');
+    if (isSerializationFailure(e)) throw new WorkingReportBusyError('serialization');
+    if (isTransactionTimeout(e)) throw new WorkingReportBusyError('tx_timeout');
     throw e;
   }
 
