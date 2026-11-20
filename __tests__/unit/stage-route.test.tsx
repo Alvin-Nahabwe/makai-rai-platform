@@ -207,7 +207,7 @@ describe('All questions: the page\'s head', () => {
       if (b.includes('ui-term-tip')) expect(b).toMatch(/(<span class="stage-route__keep">[^<\s]+|\u00a0[^<\s]+<\/span>)<span class="ui-term-tip">/);
     }
     expect(items[3]).toMatch(/<span data-term="[^"]+"><span class="stage-route__keep stage-route__lead">[\s\S]*?1\u00a0personal<\/span><\/span> data question <span class="stage-route__keep">answered<span class="ui-term-tip">/);
-    const css = readFileSync('components/question/stage-route.css', 'utf8');
+    const css = readFileSync('components/question/stage-tally.css', 'utf8');
     expect(css).toMatch(/\.stage-route__keep\s*\{[^}]*white-space:\s*nowrap;/);
     expect(css).not.toMatch(/\.stage-route__tally-head/);
   });

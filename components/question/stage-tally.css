@@ -1,0 +1,57 @@
+/* A stage's tally in words (components/question/StageTally.tsx), on the stage page (S-11) and the stage's end screen (design G3).
+   The class names stay the stage page's (stage-route__*). The rules live here, imported by StageTally alone, so stage-route.css
+   keeps the importers it shares with route-line.css and the question page (S-12) still loads the two as one CSS chunk. */
+
+/* The tally: the count, then each kind with its mark (spec 7.2), as the sketch's top strip draws it. The mark's colour is
+   the marks' own (--color-mark), so each part is a status in words beside its shape. */
+.stage-route__tally {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  margin-block: var(--space-4) 0;
+  padding-block: var(--space-3);
+  border-block: 1px solid var(--color-border-container);
+}
+
+.stage-route__count {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.stage-route__tally-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An item's words wrap where they must (reflow at 320 px, fix round 3, S3-N1); what must not part is kept together: the
+   mark with its count (and, by a no-break space, the first word), and the last word with its (i). */
+.stage-route__tally-part {
+  min-inline-size: 0;
+}
+
+.stage-route__keep {
+  white-space: nowrap;
+}
+
+.stage-route__keep .ui-term-tip {
+  vertical-align: middle;
+}
+
+.stage-route__lead {
+  color: var(--color-mark);
+}
+
+.stage-route__lead .ui-mark__shape {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-inline-end: 6px;
+}
+
+.stage-route__words {
+  color: var(--color-ink);
+}

@@ -11,7 +11,7 @@ import type { DefinedEntry } from '@/lib/vocabulary/types';
 import {
   TERM_DONE, TERM_DOES_NOT_APPLY, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION,
 } from '@/lib/vocabulary/terms';
-import './stage-route.css';
+import './stage-tally.css';
 
 /** The words of the question page's strip (its tips' names and the personal data question's tally words). */
 const FR = QUESTION_COPY.frame;
