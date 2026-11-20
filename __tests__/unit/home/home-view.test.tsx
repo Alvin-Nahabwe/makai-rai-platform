@@ -329,6 +329,18 @@ describe('reviewer, viewer, first visit (spec 9.1, review M13, T9.5)', () => {
     expect(HOME_COPY.whatYouGet).toBe('Answer the questions that apply. At any point you can open a working report: next steps by risk area, plus draft data card, model card and mitigation plan. About 5 minutes a question.');
   });
 
+  it('final review M3 (fix wave item 12): the first visit\'s G5 line marks "working report" and "risk area" at their first use, as the project page does', async () => {
+    const { firstUseProblems } = await import('../../helpers/firstUseHtml');
+    for (const [role, canCreate] of [['owner', true], ['viewer', false]] as const) {
+      const h = home(firstTime(role, canCreate));
+      for (const id of ['working-report', 'risk-area']) {
+        expect(h, `${role}: ${id} is marked`).toContain(`data-term="${id}"`);
+        expect(h, `${role}: ${id} is defined beside it`).toContain(`data-definition="${id}"`);
+      }
+      expect(firstUseProblems(h).filter((p) => p.id === 'working-report' || p.id === 'risk-area')).toEqual([]);
+    }
+  });
+
   it('an organisation with only archived projects is told where they are, not that it has none (B#31)', () => {
     const h = home(firstTime('owner', true, { archivedCount: 2 }));
     expect(textOf(h)).toContain(HOME_COPY.noActiveProjects);
