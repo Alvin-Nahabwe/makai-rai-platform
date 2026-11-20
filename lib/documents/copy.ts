@@ -37,7 +37,8 @@ export const DRAFT_PROJECT_MARK = 'Made from the answers as they were at the tim
 /** The seals field of a draft (MP-10, DC-33, MC-31). */
 export const NOT_SEALED = 'Not sealed';
 /** MP-04 in a draft while the running content's risk-area mapping is not approved (anti-goal 3; controller's call on open item 2). */
-export const CONTROLS_AFTER_APPROVAL = 'Suggested controls appear here once experts approve the risk-area mapping.';
+export const CONTROLS_AFTER_APPROVAL =
+  "Suggested controls are on each question's page. They are listed here once experts approve the new risk-area mapping, and the list may change then.";
 /**
  * MP-01 in a draft: the stage, then its review's state. An open review not yet sealed is named first; else the last sealed review;
  * "no review yet" only when the stage has no review at all (rulings 8 and O2, conflict 15).

@@ -32,7 +32,7 @@ describe('the working report page 1: first use of a defined term is defined besi
   it('"control" while page 1 hides controls: the line that says they appear later is the first use', () => {
     const h = render(summary([group('PP-01', 'Bias (PP-01)', [item(1)])], false));
     expect(tips(h, 'control')).toBe(1);
-    expect(h).toMatch(new RegExp(`<p class="report-muted"><span data-term="control">${CONTROLS_AFTER_APPROVAL.replace(/[()]/g, '\\$&')}</span><span class="ui-term-tip">`));
+    expect(h).toMatch(new RegExp(`<p class="report-muted"><span data-term="control">${CONTROLS_AFTER_APPROVAL.replace(/'/g, '&#x27;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span><span class="ui-term-tip">`));
   });
 
   it('"control" when page 1 shows them: the first "Suggested controls" is marked once, later ones are not', () => {
