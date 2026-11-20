@@ -94,11 +94,11 @@ describe('the Help page', () => {
     expect(html).not.toMatch(/<main\b/);
   });
 
-  it('L2-69: 97 entries in 8 groups, in the file\'s order, each group under its heading', () => {
+  it('L2-69: 98 entries in 8 groups, in the file\'s order, each group under its heading', () => {
     const groups = helpVocabulary();
     expect(groups.map((g) => [g.name, g.entries.length])).toEqual([
       ['People, organisations and accounts', 17], ['Projects, stages and questions', 16], ['Recording a decision', 19],
-      ['Findings and follow-up', 11], ['Stage reviews, seals and documents', 17], ['Guidance content', 5], ['Legal texts', 5],
+      ['Findings and follow-up', 11], ['Stage reviews, seals and documents', 18], ['Guidance content', 5], ['Legal texts', 5],
       ['Using the platform', 7],
     ]);
     const vocab = JSON.parse(readFileSync('data/vocabulary.json', 'utf8')) as { concepts: Array<{ id: string; group: string; definition?: unknown; historical?: unknown }> };
@@ -153,8 +153,8 @@ describe('the Help page', () => {
     const entries = helpVocabulary().flatMap((g) => g.entries);
     expect(pairs.map((m) => m[1])).toEqual(entries.map((e) => e.id));
     for (const m of pairs) expect(m[3]).toBe(m[1]);
-    expect(html.match(/<dt\b/g)).toHaveLength(97);
-    expect(html.match(/<dd\b/g)).toHaveLength(97);
+    expect(html.match(/<dt\b/g)).toHaveLength(98);
+    expect(html.match(/<dd\b/g)).toHaveLength(98);
     for (const m of pairs) expect(m[2] + m[4]).not.toMatch(/<[a-z]/i);
     const src = readFileSync('app/help/page.tsx', 'utf8');
     expect(src).not.toMatch(/Definition|<Term\b|dangerouslySetInnerHTML/);
@@ -162,7 +162,7 @@ describe('the Help page', () => {
 
   it('FX2 (lead\'s ruling): every entry looks the same, and the checked concepts pass the first-use rule through the attributes', () => {
     const html = page();
-    // One form for all 97 entries: the attributes on the dt and dd themselves, no kit span inside either.
+    // One form for all 98 entries: the attributes on the dt and dd themselves, no kit span inside either.
     expect(html).not.toContain('ui-definition');
     expect(html).not.toMatch(/<dt><span data-term/);
     const checked = Object.values(TERMS).filter((t) => t.defineOnFirstUse);
@@ -171,7 +171,7 @@ describe('the Help page', () => {
       expect(html).toContain(`<dd data-definition="${t.id}">${t.definition.replace(/'/g, '&#x27;')}</dd>`);
     }
     // The rule the browser crawl applies, over the glossary (the roles count only inside [data-role-choice]).
-    expect(checked.length).toBe(26);
+    expect(checked.length).toBe(27);
     expect(firstUseProblems(section(html, 'words-used-on-the-platform'))).toEqual([]);
   });
 

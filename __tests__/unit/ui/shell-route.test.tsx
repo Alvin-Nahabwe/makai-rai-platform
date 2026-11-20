@@ -73,10 +73,13 @@ describe('the rail project block (R4)', () => {
       'Pre-processing You are here · 22 questions',
       'In-processing Not started',
       'Post-processing 15 questions',
+      'Working report',
     ]);
     expect(links[0].attrs).toContain(`href="/orgs/a/projects/${ID}"`);
-    expect(links.slice(1).map((l) => /href="([^"]+)"/.exec(l.attrs)![1])).toEqual(
+    expect(links.slice(1, 4).map((l) => /href="([^"]+)"/.exec(l.attrs)![1])).toEqual(
       ['pre-processing', 'in-processing', 'post-processing'].map((s) => `/orgs/a/projects/${ID}/stages/${s}`));
+    // Path to outputs: the Working report link follows the three stages (RailProjectBlock, ReportRailLink).
+    expect(links[4].attrs).toContain(`href="/orgs/a/projects/${ID}/report"`);
     // Fix round 4 (lead's ruling, rail fit): the stage sentence stays on the project page and leaves the rail's block.
     expect(stripTags(html)).not.toContain(PROJECT_COPY.overview.anyOrder);
     expect(html).not.toContain('shell-project__lead');
@@ -99,6 +102,7 @@ describe('the rail project block (R4)', () => {
     expect(stripTags(html)).not.toContain('You are here');
     expect(linksOf(html).slice(1).map((l) => l.text)).toEqual([
       'Pre-processing 22 questions · 3 no decision yet', 'In-processing Not started', 'Post-processing 15 questions',
+      'Working report',
     ]);
   });
 
