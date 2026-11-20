@@ -1,7 +1,7 @@
 import { Document, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
-import { NOT_RECORDED, STATEMENT, utcSecond } from '../resolve';
-import { draftLine, sealedNote, WORKING_REPORT_PAGE } from '../copy';
+import { STATEMENT, utcSecond } from '../resolve';
+import { draftLine, emptyFieldText, sealedNote, WORKING_REPORT_PAGE } from '../copy';
 import { PDF_FONT_FAMILY, UNPRINTABLE_NOTE, printable, registerPdfFont } from './font';
 import type { RenderInput, ResolvedField } from './index';
 
@@ -101,13 +101,14 @@ export function fieldDocumentPage(input: RenderInput, title: string): { page: Re
     ...f, label: print(f.label), text: f.text === null ? null : print(f.text), provenance: print(f.provenance),
   }));
 
+  const empty = emptyFieldText(input.stamp.kind);
   const body: ReactElement[] = [];
   shown.forEach((f, i) => {
     if (i === 0 || shown[i - 1].section !== f.section) body.push(<Text key={`s-${f.fieldId}`} style={styles.section}>{f.section}</Text>);
     body.push(
       <View key={f.fieldId} style={styles.field}>
         <Text style={styles.label}>{`${f.fieldId} ${f.label}`}</Text>
-        <Text style={styles.text}>{f.text ?? NOT_RECORDED}</Text>
+        <Text style={styles.text}>{f.text ?? empty}</Text>
         {f.provenance === '' ? null : <Text style={styles.provenance}>{f.provenance}</Text>}
       </View>,
     );
@@ -123,7 +124,7 @@ export function fieldDocumentPage(input: RenderInput, title: string): { page: Re
   const lines: string[] = [...(header === null ? [] : [header]), title, `Organisation: ${input.organisationName}`, `Project: ${input.projectName}`, ...(omittedLine === null ? [] : [omittedLine])];
   input.fields.forEach((f, i) => {
     if (i === 0 || input.fields[i - 1].section !== f.section) lines.push('', f.section);
-    lines.push('', `${f.fieldId} ${f.label}`, f.text ?? NOT_RECORDED);
+    lines.push('', `${f.fieldId} ${f.label}`, f.text ?? empty);
     if (f.provenance !== '') lines.push(f.provenance);
   });
   lines.push('', ...footerLinesOf(input.stamp, title));

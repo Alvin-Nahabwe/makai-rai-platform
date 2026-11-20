@@ -1,4 +1,5 @@
 import type { Stage } from '@/types/record';
+import { WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 
 /**
  * The words of the project screens (audit B, as plan 1A Task 17 rules them): Projects (S-32), the project page (S-10)
@@ -33,8 +34,8 @@ export const PROJECT_COPY = Object.freeze({
     partLink: (name: string): string => `${name} (PDF)`,
     /** The heading of a stage's draft plan, and the name of its link. */
     planTitle: (planName: string, stageName: string): string => `${planName}, ${stageName}`,
-    /** Where an open item sits: its stage, and its question when it has one. */
-    placeOf: (stageName: string, questionId: string | null): string => (questionId === null ? stageName : `${stageName}, question ${questionId}`),
+    /** Where an open item sits: page 1's one wording (lib/documents/copy.ts), shared with the PDF. */
+    placeOf: WORKING_REPORT_PAGE.placeOf,
   }),
   /** S-10's one primary action (plan 1C C11): after a save of the person's in this project, and before one. */
   continue: 'Continue recording',

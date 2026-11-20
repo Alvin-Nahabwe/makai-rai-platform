@@ -3,7 +3,7 @@ import { Definition, Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import '@/components/ui/buttonStyles';
 import { draftSnapshot, type DraftRecord } from '@/lib/data/documents';
-import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, NOT_RECORDED_YET, PART_MESSAGE, STAGE_TERMS, WORKING_REPORT_BUSY_MESSAGE, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
+import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, PART_MESSAGE, emptyFieldText, STAGE_TERMS, WORKING_REPORT_BUSY_MESSAGE, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
 import { Callout } from '@/components/ui/Callout';
 import { API_COPY } from '@/lib/http/api/copy';
 import type { ReportRefusal } from '@/lib/http/exportRefusal';
@@ -172,7 +172,7 @@ function DraftDocument({ record, ref_, headingId }: { record: DraftRecord; ref_:
               <div key={f.fieldId} id={idOf(f.fieldId)} className="report-field">
                 <dt><span className="report-code">{f.fieldId}</span> {f.label}</dt>
                 <dd>
-                  <p className="report-field__text">{f.text ?? NOT_RECORDED_YET}</p>
+                  <p className="report-field__text">{f.text ?? emptyFieldText('draft')}</p>
                   {f.provenance === '' ? null : <p className="report-field__provenance">{f.provenance}</p>}
                 </dd>
               </div>

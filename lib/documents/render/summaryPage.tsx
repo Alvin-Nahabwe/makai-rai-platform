@@ -2,7 +2,6 @@ import { Link, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
 import type { Stage } from '@/types/record';
 import { publicOrigin } from '@/lib/publicOrigin';
-import { SUGGESTIONS_COPY } from '@/lib/suggestions/copy';
 import { CONTROLS_AFTER_APPROVAL, STAGE_TERMS, WORKING_REPORT_PAGE as W, WORKING_REPORT_TITLE } from '../copy';
 import type { OpenItem, WorkingReportSummary } from '../workingReport';
 import { footerLinesOf, framedPage, newPrinter, pageHead, styles } from './frame';
@@ -32,9 +31,8 @@ type Block =
   | { kind: 'item'; label: string; facts: string[]; controls?: ControlLine[]; place: string }
   | { kind: 'entry'; text: string };
 
-const WORDS = SUGGESTIONS_COPY.card;
 const stageName = (st: Stage): string => STAGE_TERMS[st].term;
-const place = (st: Stage, questionId: string | null): string => (questionId === null ? stageName(st) : `${stageName(st)} · question ${questionId}`);
+const place = (st: Stage, questionId: string | null): string => W.placeOf(stageName(st), questionId);
 
 function factsOf(i: OpenItem): string[] {
   const facts: string[] = [];
@@ -113,7 +111,7 @@ export function summaryPage(s: WorkingReportSummary, meta: { organisationName: s
           {(b.controls ?? []).map((c, k) => (
             <Text key={`c${k}`} style={local.control}>
               {print(c.label)}
-              {c.notebookUrl === null ? null : <>{', '}<Link src={c.notebookUrl}>{WORDS.downloadNotebook}</Link>{` (${c.notebookUrl})`}</>}
+              {c.notebookUrl === null ? null : <>{', '}<Link src={c.notebookUrl}>{W.hasNotebook}</Link>{` (${c.notebookUrl})`}</>}
             </Text>
           ))}
           {b.place === '' ? null : <Text style={styles.provenance}>{print(b.place)}</Text>}
@@ -131,7 +129,7 @@ export function summaryPage(s: WorkingReportSummary, meta: { organisationName: s
       case 'item': lines.push('', b.label, ...b.facts);
         if (b.controls !== undefined && b.controls.length > 0) {
           lines.push(`${W.controls}:`);
-          for (const c of b.controls) lines.push(c.label, ...(c.notebookUrl === null ? [] : [`${WORDS.downloadNotebook}: ${c.notebookUrl}`]));
+          for (const c of b.controls) lines.push(c.label, ...(c.notebookUrl === null ? [] : [`${W.hasNotebook}: ${c.notebookUrl}`]));
         }
         if (b.place !== '') lines.push(b.place);
         break;

@@ -25,6 +25,11 @@ export const NOT_RECORDED_AT_ISSUE = 'Not recorded: this stage had no seal when 
 // A draft document (path to outputs; ADR 0023). The design (§7) and the controller's rulings fix these words.
 /** D3 in a draft: a stage with no answers yet. */
 export const NOT_RECORDED_YET = 'Not recorded yet';
+/**
+ * What a field with no text prints, one rule for the screen and the PDF (fix wave item 11; final review M1): a draft says it is not
+ * recorded yet, an issued document says not recorded, as it always did.
+ */
+export const emptyFieldText = (kind: 'draft' | 'issued'): string => (kind === 'draft' ? NOT_RECORDED_YET : NOT_RECORDED);
 /** A typed field in a draft, with no value beside it: typed fields are written when the document is issued. */
 export const TYPED_AT_ISSUE = 'Added when the document is issued';
 /** A project value in a draft, in place of PROJECT_MARK: a draft never calls itself a sealed record (anti-goal 1; controller's wording). */
@@ -144,7 +149,10 @@ export const WORKING_REPORT_PAGE = Object.freeze({
   answer: 'Answer',
   alsoTouches: 'Also touches',
   controls: 'Suggested controls',
+  /** A control's notebook on page 1, on screen and in the PDF alike (fix wave item 11; final review M2). */
   hasNotebook: 'notebook available',
+  /** Where an open item sits on page 1, on screen and in the PDF alike: its stage, and its question when it has one (final review M2). */
+  placeOf: (stageName: string, questionId: string | null): string => (questionId === null ? stageName : `${stageName}, question ${questionId}`),
   reason: 'Reason',
   /** Printed only when some current answers could not be shown because the running content no longer holds their question (conflict 23). */
   omitted: (n: number): string => (n === 1
