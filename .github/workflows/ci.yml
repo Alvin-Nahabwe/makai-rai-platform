@@ -247,6 +247,8 @@ jobs:
         # the production host does, so the client is psql 16 (it needs
         # \bind). The runner's own psql moved to 18.7 on 20 Nov 2026 (run
         # 44755341854, D-420). No other vitest file reads the variable.
+        # (The test's own header still says CI uses the runner's psql; it is
+        # a protected test, so that comment is left as it is.)
         env:
           E2E_DB_CONTAINER: ${{ job.services.postgres.id }}
         run: npx vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
