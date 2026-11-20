@@ -11,10 +11,12 @@ import { pageTitle } from '@/lib/ui/title';
 import { isUuid } from '@/lib/shell/nav';
 import { WorkingReportView } from '@/components/report/WorkingReportView';
 import RememberProject from '@/components/layout/RememberProject';
+import { reportRefusalFrom } from '@/lib/http/exportRefusal';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
 }
+type SearchProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 /**
  * The gates and the read, once per request: the page and its title both read through this (React `cache()`), so a project that is not
@@ -47,12 +49,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * no PDF; the downloads are links to the route that does (Task 9). The reads are one REPEATABLE READ snapshot, so page 1 and the draft
  * documents below it list the same open items.
  */
-export default async function WorkingReportPage({ params }: PageProps) {
+export default async function WorkingReportPage({ params, searchParams }: PageProps & SearchProps) {
   const { slug, id } = await params;
   const { record, summary, userId } = await load(slug, id);
   return (
     <>
-      <WorkingReportView orgSlug={slug} projectId={id} record={record} summary={summary} />
+      <WorkingReportView orgSlug={slug} projectId={id} record={record} summary={summary} refusal={reportRefusalFrom(await searchParams)} />
       <RememberProject userId={userId} orgSlug={slug} projectId={id} />
     </>
   );

@@ -29,7 +29,9 @@ import { createPdfWorkerPool, pdfRenderLanes, type PdfWorkerPool } from '@/lib/d
  * aborted (its client has gone) leaves the queue and is never read or rendered (the limiter's RequestAbortedError; the route answers it).
  */
 export const WORKING_REPORT_QUEUE = Object.freeze({ maxWaiting: 40, maxWaitMs: 25_000, retryAfterSeconds: 10 });
-export const WORKING_REPORT_BUSY_MESSAGE = 'Many reports are being prepared right now. Try again in a few seconds.';
+// The refusal sentences live in lib/documents/copy.ts, so the report page can say them without importing this module (it renders).
+export { WORKING_REPORT_BUSY_MESSAGE, PART_MESSAGE } from '@/lib/documents/copy';
+import { WORKING_REPORT_BUSY_MESSAGE, PART_MESSAGE } from '@/lib/documents/copy';
 
 /** 503 `report_busy`: no render lane came free in time, or too many downloads were already waiting. The route adds `Retry-After`. */
 export class WorkingReportBusyError extends AppError {
@@ -53,7 +55,6 @@ function lanes(): Lanes {
 
 /** The report's parts by name. `all` is also what an absent `?part=` means. */
 const PARTS: ReadonlySet<string> = new Set<WorkingReportPart>(['all', 'summary', 'data_card', 'model_card', ...STAGES.map((s) => `mitigation_plan:${s}` as const)]);
-export const PART_MESSAGE = 'Choose the whole report, the summary, the data card, the model card, or the mitigation plan of one stage.';
 
 /** `?part=` as a part, or a 422 on field `part` (the invalid-parameter answer the decision route gives `stage`). Absent is the whole report. */
 export function parseWorkingReportPart(raw: string | null): WorkingReportPart {

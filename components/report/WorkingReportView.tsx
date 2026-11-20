@@ -3,7 +3,10 @@ import { Definition, Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import '@/components/ui/buttonStyles';
 import { draftSnapshot, type DraftRecord } from '@/lib/data/documents';
-import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, NOT_RECORDED_YET, STAGE_TERMS, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
+import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, NOT_RECORDED_YET, PART_MESSAGE, STAGE_TERMS, WORKING_REPORT_BUSY_MESSAGE, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
+import { Callout } from '@/components/ui/Callout';
+import { API_COPY } from '@/lib/http/api/copy';
+import type { ReportRefusal } from '@/lib/http/exportRefusal';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { resolveFields } from '@/lib/documents/resolve';
 import { workingReportPages, type OpenItem, type ReportPageRef, type WorkingReportPart, type WorkingReportSummary } from '@/lib/documents/workingReport';
@@ -18,7 +21,21 @@ const C = PROJECT_COPY.workingReport;
 /** The (i) beside a term the page defines at its first use. */
 const tip = (term: DefinedEntry): ReactElement => <TermTip of={term} label={PROJECT_COPY.whatMeans(term.term)} />;
 
-type Props = { orgSlug: string; projectId: string; record: DraftRecord; summary: WorkingReportSummary };
+type Refusal = { reason: ReportRefusal; reference: string | null };
+type Props = { orgSlug: string; projectId: string; record: DraftRecord; summary: WorkingReportSummary; refusal?: Refusal | null };
+
+/**
+ * Why a download opened as a page came back here (fix wave item 8; the route's redirect, lib/http/exportRefusal.ts), in the route's
+ * own words: the sentence its JSON answer would have carried. Nothing when the page was opened any other way.
+ */
+export function DownloadRefusal({ refusal }: { refusal: Refusal | null }): ReactElement | null {
+  if (refusal === null) return null;
+  const text = refusal.reason === 'report_busy' ? WORKING_REPORT_BUSY_MESSAGE
+    : refusal.reason === 'part' ? PART_MESSAGE
+    : refusal.reason === 'not_found' ? API_COPY.notFound
+    : API_COPY.internalError(refusal.reference ?? '');
+  return <Callout kind="caution"><p role="alert">{text}</p></Callout>;
+}
 
 const stageName = (st: Stage): string => STAGE_TERMS[st].term;
 const downloadHref = (orgSlug: string, projectId: string, part: WorkingReportPart): string =>
@@ -173,7 +190,7 @@ function DraftDocument({ record, ref_, headingId }: { record: DraftRecord; ref_:
  * It renders no PDF and imports no renderer (design §5; __tests__/unit/working-report-imports.test.ts). It holds links only, no button
  * and no field: everything on it is readable and downloadable by every role that can read the record (anti-goal 4).
  */
-export function WorkingReportView({ orgSlug, projectId, record, summary }: Props): ReactElement {
+export function WorkingReportView({ orgSlug, projectId, record, summary, refusal = null }: Props): ReactElement {
   const pages = workingReportPages(record, 'all');
   return (
     <div className="page-content report">
@@ -193,6 +210,7 @@ export function WorkingReportView({ orgSlug, projectId, record, summary }: Props
       </header>
       <section className="report-downloads" aria-labelledby="report-downloads">
         <h2 id="report-downloads">{C.downloadHeading}</h2>
+        <DownloadRefusal refusal={refusal} />
         <p><a className="ui-button ui-button--primary" href={downloadHref(orgSlug, projectId, 'all')}>{C.downloadAll}</a></p>
         <p id="report-parts" className="report-muted">{C.partsHeading}</p>
         <ul aria-labelledby="report-parts" className="report-parts">
