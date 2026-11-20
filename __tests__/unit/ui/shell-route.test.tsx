@@ -78,7 +78,7 @@ describe('the rail project block (R4)', () => {
     expect(links[0].attrs).toContain(`href="/orgs/a/projects/${ID}"`);
     expect(links.slice(1, 4).map((l) => /href="([^"]+)"/.exec(l.attrs)![1])).toEqual(
       ['pre-processing', 'in-processing', 'post-processing'].map((s) => `/orgs/a/projects/${ID}/stages/${s}`));
-    // Path to outputs: the Working report link follows the three stages (RailProjectBlock, ReportRailLink).
+    // Path to outputs: the Working report link follows the three stages (RailProjectBlock).
     expect(links[4].attrs).toContain(`href="/orgs/a/projects/${ID}/report"`);
     // Fix round 4 (lead's ruling, rail fit): the stage sentence stays on the project page and leaves the rail's block.
     expect(stripTags(html)).not.toContain(PROJECT_COPY.overview.anyOrder);
@@ -104,6 +104,14 @@ describe('the rail project block (R4)', () => {
       'Pre-processing 22 questions · 3 no decision yet', 'In-processing Not started', 'Post-processing 15 questions',
       'Working report',
     ]);
+  });
+
+  it('path to outputs: on the working report the rail says its link is the current page, rendered on the server', () => {
+    const html = renderToStaticMarkup(<RailProjectBlock project={project} orgSlug="a" currentStage={null} onReport />);
+    const current = linksOf(html).filter((l) => l.attrs.includes('aria-current'));
+    expect(current).toHaveLength(1);
+    expect(current[0].text).toBe('Working report');
+    expect(current[0].attrs).toContain('aria-current="page"');
   });
 
   it('R4: the stage list is named by the project, and its line marks are hidden from assistive technology', () => {

@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 /**
  * Fix wave item 14 (final review M10): the stage end screen (`/stages/<stage>/end`) reads the whole draft record, as the working report
  * does, so a link to it is never prefetched: a prefetch from every question page would run that read unseen. The rail's report link
- * opts out for the same reason (components/layout/ReportRailLink.tsx). Every `<Link>` whose href is `stageEndHref(...)` says
+ * opts out for the same reason (components/layout/ShellProject.tsx, RailProjectBlock). Every `<Link>` whose href is `stageEndHref(...)` says
  * `prefetch={false}`.
  */
 it('every Link to a stage end screen opts out of prefetch', () => {

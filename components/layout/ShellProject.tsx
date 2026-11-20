@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { ReportRailLink } from '@/components/layout/ReportRailLink';
 import { ShellProjectPlace } from '@/components/layout/ShellPlace';
 import { SHELL_PROJECT_COPY, stageStateLine } from '@/lib/shell/project/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
@@ -12,6 +11,11 @@ type Props = {
   orgSlug: string;
   /** The stage named in the address (`…/stages/<stage>/…`), or null on a project-level page. */
   currentStage: Stage | null;
+  /**
+   * True on the working report's own address. The slot is rendered per address (its report page passes this), so the rail knows
+   * the page on the server and the Working report link needs no client part to say `aria-current="page"`.
+   */
+  onReport?: boolean;
 };
 
 const NAME_ID = 'shell-project-name';
@@ -44,7 +48,7 @@ function LineMark({ current }: { current: boolean }) {
  * "location"`: it is where the open page sits in the project, while the stages themselves are no sequence of steps (they
  * are worked in any order), and "page" stays the rail item's (Projects). The list is named by the project's name.
  */
-export function RailProjectBlock({ project, orgSlug, currentStage }: Props) {
+export function RailProjectBlock({ project, orgSlug, currentStage, onReport = false }: Props) {
   return (
     <div className="shell-project">
       <p className="shell-project__name" id={NAME_ID}>
@@ -69,7 +73,10 @@ export function RailProjectBlock({ project, orgSlug, currentStage }: Props) {
           );
         })}
       </ul>
-      <ReportRailLink href={reportHref(orgSlug, project.id)}>{PROJECT_COPY.workingReport.railLink}</ReportRailLink>
+      {/* Not prefetched: the report reads every stage's answers, and a prefetch from every page of the project would do that unseen. */}
+      <Link href={reportHref(orgSlug, project.id)} prefetch={false} className="shell-project__report" aria-current={onReport ? 'page' : undefined}>
+        {PROJECT_COPY.workingReport.railLink}
+      </Link>
     </div>
   );
 }
