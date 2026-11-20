@@ -14,7 +14,11 @@ import { afterEach, expect, it } from 'vitest';
 
 const SCRIPT = join(process.cwd(), 'scripts', 'check-standalone.mjs');
 /** Files the server loads at run time without importing them, so only the trace includes put them in the image. */
-const RUNTIME = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json'];
+const RUNTIME = [
+  'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json',
+  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/@react-pdf/renderer/package.json',
+  'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
+];
 const made: string[] = [];
 
 // The script's output is matched as text, so it runs without colour (NO_COLOR, no FORCE_COLOR) and any escape

@@ -14,7 +14,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = join(process.cwd(), 'scripts', 'check-standalone.mjs');
 /** Files the server loads at run time without importing them (check-standalone.mjs RUNTIME_FILES). */
-const RUNTIME = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json'];
+const RUNTIME = [
+  'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json',
+  'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/@react-pdf/renderer/package.json',
+  'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
+];
 const made: string[] = [];
 afterEach(() => {
   for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });

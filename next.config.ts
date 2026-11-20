@@ -21,9 +21,16 @@ const nextConfig: NextConfig = {
    * `lib/auth/passwordHashWorker.js` is started by path as a worker thread (`lib/auth/passwordHash.ts`), and it
    * `require`s bcryptjs at run time, so neither is reached by the import trace; the image needs both (FR-ACC-05).
    * `scripts/check-standalone.mjs` fails the build check when either is missing.
+   *
+   * `lib/documents/render/pdfWorker.mjs` is started the same way, by path, to render working reports off the main thread
+   * (lib/documents/render/pdfWorkerPool.ts), and imports `./breakPoints.mjs` and `react/jsx-runtime` at run time; react-pdf
+   * itself is a server external package the routes already trace. The check fails the build when any of them is missing.
    */
   outputFileTracingIncludes: {
-    '/*': ['data/**/*.json', 'data/legal/**/*.md', 'data/fonts/**', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**'],
+    '/*': [
+      'data/**/*.json', 'data/legal/**/*.md', 'data/fonts/**', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**',
+      'lib/documents/render/pdfWorker.mjs', 'lib/documents/render/breakPoints.mjs', 'node_modules/react/jsx-runtime.js', 'node_modules/react/cjs/react-jsx-runtime.production.js',
+    ],
   },
   /**
    * NOT effective against the `.env` leak that the 4.0.0 bundle hash

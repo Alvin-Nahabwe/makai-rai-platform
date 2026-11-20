@@ -45,6 +45,14 @@ const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|mts|cjs)$/;
  * the worker_threads ban and from nothing more, and the case below checks that they stay that narrow.
  */
 const PASSWORD_HASH_POOL = [join('lib', 'auth', 'passwordHash.ts'), join('lib', 'auth', 'passwordHashWorker.js')];
+/**
+ * The second (Task 16 fix; owner decision 20 Nov 2026, "Limiter + worker thread"): `lib/documents/render/pdfWorkerPool.ts`
+ * renders the working report's PDF on worker threads so a render does not hold the event loop. It starts only its own fixed file,
+ * `lib/documents/render/pdfWorker.mjs`, which draws a document the main thread composed from react-pdf's primitives and nothing
+ * else. Exempt from the worker_threads ban and from nothing more; the case below checks that they stay that narrow.
+ */
+const PDF_RENDER_POOL = [join('lib', 'documents', 'render', 'pdfWorkerPool.ts'), join('lib', 'documents', 'render', 'pdfWorker.mjs')];
+const WORKER_POOLS = [...PASSWORD_HASH_POOL, ...PDF_RENDER_POOL];
 /** A require( or import( whose argument is not a string literal: a module name computed at run time (final review m-B). */
 const DYNAMIC_LOADER = /\b(require|import)\(\s*[^'"`\s)]/;
 /** The loaders that take a name outside import syntax; each use is allowed only where it is listed below (final review m-B). */
@@ -122,12 +130,12 @@ describe('uploads are never executed or parsed', () => {
     expect(codeFiles('lib')).toContain(join('lib', 'evidence', 'inspect.ts'));
     // A server component under components/ and the root modules run on the server too.
     expect(rootModules(), 'the root modules proxy.ts and instrumentation.ts were found').toEqual(expect.arrayContaining(['proxy.ts', 'instrumentation.ts']));
-    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules()).filter((f) => !PASSWORD_HASH_POOL.includes(f))).toEqual([]);
+    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules()).filter((f) => !WORKER_POOLS.includes(f))).toEqual([]);
     // A name the pattern above cannot read: no require( or import( of a computed name anywhere, and getBuiltinModule only
     // in the pool and in lib/integrity/canonical.mjs (node:crypto, by a literal), and no other loader at all.
     expect(grepTs(['app', 'lib', 'components'], DYNAMIC_LOADER, rootModules())).toEqual([]);
     expect(grepTs(['app', 'lib', 'components'], OTHER_LOADERS, rootModules()).sort())
-      .toEqual([join('lib', 'auth', 'passwordHash.ts'), join('lib', 'integrity', 'canonical.mjs')].sort());
+      .toEqual([join('lib', 'auth', 'passwordHash.ts'), PDF_RENDER_POOL[0], join('lib', 'integrity', 'canonical.mjs')].sort());
   });
 
   it('FR-PUB-04 FR-ACC-05: the password hash pool starts only its own worker file, which runs bcryptjs and nothing else', () => {
@@ -150,7 +158,30 @@ describe('uploads are never executed or parsed', () => {
     // The pool's own path is a fixed file, and no module passes it another one (the option exists for the tests).
     const pool = codeOf(PASSWORD_HASH_POOL[0]);
     expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'auth', 'passwordHashWorker\.js'\)/);
-    expect(grepTs(['app', 'lib', 'components'], /\bworkerPath\b/, rootModules())).toEqual([PASSWORD_HASH_POOL[0]]);
+    expect(grepTs(['app', 'lib', 'components'], /\bworkerPath\b/, rootModules())).toEqual([PASSWORD_HASH_POOL[0], PDF_RENDER_POOL[0]]);
+  });
+
+  it('FR-PUB-04 (Task 16 fix): the PDF render pool starts only its own worker file, which draws react-pdf primitives and nothing else', () => {
+    for (const f of PDF_RENDER_POOL) expect(RUNNERS_BUT_WORKERS.test(codeOf(f)), f).toBe(false);
+    const banned = (f: string) => [...codeOf(f).matchAll(BANNED_MODULE)].map((m) => m[0]).sort();
+    expect(banned(PDF_RENDER_POOL[0])).toEqual(["'node:worker_threads'", "'node:worker_threads'"]);
+    expect(banned(PDF_RENDER_POOL[1])).toEqual(["'node:worker_threads'"]);
+    const pool = codeOf(PDF_RENDER_POOL[0]);
+    expect([...pool.matchAll(/\bgetBuiltinModule\b/g)]).toHaveLength(1);
+    expect(pool).toMatch(/process\.getBuiltinModule\('node:worker_threads'\)/);
+    // The one Worker gets the path and the font, nothing that runs code (no eval, no argv, no execArgv).
+    expect([...pool.matchAll(/\bWorker\)\(([^)]*\)[^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' '))).toEqual(['workerPath, { workerData: { font: pdfFontSource() } }']);
+    expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'documents', 'render', 'pdfWorker\.mjs'\)/);
+    // The worker loads exactly its thread port, React, react-pdf and the shared break points; it requires and starts nothing.
+    const worker = codeOf(PDF_RENDER_POOL[1]);
+    expect([...worker.matchAll(/\bfrom\s*'([^']+)'/g)].map((m) => m[1]).sort())
+      .toEqual(['./breakPoints.mjs', '@react-pdf/renderer', 'node:worker_threads', 'react', 'react/jsx-runtime']);
+    expect(worker).not.toMatch(/\bimport\s*\(|\brequire\s*\(|\bprocess\.(binding|dlopen)|\bnew\s+Worker\b/);
+    // React by its default export only: the image has only React's production build, where Node cannot list named exports.
+    expect(worker).not.toMatch(/import\s*\{[^}]*\}\s*from\s*'react(\/jsx-runtime)?'/);
+    // It draws only the primitives the composer uses: the same list as lib/documents/render/pdfTree.ts.
+    expect(worker).toContain("const TYPES = new Set(['DOCUMENT', 'PAGE', 'VIEW', 'TEXT', 'LINK', '#fragment']);");
+    expect(readFileSync(join('lib', 'documents', 'render', 'pdfTree.ts'), 'utf8')).toContain("PDF_ELEMENT_TYPES = ['DOCUMENT', 'PAGE', 'VIEW', 'TEXT', 'LINK', '#fragment'] as const");
   });
 
   it('FR-PUB-04: the scan flags a process import in code and ignores a comment that names a notebook', () => {

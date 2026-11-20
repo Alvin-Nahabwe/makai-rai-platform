@@ -1,4 +1,4 @@
-import { Document, renderToBuffer } from '@react-pdf/renderer';
+import { Document, renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { cloneElement, type ReactElement } from 'react';
 import type { LoadedContent } from '@/types/content';
 import { runningContent } from '@/lib/content/loader';
@@ -44,9 +44,14 @@ export function composeWorkingReport(r: DraftRecord, content: LoadedContent, par
   return { pages, title: only !== null && only.kind === 'document' ? DOCUMENT_TITLES[only.documentType] : WORKING_REPORT_TITLE };
 }
 
-/** One PDF of `pages` in order, and their plain text joined with a blank line between. `title` is the document type alone (NFR-SEC-11). */
+/** The one document of `pages` in order. `title` is the document type alone (NFR-SEC-11). Rendered here or on a worker (pdfWorkerPool.ts). */
+export function workingReportDocument(pages: ComposedPage[], title: string): ReactElement<DocumentProps> {
+  return <Document title={title} language="en">{pages.map((p, i) => cloneElement(p.page, { key: `page-${i}` }))}</Document>;
+}
+
+/** One PDF of `pages` in order, rendered on this thread, and their plain text joined with a blank line between. */
 export async function renderWorkingReportPdf(pages: ComposedPage[], title: string): Promise<{ pdf: Buffer; plainText: string }> {
   registerPdfFont();
-  const pdf = await renderToBuffer(<Document title={title} language="en">{pages.map((p, i) => cloneElement(p.page, { key: `page-${i}` }))}</Document>);
+  const pdf = await renderToBuffer(workingReportDocument(pages, title));
   return { pdf, plainText: pages.map((p) => p.plainText).join('\n') };
 }
