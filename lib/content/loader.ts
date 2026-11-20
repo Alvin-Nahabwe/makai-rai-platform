@@ -157,6 +157,9 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   }
 
   const config = record(parse('projectConfig.json'), 'projectConfig.json');
+  // A misspelt switch would load as absent and silently leave G6/G7 off, ignoring the expert sign-off it stands for (silent-failure
+  // audit M5), so an unknown key fails the load, named.
+  for (const key of Object.keys(config)) if (!PROJECT_CONFIG_KEYS.includes(key)) fail(`projectConfig.json has an unknown key ${key}`);
   let stageApplicability: LoadedContent['stageApplicability'] = null;
   if (Object.hasOwn(config, 'stageApplicability')) {
     const table = record(config.stageApplicability, 'projectConfig.json stageApplicability');
@@ -190,6 +193,11 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
     controlSuggestionsApproved: config.controlSuggestionsApproved === true,
   });
 }
+
+/** Every key projectConfig.json may hold: the six descriptive ones every bundle carries, and the two switches (G7, G6). */
+const PROJECT_CONFIG_KEYS: readonly string[] = [
+  'projectName', 'version', 'institution', 'description', 'principlesSource', 'principlesSourceUrl', 'stageApplicability', 'controlSuggestionsApproved',
+];
 
 const refused = (): AppError => new AppError(500, 'unknown_content_version');
 const isSemver = (v: unknown): v is ContentSemver => typeof v === 'string' && SEMVER_RE.test(v);

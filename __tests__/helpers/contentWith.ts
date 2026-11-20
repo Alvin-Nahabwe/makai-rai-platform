@@ -20,7 +20,7 @@ export const OWNER_TABLE: Readonly<Record<DevelopmentStage, readonly Stage[]>> =
   retired: ['pre-processing', 'in-processing', 'post-processing'],
 };
 
-export function contentWith(over: { stageApplicability?: unknown; controlSuggestionsApproved?: unknown }): LoadedContent {
+export function contentWith(over: { stageApplicability?: unknown; controlSuggestionsApproved?: unknown; [key: string]: unknown }): LoadedContent {
   const read = (file: Parameters<Parameters<typeof buildLoadedContent>[1]>[0]): Uint8Array => {
     const bytes = readFileSync(join(DIR, file));
     if (file !== 'projectConfig.json') return bytes;

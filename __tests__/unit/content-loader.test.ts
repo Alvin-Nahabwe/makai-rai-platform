@@ -446,4 +446,10 @@ describe('content keys: stage applicability and the control switch', () => {
   it('G6: controlSuggestionsApproved true loads as true', () => {
     expect(contentWith({ controlSuggestionsApproved: true }).controlSuggestionsApproved).toBe(true);
   });
+  it.each(['controlSuggestionApproved', 'stageApplicabilty', 'extra'])('SF M5 (fix wave item 15): an unknown projectConfig.json key %s fails the load, named', (key) => {
+    expect(() => contentWith({ [key]: true })).toThrow(new RegExp(`content 0\\.0\\.1-fixture: projectConfig\\.json has an unknown key ${key}`));
+  });
+  it('SF M5: every shipped bundle\'s projectConfig.json keys are known, so each still loads', () => {
+    for (const v of ['5.0.0', '5.1.0']) expect(() => buildLoadedContent(v, (f) => readFileSync(join('data/content', v, f)))).not.toThrow();
+  });
 });
