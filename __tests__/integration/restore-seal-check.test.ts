@@ -19,9 +19,10 @@ import { addDecision, addProject, addStageReview, buildOrg, ctxFor, type OrgFixt
 
 /**
  * How psql reaches the test database. Locally the slot's env names its container (E2E_DB_CONTAINER) and psql
- * runs inside it by `docker exec`. In CI the database is a service container reached over TCP, so psql runs on
- * the runner against the URL the suite itself uses (DATABASE_URL, which vitest.config.ts takes from
- * TEST_DATABASE_URL). With neither, the test throws: it never skips.
+ * runs inside it by `docker exec`; CI's unit step sets it to the postgres:16-alpine service container's id, so
+ * the client is psql 16 there too (the runner's own psql is 18). Without it, psql runs on the host against the
+ * URL the suite itself uses (DATABASE_URL, which vitest.config.ts takes from TEST_DATABASE_URL). With neither,
+ * the test throws: it never skips.
  */
 const CONTAINER = process.env.E2E_DB_CONTAINER;
 const PSQL_FLAGS = ['-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1'];
