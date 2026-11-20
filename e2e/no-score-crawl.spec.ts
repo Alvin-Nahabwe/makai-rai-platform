@@ -266,7 +266,7 @@ test('FR-RM-01 (helper): every seat carries its own must-reach list', () => {
 });
 
 test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', async ({ browser, baseURL }) => {
-  test.setTimeout(15 * 60_000);
+  test.setTimeout(20 * 60_000);   // was 15 min; the working report and the 3 stage end screens add 4 pages per seat
   assertNoStalePendingTargets();                     // a page that now exists must not stay on the allow-list
   const manifest = readManifest();
   const slug = manifest.orgs[0].slug;
