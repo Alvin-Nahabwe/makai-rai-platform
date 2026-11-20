@@ -526,11 +526,13 @@ jobs:
     # run 42184836682 was cancelled at 30 min in its last step with every
     # test step passing, after a 2-minute browser install; the install step
     # may now retry for up to 35 min.
-    # Raised from 65 to 100 on 2026-11-20 (D-421): run 44755341854 ran the
+    # Raised from 65 to 120 on 2026-11-20 (D-421): run 44755341854 ran the
     # chromium suite (886 tests, 1 worker) for 62 min and was cancelled at
     # test 885, so the outage, idle sign-out and nginx steps never ran.
-    # Sharding the suite across jobs is the lasting fix; this is headroom.
-    timeout-minutes: 100
+    # 120 covers the documented worst case: up to 35 min of browser install,
+    # ~3.5 min of setup, ~62 min of suite, then the three follow-on steps.
+    # Sharding the suite across jobs is the lasting fix (D-422).
+    timeout-minutes: 120
 
     # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
