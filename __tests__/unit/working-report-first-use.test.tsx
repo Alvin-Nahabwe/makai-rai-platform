@@ -15,7 +15,7 @@ const item = (n: number, controls: OpenItem['controls'] = []): OpenItem => ({
 });
 const group = (areaId: string | null, areaName: string, items: OpenItem[]): AreaGroup => ({ areaId, areaName, items });
 const summary = (nextSteps: AreaGroup[], controlsShown: boolean): WorkingReportSummary => ({
-  takenAt: TAKEN, controlsShown, omittedAnswers: 0, nextSteps, riskAccepted: [], inPlace: [], doesNotApply: [],
+  takenAt: TAKEN, controlsShown, omittedAnswers: 0, omittedByStage: { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 }, nextSteps, riskAccepted: [], inPlace: [], doesNotApply: [],
 });
 const render = (s: WorkingReportSummary): string => renderToStaticMarkup(<Summary summary={s} headingId="h" />);
 const tips = (h: string, id: string): number => (h.match(new RegExp(`data-definition="${id}"`, 'g')) ?? []).length;

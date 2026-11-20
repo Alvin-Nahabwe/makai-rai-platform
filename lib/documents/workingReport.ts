@@ -32,6 +32,8 @@ export type WorkingReportSummary = {
   controlsShown: boolean;
   /** Current answers left out because the running content no longer holds their question; page 1 says so when this is above 0. */
   omittedAnswers: number;
+  /** Per stage (fix wave item 10): the end screen says its own stage's. */
+  omittedByStage: Readonly<Record<Stage, number>>;
   nextSteps: AreaGroup[];
   riskAccepted: Array<{ findingId: string; title: string; reason: string; areaName: string | null }>;
   inPlace: Array<{ stage: Stage; questionId: string; questionText: string }>;
@@ -162,7 +164,7 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
     }
   }
 
-  return { takenAt: r.takenAt, controlsShown, omittedAnswers: r.omittedAnswers, nextSteps, riskAccepted: accepted.map((a) => a.row), inPlace, doesNotApply };
+  return { takenAt: r.takenAt, controlsShown, omittedAnswers: r.omittedAnswers, omittedByStage: r.omittedByStage, nextSteps, riskAccepted: accepted.map((a) => a.row), inPlace, doesNotApply };
 }
 
 // ─── The parts of the report, in order ────────────────────────────────────────────────────────────

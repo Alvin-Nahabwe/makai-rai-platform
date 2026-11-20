@@ -36,7 +36,7 @@ export function composeWorkingReport(r: DraftRecord, content: LoadedContent, par
     const map = loadFieldMap(ref.documentType);
     const resolved = resolveFields(map, draftSnapshot(r, ref.documentType, ref.reviewStage), {});
     return fieldDocumentPage(
-      { map, fields: resolved.fields, stamp: { kind: 'draft', takenAt: r.takenAt }, organisationName: r.organisationName, projectName: r.project.name },
+      { map, fields: resolved.fields, stamp: { kind: 'draft', takenAt: r.takenAt, omitted: ref.documentType === 'mitigation_plan' ? r.omittedByStage[ref.reviewStage] : r.omittedAnswers }, organisationName: r.organisationName, projectName: r.project.name },
       DOCUMENT_TITLES[ref.documentType],
     );
   });

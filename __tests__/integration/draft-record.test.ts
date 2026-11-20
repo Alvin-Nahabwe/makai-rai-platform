@@ -325,6 +325,8 @@ describe('the draft record (Task 6)', () => {
     const second = await captureLogs(() => readDraft());
     expect(second.lines.filter((l) => l.includes('DRAFT_ORPHAN_DECISION'))).toEqual([]);
     expect(second.result.omittedAnswers).toBe(1);
+    // Fix wave item 10: the count per stage, which a stage's plan and end screen print.
+    expect(second.result.omittedByStage).toEqual({ 'pre-processing': 1, 'in-processing': 0, 'post-processing': 0 });
   });
 
   it('isolation: another organisation\'s project id is NotFoundError', async () => {

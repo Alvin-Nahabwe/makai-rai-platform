@@ -36,7 +36,7 @@ const item = (n: number, stage: Stage, controls: OpenItem['controls'] = []): Ope
 });
 const group = (areaName: string, items: OpenItem[]): AreaGroup => ({ areaId: areaName, areaName, items });
 const summary = (nextSteps: AreaGroup[], controlsShown = false): WorkingReportSummary => ({
-  takenAt: TAKEN, controlsShown, omittedAnswers: 0, nextSteps, riskAccepted: [], inPlace: [], doesNotApply: [],
+  takenAt: TAKEN, controlsShown, omittedAnswers: 0, omittedByStage: { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 }, nextSteps, riskAccepted: [], inPlace: [], doesNotApply: [],
 });
 
 type Over = Partial<Parameters<typeof StageEnd>[0]>;

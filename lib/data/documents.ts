@@ -456,6 +456,8 @@ export interface DraftRecord {
   developmentStage: string | null;
   /** Current answers left out because the running content no longer holds their question (conflict 23); Task 7's page 1 is to print a line for them. */
   omittedAnswers: number;
+  /** The same, per stage: a stage's plan and its end screen say how many of their own stage's answers are left out (fix wave item 10). */
+  omittedByStage: Readonly<Record<Stage, number>>;
   /** See `SnapshotProvenance`: the recorded wording of each title-less shortfall finding's question the running content lacks (fix I1). */
   recordedQuestionWords: ReadonlyMap<string, string | null>;
 }
@@ -537,10 +539,12 @@ export async function readDraftRecord(tx: TenantTx, projectId: string, viewer: A
 
   const raw = new Map<Stage, RawStage>();
   let omittedAnswers = 0;
+  const omittedByStage = Object.fromEntries(STAGES.map((st) => [st, 0])) as Record<Stage, number>;
   for (const stage of STAGES) {
     const live = liveDecisionRows(await readStageRows(tx, projectId, stage), content);
     for (const decisionVersionId of live.orphans) warnOncePerProcess('DRAFT_ORPHAN_DECISION', decisionVersionId, { decisionVersionId, stage });
     omittedAnswers += live.omittedAnswers;
+    omittedByStage[stage] = live.omittedAnswers;
     const plan = stagePlan(live.rows, { stage, content });
     const header: DraftHeader = {
       sealRow: {
@@ -568,7 +572,7 @@ export async function readDraftRecord(tx: TenantTx, projectId: string, viewer: A
   return {
     takenAt: at.toISOString(), stages: every,
     stagesWithAnswers: STAGES.filter((st) => every[st].manifest.decisions.some((d) => 'id' in d)),
-    contents, project, organisationName, today, erasures, developmentStage: project.metadata.developmentStage ?? null, omittedAnswers,
+    contents, project, organisationName, today, erasures, developmentStage: project.metadata.developmentStage ?? null, omittedAnswers, omittedByStage,
     recordedQuestionWords: await recordedQuestionWordsOf(tx, Object.values(every), content),
   };
 }

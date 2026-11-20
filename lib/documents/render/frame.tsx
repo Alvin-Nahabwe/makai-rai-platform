@@ -1,7 +1,7 @@
 import { Document, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
 import { NOT_RECORDED, STATEMENT, utcSecond } from '../resolve';
-import { draftLine, sealedNote } from '../copy';
+import { draftLine, sealedNote, WORKING_REPORT_PAGE } from '../copy';
 import { PDF_FONT_FAMILY, UNPRINTABLE_NOTE, printable, registerPdfFont } from './font';
 import type { RenderInput, ResolvedField } from './index';
 
@@ -113,10 +113,14 @@ export function fieldDocumentPage(input: RenderInput, title: string): { page: Re
     );
   });
 
-  const { page, header } = framedPage(input.stamp, title, [...pageHead(title, input, printer), ...body]);
+  // A draft that leaves recorded answers out says so under its head, whether it is downloaded alone or in the whole report (fix wave
+  // item 10; silent-failure audit I3). Never on an issued document.
+  const omittedLine = input.stamp.kind === 'draft' && input.stamp.omitted > 0 ? WORKING_REPORT_PAGE.omitted(input.stamp.omitted) : null;
+  const omittedNote = omittedLine === null ? [] : [<Text key="omitted" style={styles.note}>{omittedLine}</Text>];
+  const { page, header } = framedPage(input.stamp, title, [...pageHead(title, input, printer), ...omittedNote, ...body]);
 
   // The plain-text copy keeps every character as typed and holds the footer once, at the end; a draft's line also opens it.
-  const lines: string[] = [...(header === null ? [] : [header]), title, `Organisation: ${input.organisationName}`, `Project: ${input.projectName}`];
+  const lines: string[] = [...(header === null ? [] : [header]), title, `Organisation: ${input.organisationName}`, `Project: ${input.projectName}`, ...(omittedLine === null ? [] : [omittedLine])];
   input.fields.forEach((f, i) => {
     if (i === 0 || input.fields[i - 1].section !== f.section) lines.push('', f.section);
     lines.push('', `${f.fieldId} ${f.label}`, f.text ?? NOT_RECORDED);

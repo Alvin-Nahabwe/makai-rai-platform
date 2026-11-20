@@ -95,7 +95,8 @@ export function summaryPage(s: WorkingReportSummary, meta: { organisationName: s
   const printer = newPrinter();
   const { print } = printer;
   const blocks = blocksOf(s);
-  const stamp = { kind: 'draft', takenAt: s.takenAt } as const;
+  // Page 1 prints its own omitted line among its blocks (above), so the frame prints none: omitted 0 here.
+  const stamp = { kind: 'draft', takenAt: s.takenAt, omitted: 0 } as const;
 
   const body = blocks.map((b, n): ReactElement => {
     switch (b.kind) {

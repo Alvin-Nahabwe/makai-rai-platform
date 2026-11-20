@@ -62,7 +62,7 @@ export function recordOf(content: LoadedContent, specs: Partial<Record<Stage, St
     takenAt: TAKEN, stages, stagesWithAnswers: STAGES.filter((st) => stages[st].decisions.size > 0), contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: '2026-11-19',
     erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map() },
-    developmentStage: null, omittedAnswers: 0, recordedQuestionWords: new Map(), ...over,
+    developmentStage: null, omittedAnswers: 0, omittedByStage: { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 }, recordedQuestionWords: new Map(), ...over,
   };
 }
 

@@ -74,6 +74,8 @@ export function StageEnd(p: StageEndProps): ReactElement {
       <Breadcrumb items={[{ label: p.projectName, href: base }, { label: STAGE_TITLE[p.stage], href: stageAt }, { label: E.title }]} />
       <h1>{E.heading}</h1>
       <p className="stage-end__draft" data-report-draft>{draftLine(p.takenAt)}</p>
+      {/* This stage's recorded answers the draft leaves out (fix wave item 10), as page 1 says the project's. */}
+      {p.summary.omittedByStage[p.stage] > 0 ? <p>{WORKING_REPORT_PAGE.omitted(p.summary.omittedByStage[p.stage])}</p> : null}
 
       <section className="stage-end__stage" aria-labelledby="stage-end-stage">
         <h2 id="stage-end-stage"><Term of={stageTerm(p.stage)}>{STAGE_TITLE[p.stage]}</Term></h2>

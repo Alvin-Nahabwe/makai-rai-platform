@@ -72,7 +72,7 @@ describe('anti-goal 1: a draft PDF cannot be mistaken for a sealed one', () => {
 
   it('the draft footer is the title, the draft line and the statement; the draft header is the draft line alone', () => {
     const map = loadFieldMap('data_card');
-    const input: RenderInput = { map, fields: [], stamp: { kind: 'draft', takenAt: TAKEN }, organisationName: 'Org', projectName: 'Project' };
+    const input: RenderInput = { map, fields: [], stamp: { kind: 'draft', takenAt: TAKEN, omitted: 0 }, organisationName: 'Org', projectName: 'Project' };
     const { plainText } = fieldDocumentPage(input, 'Data card');
     expect(plainText.split('\n')[0]).toBe(LINE);
     expect(plainText.trimEnd().split('\n').slice(-2)).toEqual([`Data card · ${LINE}`, STATEMENT]);

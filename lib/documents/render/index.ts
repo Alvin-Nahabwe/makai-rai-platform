@@ -13,7 +13,8 @@ export type ResolvedField = { fieldId: string; label: string; section: string; t
  */
 export type RenderStamp =
   | { kind: 'issued'; issuedAt: UtcInstant; seals: Array<SealRef & { fingerprint: string }> }
-  | { kind: 'draft'; takenAt: UtcInstant };
+  /** `omitted`: the recorded answers this draft leaves out (their question is no longer in the framework); a line says so when above 0. */
+  | { kind: 'draft'; takenAt: UtcInstant; omitted: number };
 export type RenderInput = { map: FieldMap; fields: ResolvedField[]; stamp: RenderStamp; organisationName: string; projectName: string };
 export type Renderer = (input: RenderInput) => Promise<{ pdf: Buffer; plainText: string }>;
 

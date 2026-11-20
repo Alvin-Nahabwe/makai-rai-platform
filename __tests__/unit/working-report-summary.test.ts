@@ -76,7 +76,7 @@ function record(specs: Partial<Record<Stage, StageSpec>>, over: Partial<DraftRec
     takenAt: TAKEN, stages, stagesWithAnswers: STAGES.filter((st) => stages[st].decisions.size > 0), contents: new Map([['cv1', plain]]),
     project: { name: 'Project', description: null, metadata: {} }, organisationName: 'Org', today: '2026-11-19',
     erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), stage_reviews: new Map() },
-    developmentStage: null, omittedAnswers: 0, recordedQuestionWords: new Map(), ...over,
+    developmentStage: null, omittedAnswers: 0, omittedByStage: { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 }, recordedQuestionWords: new Map(), ...over,
   };
 }
 
@@ -267,7 +267,7 @@ describe('buildWorkingReportSummary (Task 7)', () => {
   it('Review Focus 5: no answers gives empty lists', () => {
     const s = buildWorkingReportSummary(record({}), approved);
     expect(s).toEqual({
-      takenAt: TAKEN, controlsShown: true, omittedAnswers: 0, nextSteps: [], riskAccepted: [], inPlace: [], doesNotApply: [],
+      takenAt: TAKEN, controlsShown: true, omittedAnswers: 0, omittedByStage: { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 }, nextSteps: [], riskAccepted: [], inPlace: [], doesNotApply: [],
     });
   });
 
