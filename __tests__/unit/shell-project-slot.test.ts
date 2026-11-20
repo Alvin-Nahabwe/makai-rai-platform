@@ -63,7 +63,9 @@ describe('the @project slot mirrors every signed-in page', () => {
     expect(inside.length).toBeGreaterThanOrEqual(12);
     for (const rel of inside) {
       const src = code(`${SLOT}/${rel}`);
-      expect(src, rel).toMatch(/const identity = await requireIdentity\(\);\s*return <ProjectInContext identity=\{identity\} params=\{await params\} \/>;/);
+      // The working report's slot page alone also says the rail's report link is the current page (path to outputs: onReport).
+      const props = rel === 'orgs/[slug]/projects/[id]/report/page.tsx' ? ' onReport' : '';
+      expect(src, rel).toMatch(new RegExp(`const identity = await requireIdentity\\(\\);\\s*return <ProjectInContext identity=\\{identity\\} params=\\{await params\\}${props} \\/>;`));
       expect(src, rel).not.toMatch(/\bcatch\b/);
     }
   });
