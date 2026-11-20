@@ -5,7 +5,7 @@ import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, openQue
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
-import { QUESTION_COPY } from '../lib/question/copy';
+import { STAGE_END_COPY } from '../lib/question/end/copy';
 import { REVIEW_COPY } from '../lib/review/copy';
 import { ERRORS_COPY } from '../lib/errors/copy';
 import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
@@ -16,7 +16,7 @@ import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
  * for the viewer's role. G7 is dormant on the fixture content, so every next stage is offered. Q-PP-23 is the last question of
  * Pre-processing in the fixture bundle.
  */
-const E = QUESTION_COPY.end;
+const E = STAGE_END_COPY;
 const LAST = 'Q-PP-23';
 const endPath = (projectId: string, stage: string): string => `${stagePath(projectId, stage)}/end`;
 

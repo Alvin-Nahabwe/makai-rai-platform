@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTROLS_AFTER_APPROVAL, DRAFT_PROJECT_MARK, NOT_RECORDED_YET, NOT_SEALED, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, TYPED_AT_ISSUE, WORKING_REPORT_PAGE, WORKING_REPORT_TITLE, draftLine, draftReviewLine,
 } from '@/lib/documents/copy';
-import { QUESTION_COPY } from '@/lib/question/copy';
+import { STAGE_END_COPY } from '@/lib/question/end/copy';
 import { PROJECT_COPY } from '@/lib/project/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { TERM_WORKING_REPORT } from '@/lib/vocabulary/terms';
@@ -64,7 +64,7 @@ describe('path-to-outputs copy has no claims (SRS 7.5.3)', () => {
   });
 
   it('the end-of-stage screen and the links to it hold no claim (Task 14)', () => {
-    const E = QUESTION_COPY.end;
+    const E = STAGE_END_COPY;
     assertNoClaims('end of stage copy', {
       heading: E.heading, link: E.link, openReport: E.openReport, start: E.start('In-processing'), view: E.view('In-processing'),
       openHeading: E.openHeading, nothingOpen: E.nothingOpen, more: E.more(2), moreOne: E.more(1), title: E.title, whatMeans: E.whatMeans('risk area'),

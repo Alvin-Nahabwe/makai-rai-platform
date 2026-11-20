@@ -6,7 +6,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { NotFoundError } from '@/lib/data/tenant';
 import { orNotFound } from '@/lib/auth/titleGate';
 import { loadStageEnd } from '@/lib/question/stageEnd';
-import { QUESTION_COPY } from '@/lib/question/copy';
+import { STAGE_END_COPY } from '@/lib/question/end/copy';
 import { pageTitle } from '@/lib/ui/title';
 import { isUuid } from '@/lib/shell/nav';
 import { STAGES, type Stage } from '@/types/record';
@@ -37,7 +37,7 @@ const load = cache(async (slug: string, id: string, stage: string) => {
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, id, stage } = await params;
-  return { title: pageTitle(QUESTION_COPY.end.title, (await orNotFound(load(slug, id, stage))).page.projectName) };
+  return { title: pageTitle(STAGE_END_COPY.title, (await orNotFound(load(slug, id, stage))).page.projectName) };
 }
 
 /**

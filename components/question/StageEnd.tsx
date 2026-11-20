@@ -11,7 +11,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import type { StatusMarkKind } from '@/components/ui/types';
 import { draftLine, NO_RISK_AREA_GROUP, WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 import { endItems } from '@/lib/question/stageEnd';
-import { QUESTION_COPY } from '@/lib/question/copy';
+import { STAGE_END_COPY } from '@/lib/question/end/copy';
 import { STAGE_TITLE, type StageRow } from '@/lib/question/stageList';
 import { nextStageThatApplies } from '@/lib/project/applicability';
 import type { SealStepState } from '@/lib/review/sealStep';
@@ -21,7 +21,7 @@ import type { DefinedEntry, VocabularyEntry } from '@/lib/vocabulary/types';
 import type { Stage, UtcInstant } from '@/types/record';
 import './StageEnd.css';
 
-const E = QUESTION_COPY.end;
+const E = STAGE_END_COPY;
 
 /**
  * `words` with the first occurrence of `name` marked as `term` (the vocabulary defines it at first use), or null when the words do

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { StatusMarkKind } from '@/components/ui/types';
 import type { StageRow } from '@/lib/question/stageList';
 import type { AreaGroup, OpenItem, WorkingReportSummary } from '@/lib/documents/workingReport';
-import { QUESTION_COPY } from '@/lib/question/copy';
+import { STAGE_END_COPY } from '@/lib/question/end/copy';
 import { REVIEW_COPY } from '@/lib/review/copy';
 import { draftLine, NO_RISK_AREA_GROUP, REMOVED_QUESTION_GROUP, WORKING_REPORT_PAGE } from '@/lib/documents/copy';
 import { stagesThatApply } from '@/lib/project/applicability';
@@ -20,7 +20,7 @@ const { StageEnd } = await import('@/components/question/StageEnd');
  * The end-of-stage screen (design G3): where the project stands, then the report first, the next stage second and the seal step
  * for the viewer's role. Rendered from data without a database; the save that lands on it is driven by e2e/stage-end.spec.ts.
  */
-const E = QUESTION_COPY.end;
+const E = STAGE_END_COPY;
 const TAKEN = '2026-11-19T14:05:09.000Z';
 const ALL = stagesThatApply({ stageApplicability: null }, null);
 

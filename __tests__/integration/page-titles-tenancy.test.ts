@@ -13,7 +13,7 @@ import { REVIEW_COPY } from '../../lib/review/copy';
 import { DOCUMENTS_COPY } from '../../lib/documents/copy';
 import { DECISION_COPY } from '../../lib/decision/copy';
 import { STAGE_TITLE } from '../../lib/question/stageList';
-import { QUESTION_COPY } from '../../lib/question/copy';
+import { STAGE_END_COPY } from '../../lib/question/end/copy';
 import { stageReviewName } from '../../lib/seal/reviewName';
 import { runningContent } from '../../lib/content/loader';
 import { useFixtureContent } from '../helpers/content';
@@ -85,7 +85,7 @@ const PAGES = (): Array<[file: string, params: Record<string, string>, title: st
     [`${PRJ}/reviews/[reviewId]/seal`, { ...p, reviewId }, pageTitle(REVIEW_COPY.titles.seal(REVIEW, 1), PROJECT)],
     [`${PRJ}/reviews/[reviewId]/documents`, { ...p, reviewId }, pageTitle(DOCUMENTS_COPY.titles.documentsOf(REVIEW), PROJECT)],
     [`${PRJ}/stages/[stage]`, { ...p, stage: 'pre-processing' }, pageTitle(STAGE_TITLE['pre-processing'], PROJECT)],
-    [`${PRJ}/stages/[stage]/end`, { ...p, stage: 'pre-processing' }, pageTitle(QUESTION_COPY.end.title, PROJECT)],
+    [`${PRJ}/stages/[stage]/end`, { ...p, stage: 'pre-processing' }, pageTitle(STAGE_END_COPY.title, PROJECT)],
     [`${PRJ}/stages/[stage]/questions/[questionId]`, { ...p, stage: 'pre-processing', questionId: q },
       pageTitle(DECISION_COPY.titles.question(q, runningContent().questions.get(q)?.moduleTitle ?? ''), PROJECT)],
     [`${PRJ}/stages/[stage]/questions/[questionId]/history`, { ...p, stage: 'pre-processing', questionId: q }, pageTitle(DECISION_COPY.titles.history(q), PROJECT)],
