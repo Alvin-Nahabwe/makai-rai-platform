@@ -1416,6 +1416,14 @@
     "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.7.0 entry has a case of its own above it."
   },
   {
+    "task": "D-419 SFH-11 release 0.8.0",
+    "kind": "wording",
+    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
+    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0 and 0.8.0",
+    "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.8.0 records a waiver (the owner deferred the screen-reader walk again on 15 November 2026), so the list and the title gain 0.8.0.",
+    "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.8.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.8.0 the committed file waives the screen-reader walk and nothing else."
+  },
+  {
     "kind": "rule",
     "changed": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): the confirm button is disabled while busy or when canConfirm is false, and the cancel button never is",
     "replacedBy": "__tests__/unit/shared-components.test.tsx::UX-29 (helper): busy, the confirm button is aria-busy and not disabled; canConfirm false disables it, busy or not; the cancel button is never either",

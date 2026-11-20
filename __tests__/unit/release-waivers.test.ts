@@ -152,9 +152,19 @@ describe('release waivers', () => {
     expect(releaseWaiver('UX-03 help-contact-pending', RELEASE_WAIVERS_FILE, '0.7.0')).toBeUndefined();
   });
 
-  it('SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2 and 0.7.0', () => {
+  it('NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.8.0 the committed file waives the screen-reader walk and nothing else', () => {
+    const byCase = committed('0.8.0');
+    expect(Object.keys(byCase)).toEqual(['NFR-A11Y-07 screen-reader-walk']);
+    expect(byCase['NFR-A11Y-07 screen-reader-walk']).toMatchObject({
+      owner_words: 'do the checks that were not done except the screen-reader walk (keep deffered)', date: '2026-11-15', covers: ['docs/accessibility/screen-reader-walk-v0.6.0.md'], register_row: 'D-301', release: '0.8.0',
+    });
+    expect(releaseWaiver('FR-ACC-02 legal-placeholder', RELEASE_WAIVERS_FILE, '0.8.0')).toBeUndefined();
+    expect(releaseWaiver('UX-03 help-contact-pending', RELEASE_WAIVERS_FILE, '0.8.0')).toBeUndefined();
+  });
+
+  it('SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0 and 0.8.0', () => {
     // A mistyped release (0.6.10, say) would waive nothing and say nothing, so the releases are listed. A later release
     // that records a waiver adds its version here, with a case of its own above.
-    expect([...new Set(entries().map((w) => w.release))].sort()).toEqual(['0.6.0', '0.6.1', '0.6.2', '0.7.0']);
+    expect([...new Set(entries().map((w) => w.release))].sort()).toEqual(['0.6.0', '0.6.1', '0.6.2', '0.7.0', '0.8.0']);
   });
 });
