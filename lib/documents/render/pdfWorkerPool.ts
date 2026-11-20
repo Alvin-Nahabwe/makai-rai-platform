@@ -14,7 +14,8 @@ import { CLASS_NAME, FRAME, MAX_FRAMES } from '@/lib/http/stackFrames.mjs';
  * The shape is lib/auth/passwordHash.ts's pool, kept separate because that one gates sign-in:
  * - `size` workers, started on first use; idle workers do not keep the process alive.
  * - A job is rejected when its worker dies, cannot start, answers something that is not a non-empty PDF, sends an answer that
- *   cannot be read (`messageerror`), or runs longer than `timeoutMs`; that worker is ended and a new one takes the next job.
+ *   cannot be read (`messageerror`), or runs longer than `timeoutMs`; that worker is ended and a new one takes the next job. Each
+ *   such failure is a PdfPoolError whose code names it, so the request's log line does too.
  * - A render that throws in the worker is rejected with a PdfRenderFailedError: the worker's error class as a code, and the worker's
  *   own stack frames, so the request's log line (lib/http/toResponse.ts, which logs the code and frames, never the message) names
  *   where in the worker it failed. The worker sends no message and no raw stack, and the pool keeps only what it can check: a class
@@ -69,6 +70,42 @@ export class PdfRenderFailedError extends Error {
     // The main thread's own stack has only the fixed message above it, so its frame-shaped lines are frames.
     const own = (this.stack ?? '').split('\n').filter((l) => FRAME.test(l));
     this.stack = [`${this.name}: ${this.message}`, ...frames, ...own].join('\n');
+  }
+}
+
+/** How the pool failed a job, other than a render that threw on the worker (PdfRenderFailedError). */
+export type PdfPoolFailure = 'TIMEOUT' | 'WORKER_ERROR' | 'MESSAGEERROR' | 'EXIT' | 'NOT_PDF' | 'SPAWN' | 'POST' | 'CLOSED';
+
+const POOL_MESSAGES: Record<PdfPoolFailure, string> = {
+  TIMEOUT: 'pdf render timed out',
+  WORKER_ERROR: 'pdf worker failed',
+  MESSAGEERROR: 'pdf worker answer could not be read',
+  EXIT: 'pdf worker exited',
+  NOT_PDF: 'pdf worker answered something that is not a PDF',
+  SPAWN: 'pdf worker could not start',
+  POST: 'pdf worker could not be sent the document',
+  CLOSED: 'pdf worker pool is closed',
+};
+/** An errno- or Node-shaped code (`ERR_WORKER_OUT_OF_MEMORY`, `EAGAIN`) short enough that `PDF_POOL_<code>` is one toResponse keeps. */
+const NODE_CODE = /^(ERR_[A-Z0-9_]{1,28}|E[A-Z0-9]{2,20})$/;
+
+/**
+ * A job the pool failed (fix wave item 9; silent-failure audit I2). toResponse's log line keeps an error's class, code and frames and
+ * never its message, so the classification is the code: `PDF_POOL_<FAILURE>`; for a worker `error` whose own code is errno- or
+ * Node-shaped, `PDF_POOL_<that code>` (an out-of-memory end is `PDF_POOL_ERR_WORKER_OUT_OF_MEMORY`); for an exit, `PDF_POOL_EXIT_<exit
+ * code>`. The message is fixed per failure (a timeout names its limit): nothing the worker or the error event says is carried, as a
+ * worker's text can hold the report's (b29106e9).
+ */
+export class PdfPoolError extends Error {
+  readonly code: string;
+  constructor(failure: PdfPoolFailure, detail: { errorCode?: unknown; exitCode?: unknown; timeoutMs?: number } = {}) {
+    const exit = failure === 'EXIT' && Number.isInteger(detail.exitCode) && (detail.exitCode as number) >= 0 && (detail.exitCode as number) < 1e6
+      ? detail.exitCode as number : null;
+    super(failure === 'TIMEOUT' && detail.timeoutMs !== undefined ? `${POOL_MESSAGES.TIMEOUT} after ${detail.timeoutMs} ms`
+      : exit !== null ? `${POOL_MESSAGES.EXIT} (code ${exit})` : POOL_MESSAGES[failure]);
+    this.name = 'PdfPoolError';
+    this.code = failure === 'WORKER_ERROR' && typeof detail.errorCode === 'string' && NODE_CODE.test(detail.errorCode) ? `PDF_POOL_${detail.errorCode}`
+      : exit !== null ? `PDF_POOL_EXIT_${exit}` : `PDF_POOL_${failure}`;
   }
 }
 
@@ -141,14 +178,14 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
       if (slot.worker !== worker || !slot.job || m.id !== slot.jobId) return;
       const job = finish(slot)!;
       if (m.error !== undefined) job.reject(new PdfRenderFailedError(m.error, m.frames));
-      else if (!isPdf(m.pdf)) job.reject(new Error('pdf worker answered something that is not a PDF'));
+      else if (!isPdf(m.pdf)) job.reject(new PdfPoolError('NOT_PDF'));
       else job.resolve(Buffer.from(m.pdf.buffer, m.pdf.byteOffset, m.pdf.byteLength));
       pump();
     });
-    worker.on('error', (e) => fail(slot, worker, new Error(`pdf worker failed: ${e.message}`)));
+    worker.on('error', (e: Error & { code?: unknown }) => fail(slot, worker, new PdfPoolError('WORKER_ERROR', { errorCode: e.code })));
     // An answer the main thread cannot deserialize: without this the job would wait out the timeout.
-    worker.on('messageerror', (e) => fail(slot, worker, new Error(`pdf worker answer could not be read: ${e.message}`)));
-    worker.on('exit', (code) => fail(slot, worker, new Error(`pdf worker exited (code ${code})`)));
+    worker.on('messageerror', () => fail(slot, worker, new PdfPoolError('MESSAGEERROR')));
+    worker.on('exit', (code) => fail(slot, worker, new PdfPoolError('EXIT', { exitCode: code })));
     slot.worker = worker;
     return worker;
   }
@@ -162,27 +199,27 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
       let worker: Worker;
       try {
         worker = slot.worker ?? spawn(slot);
-      } catch (e) {
-        job.reject(new Error(`pdf worker could not start: ${e instanceof Error ? e.message : String(e)}`));
+      } catch {
+        job.reject(new PdfPoolError('SPAWN'));
         continue;
       }
       slot.jobId = nextId++;
       slot.job = job;
       worker.ref(); // a job in flight keeps the process alive until it is answered
-      slot.timer = timers.setTimeout(() => fail(slot, worker, new Error(`pdf render timed out after ${timeoutMs} ms`)), timeoutMs);
+      slot.timer = timers.setTimeout(() => fail(slot, worker, new PdfPoolError('TIMEOUT', { timeoutMs })), timeoutMs);
       try {
         worker.postMessage({ id: slot.jobId, tree: job.tree });
-      } catch (e) {
+      } catch {
         // A tree that cannot be copied to the thread (DataCloneError): this job fails, the worker is still good.
         finish(slot);
-        job.reject(new Error(`pdf worker could not be sent the document: ${e instanceof Error ? e.message : String(e)}`));
+        job.reject(new PdfPoolError('POST'));
       }
     }
   }
 
   return {
     render(tree) {
-      if (closed) return Promise.reject(new Error('pdf worker pool is closed'));
+      if (closed) return Promise.reject(new PdfPoolError('CLOSED'));
       return new Promise<Buffer>((resolve, reject) => {
         queue.push({ tree, resolve, reject });
         pump();
@@ -190,11 +227,11 @@ export function createPdfWorkerPool(o: { size: number; workerPath?: string; time
     },
     async close() {
       closed = true;
-      for (const job of queue.splice(0)) job.reject(new Error('pdf worker pool is closed'));
+      for (const job of queue.splice(0)) job.reject(new PdfPoolError('CLOSED'));
       await Promise.all(slots.map(async (slot) => {
         const worker = slot.worker;
         slot.worker = null;
-        finish(slot)?.reject(new Error('pdf worker pool is closed'));
+        finish(slot)?.reject(new PdfPoolError('CLOSED'));
         if (worker) await worker.terminate();
       }));
     },

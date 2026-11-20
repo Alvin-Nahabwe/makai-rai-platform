@@ -148,7 +148,7 @@ describe('the working report rendered on a worker thread', () => {
       id === 'node:worker_threads'
         ? { Worker: function Worker() { throw new Error('ERR_WORKER_INIT_FAILED EAGAIN'); } }
         : real(id)) as typeof process.getBuiltinModule);
-    await expect(within(p.render(toPdfTree(docTitled('fine'))), 5_000)).rejects.toThrow(/pdf worker could not start: ERR_WORKER_INIT_FAILED/);
+    await expect(within(p.render(toPdfTree(docTitled('fine'))), 5_000)).rejects.toThrow(/^pdf worker could not start$/); // fixed text: the start error's own message is not carried (fix wave item 9)
   });
 
   it('the worker draws only the report: a tree with another element type is refused by the worker too', async () => {
@@ -232,7 +232,7 @@ describe('the working report rendered on a worker thread', () => {
     vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
       id === 'node:worker_threads' ? { Worker: FakeWorker } : real(id)) as typeof process.getBuiltinModule);
     const p = pool({ size: 1, timers: fakeTimers() });
-    await expect(within(p.render(toPdfTree(docTitled('fine'))), 5_000)).rejects.toThrow(/pdf worker answer could not be read: could not deserialize/);
+    await expect(within(p.render(toPdfTree(docTitled('fine'))), 5_000)).rejects.toThrow(/^pdf worker answer could not be read$/); // fixed text (fix wave item 9)
     expect(FakeWorker.made[0].terminated).toBe(true);
     expect((await within(p.render(toPdfTree(docTitled('fine'))), 5_000)).subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(FakeWorker.made).toHaveLength(2);
@@ -251,4 +251,83 @@ describe('the working report rendered on a worker thread', () => {
     await expect(within(small.render(toPdfTree(docTitled('balloon'))), 30_000)).rejects.toThrow(/pdf worker (failed|exited)/);
     expect([...(await within(small.render(toPdfTree(docTitled('fine'))), 10_000))]).toEqual(FINE);
   }, 60_000);
+});
+
+/**
+ * Fix wave item 9 (silent-failure audit I2): every way the pool fails a job reaches the request's log line with a code, since that line
+ * keeps an error's class, code and frames and never its message. Each failure is a PdfPoolError with a fixed message; a worker
+ * error's own errno-shaped code and a worker's exit code are carried in the code, never its message.
+ */
+describe('every pool failure is a coded PdfPoolError in the log line', () => {
+  /** The REQUEST_FAILED line's error entry for `e`, as lib/http/toResponse.ts logs it. */
+  function loggedFor(e: unknown): { name: string; code?: string } {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+    toResponse(e);
+    spy.mockRestore();
+    const entry = JSON.parse(lines.find((l) => l.includes('REQUEST_FAILED'))!);
+    return { name: entry.error.name, code: entry.error.code };
+  }
+  const failure = <T,>(p: Promise<T>, ms: number) => within(p, ms).then(() => null, (e: unknown) => e);
+
+  it('a worker that exits: PDF_POOL_EXIT_<exit code>', async () => {
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    expect(loggedFor(await failure(p.render(toPdfTree(docTitled('crash'))), 10_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_EXIT_1' });
+  }, 30_000);
+
+  it('a render past the timeout: PDF_POOL_TIMEOUT', async () => {
+    const timers = fakeTimers();
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER, timers });
+    const hung = p.render(toPdfTree(docTitled('hang')));
+    timers.fire(timers.made[0]);
+    expect(loggedFor(await failure(hung, 10_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_TIMEOUT' });
+  }, 30_000);
+
+  it('an answer that is not a PDF: PDF_POOL_NOT_PDF', async () => {
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    expect(loggedFor(await failure(p.render(toPdfTree(docTitled('junk'))), 10_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_NOT_PDF' });
+  }, 30_000);
+
+  it('a worker that runs out of heap: the worker error\'s own code, PDF_POOL_ERR_WORKER_OUT_OF_MEMORY', async () => {
+    spyWorkers({ maxOldGenerationSizeMb: 32 });
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    expect(loggedFor(await failure(p.render(toPdfTree(docTitled('balloon'))), 30_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_ERR_WORKER_OUT_OF_MEMORY' });
+  }, 60_000);
+
+  it('a worker file that cannot load: a PDF_POOL_ code, never an anonymous Error', async () => {
+    const p = pool({ size: 1, workerPath: join(process.cwd(), '__tests__', 'fixtures', 'pdf-worker', 'missing.mjs') });
+    const logged = loggedFor(await failure(p.render(toPdfTree(docTitled('fine'))), 10_000));
+    expect(logged.name).toBe('PdfPoolError');
+    expect(logged.code).toMatch(/^PDF_POOL_(ERR_[A-Z_]+|WORKER_ERROR|EXIT_\d+)$/);
+  }, 30_000);
+
+  it('a worker that cannot start, a document that cannot be sent, and a closed pool: PDF_POOL_SPAWN, PDF_POOL_POST, PDF_POOL_CLOSED', async () => {
+    const real = process.getBuiltinModule.bind(process);
+    const spy = vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
+      id === 'node:worker_threads' ? { Worker: function Worker() { throw new Error('secret EAGAIN'); } } : real(id)) as typeof process.getBuiltinModule);
+    const spawnFailure = await failure(pool({ size: 1 }).render(toPdfTree(docTitled('fine'))), 5_000);
+    spy.mockRestore();
+    expect(loggedFor(spawnFailure)).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_SPAWN' });
+    expect(String((spawnFailure as Error).message)).not.toMatch(/secret/);
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    const unsendable = { t: 'DOCUMENT', k: null, p: { title: () => 'x' } };
+    expect(loggedFor(await failure(p.render(unsendable as never), 10_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_POST' });
+    await p.close();
+    expect(loggedFor(await failure(p.render(toPdfTree(docTitled('fine'))), 5_000))).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_CLOSED' });
+  }, 30_000);
+
+  it('an answer the main thread cannot read: PDF_POOL_MESSAGEERROR', async () => {
+    class FakeWorker extends EventEmitter {
+      postMessage() { setImmediate(() => this.emit('messageerror', new Error('secret could not deserialize'))); }
+      ref() {}
+      unref() {}
+      terminate() { return Promise.resolve(0); }
+    }
+    const real = process.getBuiltinModule.bind(process);
+    vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
+      id === 'node:worker_threads' ? { Worker: FakeWorker } : real(id)) as typeof process.getBuiltinModule);
+    const e = await failure(pool({ size: 1, timers: fakeTimers() }).render(toPdfTree(docTitled('fine'))), 5_000);
+    expect(loggedFor(e)).toEqual({ name: 'PdfPoolError', code: 'PDF_POOL_MESSAGEERROR' });
+    expect(String((e as Error).message)).not.toMatch(/secret/);
+  });
 });
