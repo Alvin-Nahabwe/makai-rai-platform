@@ -60,9 +60,9 @@ let warnedNoPublicOrigin = false;
 /** The report page for a refused download opened as a page, absolute on the public origin; null keeps the JSON answer `res`. */
 async function backToReport(slug: string, id: string, e: unknown, res: Response): Promise<Response | null> {
   const reason: ReportRefusal | null = e instanceof WorkingReportBusyError ? 'report_busy'
-    : res.status === 422 ? 'part' : res.status === 404 ? 'not_found' : res.status >= 500 ? 'failed' : null;
+    : res.status === 422 ? 'part' : res.status === 404 ? 'not_found' : res.status >= 500 ? 'internal_error' : null;
   if (reason === null) return null;
-  const reference = reason === 'failed' ? String(((await res.clone().json()) as { reference?: unknown }).reference ?? '') : undefined;
+  const reference = reason === 'internal_error' ? String(((await res.clone().json()) as { reference?: unknown }).reference ?? '') : undefined;
   const location = reportRefusalLocation(slug, id, reason, reference);
   if (location === null) return null;
   try {

@@ -25,8 +25,8 @@ export function exportRefusalLocation(
 }
 
 /** Why the working report page was given back a refused download (fix wave item 8; silent-failure audit I1). A closed set. */
-export type ReportRefusal = 'report_busy' | 'part' | 'not_found' | 'failed';
-const REPORT_REFUSALS: ReadonlySet<string> = new Set<ReportRefusal>(['report_busy', 'part', 'not_found', 'failed']);
+export type ReportRefusal = 'report_busy' | 'part' | 'not_found' | 'internal_error';
+const REPORT_REFUSALS: ReadonlySet<string> = new Set<ReportRefusal>(['report_busy', 'part', 'not_found', 'internal_error']);
 /** A support reference as lib/http/supportReference.ts makes it: eight lowercase hexadecimal characters. */
 const REFERENCE = /^[0-9a-f]{8}$/;
 
@@ -37,7 +37,7 @@ const REFERENCE = /^[0-9a-f]{8}$/;
  */
 export function reportRefusalLocation(slug: string, projectId: string, reason: ReportRefusal, reference?: string): string | null {
   if (!SLUG.test(slug) || !PROJECT_ID.test(projectId)) return null;
-  if (reason === 'failed') return reference !== undefined && REFERENCE.test(reference) ? `/orgs/${slug}/projects/${projectId}/report?refused=failed&reference=${reference}` : null;
+  if (reason === 'internal_error') return reference !== undefined && REFERENCE.test(reference) ? `/orgs/${slug}/projects/${projectId}/report?refused=internal_error&reference=${reference}` : null;
   return `/orgs/${slug}/projects/${projectId}/report?refused=${reason}`;
 }
 
@@ -45,7 +45,7 @@ export function reportRefusalLocation(slug: string, projectId: string, reason: R
 export function reportRefusalFrom(searchParams: Record<string, string | string[] | undefined>): { reason: ReportRefusal; reference: string | null } | null {
   const r = searchParams.refused;
   if (typeof r !== 'string' || !REPORT_REFUSALS.has(r)) return null;
-  if (r !== 'failed') return { reason: r as ReportRefusal, reference: null };
+  if (r !== 'internal_error') return { reason: r as ReportRefusal, reference: null };
   const ref = searchParams.reference;
-  return typeof ref === 'string' && REFERENCE.test(ref) ? { reason: 'failed', reference: ref } : null;
+  return typeof ref === 'string' && REFERENCE.test(ref) ? { reason: 'internal_error', reference: ref } : null;
 }

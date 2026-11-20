@@ -15,10 +15,10 @@ const ID = '0b6d1f0e-8d1c-4f5e-9a3b-2c1d0e9f8a7b';
 describe('reportRefusalLocation', () => {
   it('builds the report page of the same project, and refuses a slug or id that does not pass its pattern', () => {
     expect(reportRefusalLocation('acme', ID, 'report_busy')).toBe(`/orgs/acme/projects/${ID}/report?refused=report_busy`);
-    expect(reportRefusalLocation('acme', ID, 'failed', 'a1b2c3d4')).toBe(`/orgs/acme/projects/${ID}/report?refused=failed&reference=a1b2c3d4`);
+    expect(reportRefusalLocation('acme', ID, 'internal_error', 'a1b2c3d4')).toBe(`/orgs/acme/projects/${ID}/report?refused=internal_error&reference=a1b2c3d4`);
     expect(reportRefusalLocation('acme', '../x', 'part')).toBeNull();
     expect(reportRefusalLocation('Acme/..', ID, 'part')).toBeNull();
-    expect(reportRefusalLocation('acme', ID, 'failed', 'not-a-ref')).toBeNull();
+    expect(reportRefusalLocation('acme', ID, 'internal_error', 'not-a-ref')).toBeNull();
   });
 });
 
@@ -27,9 +27,9 @@ describe('reportRefusalFrom', () => {
     expect(reportRefusalFrom({ refused: 'report_busy' })).toEqual({ reason: 'report_busy', reference: null });
     expect(reportRefusalFrom({ refused: 'part' })).toEqual({ reason: 'part', reference: null });
     expect(reportRefusalFrom({ refused: 'not_found' })).toEqual({ reason: 'not_found', reference: null });
-    expect(reportRefusalFrom({ refused: 'failed', reference: 'a1b2c3d4' })).toEqual({ reason: 'failed', reference: 'a1b2c3d4' });
-    expect(reportRefusalFrom({ refused: 'failed', reference: '<script>' })).toBeNull();
-    expect(reportRefusalFrom({ refused: 'failed' })).toBeNull();
+    expect(reportRefusalFrom({ refused: 'internal_error', reference: 'a1b2c3d4' })).toEqual({ reason: 'internal_error', reference: 'a1b2c3d4' });
+    expect(reportRefusalFrom({ refused: 'internal_error', reference: '<script>' })).toBeNull();
+    expect(reportRefusalFrom({ refused: 'internal_error' })).toBeNull();
     expect(reportRefusalFrom({ refused: ['part', 'part'] })).toBeNull();
     expect(reportRefusalFrom({ refused: 'export_busy' })).toBeNull();
     expect(reportRefusalFrom({})).toBeNull();
@@ -42,7 +42,7 @@ describe('DownloadRefusal', () => {
     expect(text({ reason: 'report_busy', reference: null })).toContain(WORKING_REPORT_BUSY_MESSAGE);
     expect(text({ reason: 'part', reference: null })).toContain(PART_MESSAGE);
     expect(text({ reason: 'not_found', reference: null })).toContain(API_COPY.notFound);
-    expect(text({ reason: 'failed', reference: 'a1b2c3d4' })).toContain(API_COPY.internalError('a1b2c3d4'));
+    expect(text({ reason: 'internal_error', reference: 'a1b2c3d4' })).toContain(API_COPY.internalError('a1b2c3d4'));
     expect(text({ reason: 'part', reference: null })).toMatch(/role="alert"/);
   });
   it('renders nothing with no refusal', () => {

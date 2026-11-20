@@ -103,7 +103,7 @@ describe('a refused download opened as a page goes back to the report page', () 
     expect([nav.status, nav.headers.get('location'), (await nav.json()).code]).toEqual([404, null, 'not_found']);
   });
 
-  it('500: 303 to ?refused=failed&reference=<the logged reference>', async () => {
+  it('500: 303 to ?refused=internal_error&reference=<the logged reference>', async () => {
     store[LANES] = {
       limiter: createLimiter(1),
       pool: createPdfWorkerPool({ size: 1, workerPath: join(process.cwd(), '__tests__', 'fixtures', 'pdf-worker', 'missing.mjs') }),
@@ -114,7 +114,7 @@ describe('a refused download opened as a page goes back to the report page', () 
       const nav = await call({ navigate: true });
       const logged = lines.filter((l) => l.includes('REQUEST_FAILED')).map((l) => JSON.parse(l));
       expect(logged).toHaveLength(1);
-      expect([nav.status, nav.headers.get('location')]).toEqual([303, `${reportPage()}?refused=failed&reference=${logged[0].reference}`]);
+      expect([nav.status, nav.headers.get('location')]).toEqual([303, `${reportPage()}?refused=internal_error&reference=${logged[0].reference}`]);
     } finally {
       await store[LANES]?.pool.close();
     }
