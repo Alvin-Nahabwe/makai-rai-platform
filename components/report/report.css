@@ -238,6 +238,11 @@
     color: inherit;
   }
 
+  /* A term tip's definition sets its own ink (TermTip.css, 0,2,0), which outranks the rule above; in print the report's ink wins. */
+  .report .ui-term-tip__body .ui-definition {
+    color: inherit;
+  }
+
   .report-frame {
     display: table;
     inline-size: 100%;
