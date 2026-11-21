@@ -6,6 +6,10 @@ import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/hel
 import { draftKeys } from './helpers/session';
 import { INVITATION_COPY } from '../lib/invitations/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * NFR-PERF-02 NFR-PRIV-06, ruling T16-Q11: the invitation page's M-24 Sign out, the acceptances form's "sign out" and

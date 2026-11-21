@@ -3214,5 +3214,29 @@
     "property": "The owner's census on Home counts every button and field, and every link outside Home's data lists; the links inside Home's data lists are left out because they name the data they list. Owner's choice, 20 Nov 2026, in a question box: \"Ignore links, keep buttons (Recommended)\". The lead's lists render only for an Owner or Admin (lib/home/load.ts:175), so this narrows what O-13 counts on Home, by the owner's decision.",
     "proof": "isIgnored gains one line: `if (el.matches('a[href]') && el.closest('.home-plates, .home-rows, .home-more-link, .home-changes__list')) return true;`. It leaves out a[href] only, only inside AssignedToYou's ul.home-plates (components/home/AssignedToYou.tsx:50), TeamLeadAdditions' ul.home-rows and p.home-more-link (components/home/TeamLeadAdditions.tsx:70,86,95) and ChangesSince's ol.home-changes__list (components/home/ChangesSince.tsx:48, no links today); never by link text, so a button or field in those sections, and any link elsewhere on Home, is still counted against DASHBOARD_CONTROLS. StagesOverview is unchanged: its section carries .project-card (components/home/StagesOverview.tsx:143), excluded before. GitHub run 44777985858 failed org A owner with 'dashboard: unclassified control(s) ... Collect and label a further 1,500 records ..., Have you evaluated whether AI/ML ... (x3), Choose a project to see its findings.' (the question links are shortfall findings' rows in ul.home-rows, whose label is the question's text, components/home/parts.tsx:127-131). Seen RED then GREEN in CI mode with org A filled past 50 projects, a save and four team findings in four projects, and e2e/reading-view.spec.ts run first: before, org A owner failed 'dashboard: unclassified control(s) ... Collect and label a further 1,500 records ..., D-419 finding 3, D-419 finding 2, D-419 finding 1, Choose a project to see its findings.'; after, 15 passed with --fail-on-flaky-tests (all ten role cases).",
     "task": "D-419 (role-matrix:269), owner's choice of 20 Nov 2026"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/decision-drafts.spec.ts::(module)",
+    "replacedBy": "e2e/decision-drafts.spec.ts::UX-26 NFR-PRIV-06 B2: a second account on the same browser, on the same question, never reads the first account's draft",
+    "property": "The file's module code serves its cases; no case's steps or assertions change. Each case still opens its own browser contexts and checks what it checked before.",
+    "proof": "Three module lines are added: the import of closeOpenedContexts (e2e/helpers/contexts.ts) and a top-level `test.afterEach(closeOpenedContexts)` with a one-line comment. After each case the hook closes every browser context except the `context` fixture's. It closes only what the case itself opened, and closing an already closed context is a no-op, so no assertion can pass or fail differently. Why: with trace 'retain-on-first-failure' (eec5372d), every test traced every context earlier tests had left open in the worker. That filled the CI runner's disk (ENOSPC in run 44891338626), and the failed test's trace carried 94 contexts (run 44891340692). The same hook goes into every e2e file that calls browser.newContext.",
+    "task": "D-419 (PR 100, the CI disk)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/export-and-deletion.spec.ts::(module)",
+    "replacedBy": "e2e/export-and-deletion.spec.ts::FR-EXP-01 FR-EXP-03 UX-29 NFR-A11Y-02: export a project and delete an account with the keyboard alone",
+    "property": "The file's module code serves its cases; no case's steps or assertions change. Each case still opens its own browser contexts and checks what it checked before.",
+    "proof": "Three module lines are added: the import of closeOpenedContexts (e2e/helpers/contexts.ts) and a top-level `test.afterEach(closeOpenedContexts)` with a one-line comment. After each case the hook closes every browser context except the `context` fixture's. It closes only what the case itself opened, and closing an already closed context is a no-op, so no assertion can pass or fail differently. Why: with trace 'retain-on-first-failure' (eec5372d), every test traced every context earlier tests had left open in the worker. That filled the CI runner's disk (ENOSPC in run 44891338626), and the failed test's trace carried 94 contexts (run 44891340692). The same hook goes into every e2e file that calls browser.newContext.",
+    "task": "D-419 (PR 100, the CI disk)"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/fix7-draft-purge.spec.ts::(module)",
+    "replacedBy": "e2e/fix7-draft-purge.spec.ts::NFR-PRIV-06 FR-EXP-03 FIX-7: deleting the account removes its drafts from this browser",
+    "property": "The file's module code serves its cases; no case's steps or assertions change. Each case still opens its own browser contexts and checks what it checked before.",
+    "proof": "Three module lines are added: the import of closeOpenedContexts (e2e/helpers/contexts.ts) and a top-level `test.afterEach(closeOpenedContexts)` with a one-line comment. After each case the hook closes every browser context except the `context` fixture's. It closes only what the case itself opened, and closing an already closed context is a no-op, so no assertion can pass or fail differently. Why: with trace 'retain-on-first-failure' (eec5372d), every test traced every context earlier tests had left open in the worker. That filled the CI runner's disk (ENOSPC in run 44891338626), and the failed test's trace carried 94 contexts (run 44891340692). The same hook goes into every e2e file that calls browser.newContext.",
+    "task": "D-419 (PR 100, the CI disk)"
   }
 ]

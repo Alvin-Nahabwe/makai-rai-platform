@@ -18,6 +18,10 @@ import { PROJECT_WRITE_COPY } from '../lib/project/write/copy';
 import { PROJECT_FIELD_MESSAGES } from '../lib/projects/copy';
 import { LIFECYCLE_STAGE_WORDS } from '../lib/project/labels';
 import { UI_COPY } from '../lib/ui/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The project screens in a browser: S-08 (dashboard), S-09 (new and edit project), S-10 (stage view) and S-32 (all

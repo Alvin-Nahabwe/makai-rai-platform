@@ -5,6 +5,10 @@ import { addProject, addStageReview, buildOrg, type FixtureAccount } from '../__
 import { adminSeat } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Plan 1A Task 12 in a browser: the rail's Findings link follows the last project opened (P2, L2-64), sign-out clears it

@@ -4,6 +4,10 @@ import { expect, test } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * UX-01 (7.1.2: the gates run on every page request; gate 2 is must-change-password): `x-pathname` is the proxy's value or

@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { HOME_COPY } from '../lib/home/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Sign-in through the real /login form. Accounts are created only from an invitation (FR-ACC-01;

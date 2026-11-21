@@ -7,6 +7,10 @@ import { AUTH_COPY } from '../lib/auth/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * D16, option A (plan 1B Task 5; owner's answer to OD-1, 11 Nov 2026): on a shared browser, a second account that signs in

@@ -8,6 +8,10 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { HOME_COPY } from '../lib/home/copy';
 import { PROJECT_COPY } from '../lib/project/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Home, every variant, in a browser (plan 1B Task 10, step 2; spec 9.1): each seat of this spec's own organisation sees

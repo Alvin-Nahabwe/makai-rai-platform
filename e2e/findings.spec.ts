@@ -21,6 +21,10 @@ import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-14 and S-15 in the browser (FR-FND-02 to FR-FND-08, UX-14 to UX-17, UX-29, UX-06, UX-07, NFR-A11Y-02, NFR-A11Y-05, NFR-SEC-11).

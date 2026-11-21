@@ -7,6 +7,10 @@ import { expectDownloadLinksShowKindAndSize } from './helpers/downloads';
 import { readCreditLine } from '../lib/credit';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The shell every page sits in (units UI, SRS 7.1.1 and 7.6): S-31, the offline

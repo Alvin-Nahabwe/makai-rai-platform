@@ -10,6 +10,10 @@ import {
   pendingTargetFor,
   type PendingLinkTarget,
 } from './helpers/pendingLinks';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * FR-RM-01 (SRS line 451) and FR-RM-04: a crawl signed in as one seat of each role visits every page

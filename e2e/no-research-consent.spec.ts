@@ -6,6 +6,10 @@ import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUse
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * FR-RES-01: no page offers a research-consent control. The pages half of the guard (the source

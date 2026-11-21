@@ -5,6 +5,10 @@ import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { ORG_COPY, roleWithArticle } from '../lib/org/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The members are fixture seats (e2e/fixtures/auth.setup.ts, K0a's buildTwoOrgFixture) with their

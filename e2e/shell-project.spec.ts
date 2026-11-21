@@ -4,6 +4,10 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Stage 1 "Route", lane 3 task 1, in a browser: the rail's logo and project block (owner ruling R4), the narrow top bar's

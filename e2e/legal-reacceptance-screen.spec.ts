@@ -9,6 +9,10 @@ import { LEGAL_KIND_NAMES } from '../lib/legal/kinds';
 import { ACCEPTED_KINDS } from '../types/legal';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Plan 1B Task 7 Step 6 (spec 9.8): an account that accepted version 1 of the three texts sees, on S-05, which texts

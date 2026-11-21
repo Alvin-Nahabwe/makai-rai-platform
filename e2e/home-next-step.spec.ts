@@ -5,6 +5,10 @@ import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../_
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { HOME_COPY } from '../lib/home/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Home's "Your next step" in a browser (plan 1B Task 10, slice 3 cut; spec 9.1): an Assessor who saved a decision sees the

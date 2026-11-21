@@ -3,6 +3,10 @@ import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 import { pageTitle } from '../lib/ui/title';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * UX-05 and FR-AUTHZ-01 (SRS lines 1646-1647): a non-member opening an organisation's page, a member opening a

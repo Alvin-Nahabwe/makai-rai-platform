@@ -8,6 +8,10 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { IDLE_TEXTS } from '../lib/auth/session/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Plan 1A Task 11: the shell in a browser (the lead's additions, section 8). Each case says where a thing is, not only that

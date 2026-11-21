@@ -15,6 +15,10 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * P5: every page route loads and hydrates under the PRODUCTION Content-Security-Policy

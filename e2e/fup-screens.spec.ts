@@ -8,6 +8,10 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { eatDate } from '../lib/followup/overdue';
 import { PROJECT_COPY } from '../lib/project/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The follow-up lines of S-10 and the reminder setting of S-21 in a browser (FR-FUP-01, FR-FUP-06,

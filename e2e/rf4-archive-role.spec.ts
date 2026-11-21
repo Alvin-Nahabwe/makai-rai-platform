@@ -12,6 +12,10 @@ import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '../lib/evidence/copy';
 import { REVIEW_COPY } from '../lib/review/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,

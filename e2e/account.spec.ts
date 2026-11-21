@@ -15,6 +15,10 @@ import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { ACCOUNT_COPY, PERSONAL_DATA_COPY, SIGN_OUT_EVERYWHERE_COPY, phraseLabel } from '../lib/account/copy';
 import { DELETE_PHRASE, DELETION_UNCONFIRMED } from '../lib/export/messages';
 import { EMAIL_COPY } from '../lib/email/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-21, S-29 and the session endpoint on a running server (FR-ACC-06 to FR-ACC-09, NFR-SEC-07, UX-01, NFR-A11Y-02,
