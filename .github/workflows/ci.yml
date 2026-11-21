@@ -242,6 +242,15 @@ jobs:
         # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
         # DATABASE_URL/APP_DATABASE_URL directly), falling back to
         # identical literals when those are unset.
+        # E2E_DB_CONTAINER: restore-seal-check runs psql inside the
+        # postgres:16-alpine service container, as it does locally and as
+        # the production host does, so the client is psql 16 (it needs
+        # \bind). The runner's own psql moved to 18.7 on 20 Nov 2026 (run
+        # 44755341854, D-420). No other vitest file reads the variable.
+        # (The test's own header still says CI uses the runner's psql; it is
+        # a protected test, so that comment is left as it is.)
+        env:
+          E2E_DB_CONTAINER: ${{ job.services.postgres.id }}
         run: npx vitest run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
 
@@ -519,7 +528,13 @@ jobs:
     # run 42184836682 was cancelled at 30 min in its last step with every
     # test step passing, after a 2-minute browser install; the install step
     # may now retry for up to 35 min.
-    timeout-minutes: 65
+    # Raised from 65 to 120 on 2026-11-20 (D-421): run 44755341854 ran the
+    # chromium suite (886 tests, 1 worker) for 62 min and was cancelled at
+    # test 885, so the outage, idle sign-out and nginx steps never ran.
+    # 120 covers the documented worst case: up to 35 min of browser install,
+    # ~3.5 min of setup, ~62 min of suite, then the three follow-on steps.
+    # Sharding the suite across jobs is the lasting fix (D-422).
+    timeout-minutes: 120
 
     # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
