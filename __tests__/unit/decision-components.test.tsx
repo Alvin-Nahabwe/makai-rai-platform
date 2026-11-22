@@ -222,6 +222,18 @@ describe('S-12 decision fields', () => {
       expect(edits).toHaveBeenLastCalledWith(expect.objectContaining({ reason: 'Because', whoWhenChanged: false }));
     });
 
+    it('a changed who or when the line cannot state opens the fields instead of saying "today"; a readable one shows its own date', () => {
+      const half = { ...EMPTY, whoWhenChanged: true, date: { day: '5', month: '', year: '' } };
+      const h = renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: half })} />);
+      expect(h).toMatch(/<input[^>]*id="decision-day"[^>]*value="5"/);
+      expect(h).not.toContain('Decided by you, today');
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: { ...EMPTY, whoWhenChanged: true, date: { day: '', month: '', year: '' } } })} />)).toContain('id="decision-decided-by"');
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: { ...EMPTY, whoWhenChanged: true, decidedBy: null, date: { day: '3', month: '11', year: '2026' } } })} />)).toContain('id="decision-decided-by"');
+      const fine = renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: { ...EMPTY, whoWhenChanged: true, date: { day: '3', month: '11', year: '2026' } } })} />);
+      expect(fine).toContain('Decided by you, 3 Nov 2026');
+      expect(fine).not.toContain('id="decision-decided-by"');
+    });
+
     it('a server field error on decidedBy or declaredDate opens the fields, and the error link\'s target exists', () => {
       for (const field of ['decidedBy', 'declaredDate'] as const) {
         const h = renderToStaticMarkup(<DecisionFields {...fieldsFor({ errors: [{ field, message: 'Fix this.' }] })} />);

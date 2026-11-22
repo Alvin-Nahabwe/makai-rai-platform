@@ -3318,5 +3318,61 @@
     "property": "A field error on the reason is drawn next to its field, linked to it by aria-describedby, and marked aria-invalid. DecisionFields now takes two props, whoWhenOpen and onOpenWhoWhen (answer cost, design 2026-11-22 section 2 item 1: who and when open as one line behind Change); the case passes whoWhenOpen true and a no-op, so the form renders in the shape it asserted before.",
     "proof": "In this case the one render call gains the props `whoWhenOpen onOpenWhoWhen={() => {}}` and every expectation is unchanged (aria-invalid on the textarea, the error id in its aria-describedby, the message text); __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line holds the new props: the closed line, the opened fields, and a field error on Decided by or Decided on opening them.",
     "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::answer cost 3: Decided by opens as the viewer on a first decision, with \"Choose one\" still first and the viewer chosen",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::answer cost 3: Decided by opens as the viewer on a first decision, with \"Choose one\" still first and the viewer chosen",
+    "property": "On a first decision Decided by opens as the viewer, with the empty Choose one option first and the viewer's option selected. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::Decided by and Decided on share one row; the date keeps three boxes and Today",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::Decided by and Decided on share one row; the date keeps three boxes and Today",
+    "property": "Decided by and Decided on share one row, the date keeps its three boxes, and Today stays. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::D2 D3: the reason box is four rows; the date's hint sits under the row, one line, and every box names it",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::D2 D3: the reason box is four rows; the date's hint sits under the row, one line, and every box names it",
+    "property": "The reason box is four rows, the date's hint sits under the row, and every date box names it. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::M3: the two \"Same date as\" shortcuts are quiet single-line controls, still buttons with their names",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::M3: the two \"Same date as\" shortcuts are quiet single-line controls, still buttons with their names",
+    "property": "The two Same date as shortcuts are buttons with their names, and are drawn quiet, small and on one line. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::a current version shows \"Last decided on <date>\" at its precision, the boxes stay empty, every box names the line, and Today stays",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::a current version shows \"Last decided on <date>\" at its precision, the boxes stay empty, every box names the line, and Today stays",
+    "property": "A current version shows Last decided on <date> at its precision in the date's group, and every box names it. In the card the boxes now open at today, so this case's empty boxes are the server draft's (device date unknown) shown through DecisionFields. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::a first decision and a withdrawal as the current version show no such line",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::a first decision and a withdrawal as the current version show no such line",
+    "property": "A first decision and a withdrawal as the current version show no Last decided on line. The card's first markup now shows one line, \"Decided by you, today\", and a Change button instead of the two fields (answer cost, design 2026-11-22 section 2 item 1), so the case reads the fields through DecisionFields with whoWhenOpen true, the shape the card shows after Change.",
+    "proof": "In this case the render call changes from card(...) to the local opened(...), which renders DecisionFields with whoWhenOpen true and the draft the server renders; every expectation is unchanged. __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the closed line, the opened fields and the Change press.",
+    "task": "answer-cost 4"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::is the whole decision section, headed \"Your decision\", in the order of the sketch",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::is the whole decision section, headed \"Your decision\", in the order of the sketch",
+    "property": "The card's parts keep the sketch's order: saved mark, checklist, status, main reason, reason, who and when, evidence, consequence, Save, Next, More actions. The who-and-when position was marked by the Decided by select and the Day box; it is now marked by the one line (id decision-who-when-summary), because the card's first markup shows the line and a Change button, not the fields (answer cost, design 2026-11-22 section 2 item 1).",
+    "proof": "In this case the two needles id=\"decision-decided-by\" and id=\"decision-day\" are replaced by the one needle id=\"decision-who-when-summary\" in the same slot of the order list, and the order is still required to be ascending; the opened fields keep their own order in the 'Decided by and Decided on share one row' case, and __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the line.",
+    "task": "answer-cost 4"
   }
 ]

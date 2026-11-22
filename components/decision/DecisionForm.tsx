@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
-import { DecisionFields, FIELD_LABEL, FIELD_TARGET, isWhoWhenError } from '@/components/decision/DecisionFields';
+import { DecisionFields, FIELD_LABEL, FIELD_TARGET, isWhoWhenError, whoWhenUnreadable } from '@/components/decision/DecisionFields';
 import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
 import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
 import { cardScroller, SCROLLER_ATTRIBUTE, scrollerView } from '@/components/decision/scroller';
@@ -335,8 +335,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const latest = useRef({ value, base, retry });
   useLayoutEffect(() => { latest.current = { value, base, retry }; });
 
-  // A server or browser error on Decided by or Decided on opens them for good (the M-11 summary's links need their controls).
-  if (!whoWhenOpen && errors.some(isWhoWhenError)) setWhoWhenOpen(true);
+  // An error on Decided by or Decided on, or a who or when the line cannot state (a restored draft's half-typed date), opens
+  // them for good: the M-11 summary's links need their controls, and the fields must not close under the person's typing.
+  if (!whoWhenOpen && (errors.some(isWhoWhenError) || whoWhenUnreadable(value))) setWhoWhenOpen(true);
 
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
@@ -488,9 +489,15 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     return true;
   }, [footOfView]);
 
-  // Change opened Decided by and Decided on: focus goes to the select, as the person pressed Change to edit it.
+  // Change opened Decided by and Decided on: focus goes to the select, as the person pressed Change to edit it. The page moves
+  // only if the select is out of view (`reveal`), not to the field group's top as an M-11 link's jump does (`land`).
   useEffect(() => {
-    if (focusWhoWhen.current && whoWhenOpen) { focusWhoWhen.current = false; land('decision-decided-by'); }
+    if (!focusWhoWhen.current || !whoWhenOpen) return;
+    focusWhoWhen.current = false;
+    const select = document.getElementById('decision-decided-by');
+    if (select === null) return;
+    select.focus({ preventScroll: true });
+    reveal(select);
   });
   useEffect(() => {
     const bar = saveBar.current;

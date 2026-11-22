@@ -42,6 +42,13 @@ export interface DecisionFieldsProps {
 /** The field errors that point into Decided by or Decided on: they need those fields on the page (M-11's links). */
 export const isWhoWhenError = (e: FieldError): boolean => e.field === 'decidedBy' || e.field === 'declaredDate';
 
+/**
+ * Whether the draft's who or when is one the one-line summary cannot state truly: the person changed them (`whoWhenChanged`)
+ * and the decider is none or the date is not a date (empty, or half typed, as a restored draft can hold). The line says
+ * "today" only for a date that is still the default, so these open the fields instead.
+ */
+export const whoWhenUnreadable = (v: DecisionDraft): boolean => v.whoWhenChanged && (v.decidedBy === null || 'field' in declaredDateFromParts(v.date));
+
 /** The id of the control a field error points to, so the M-11 summary links to it (7.4.1 "Validation errors"). */
 export const FIELD_TARGET: Readonly<Record<string, string>> = Object.freeze({
   status: 'decision-status-done', scopeAnswer: 'decision-scope-yes', optionsInPlace: 'decision-option-0', reasonCode: 'decision-reason-code',
@@ -154,8 +161,8 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   // A former member who decided the current version stays selectable, named as the record names them.
   const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);
   const extraMember = current?.decidedBy?.kind === 'member' && !listed.has(current.decidedBy.user.userId) ? current.decidedBy.user : null;
-  // A field error on who or when needs the fields on the page, whatever the form holds.
-  const open = whoWhenOpen || errors.some(isWhoWhenError);
+  // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot state.
+  const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value);
   const lastOwn = data.lastOwnSaveDate;
   const shortcuts = [
     ...(lastOwn !== null ? [{ label: F.sameAsMyLast(formatDeclaredDate(lastOwn)), value: dateParts(lastOwn) }] : []),

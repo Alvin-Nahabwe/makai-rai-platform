@@ -6,7 +6,8 @@ import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib
 /**
  * The fixed texts of a decision (SRS 7.5.6, 7.5.7 M-03 and M-11, FR-DEC-01's outside roles, FR-DEC-08's
  * withdrawal codes), shared by the decision service and the S-12 form so each text has one copy. Imports
- * only `types/` and the vocabulary's terms, so a client component can import it (00-contract.md, "Further cross-unit
+ * only `types/`, the vocabulary's terms and `lib/format/dates` (which imports only `types/`; `whoWhenSummary` writes a date with it),
+ * so a client component can import it (00-contract.md, "Further cross-unit
  * symbols").
  *
  * Texts the SRS does not fix are the defaults of owner question B1 (`reviews/owner-questions.md`):
