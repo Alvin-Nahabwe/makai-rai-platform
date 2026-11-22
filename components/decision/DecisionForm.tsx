@@ -94,10 +94,10 @@ export function DecisionForm({ data, nextQuestion = null, stageHref, foot, lead,
  * the corner's mark after a refresh, and a stale base meets the conflict view before any save (review round 1).
  * `finding` is true when the sentence uses the word, so its definition goes beside it.
  */
-export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null, today: DateParts | null = null): { text: string; finding: boolean; tips: DefinedEntry[] } {
+export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null): { text: string; finding: boolean; tips: DefinedEntry[] } {
   const C = F.consequence;
   // Coordinator (T3c item 7): the version line only while the answer differs from the saved version; render only.
-  const version = answerDiffers(d, data, today) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
+  const version = answerDiffers(d, data) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
   const join = (sentence: string) => (version === '' ? sentence : sentence === '' ? version : `${sentence} ${version}`);
   if (data.question.type === 'gate') {
     return { text: join(d.scopeAnswer === null ? '' : C.scope[d.scopeAnswer]), finding: false, tips: [] };
@@ -145,24 +145,25 @@ export function ConsequenceWords({ text, finding, tips }: { text: string; findin
 /**
  * Whether the form's answer differs from the saved version (the coordinator's rule for the version line, T3c item 7): any
  * answer differs when there is no saved decision (none yet, or a withdrawal); otherwise any field the save sends, the
- * evidence in any order, and the date when one is typed; and every answer while the saved version was answered against
- * other wording (its content version). Who and when still at what the form opened with are not a different answer: the
- * date opens at `today` (the device's date, null before the form has mounted; the owner's "Prefill today", 22 Nov 2026), so
- * an untouched form is compared with the draft it opened as, and is not "unsaved". Render only: what a save sends, and the
- * server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
+ * evidence in any order, and the date when the form holds one; and every answer while the saved version was answered against
+ * other wording (its content version). The date is compared as the server's `repeats` compares it (lib/data/decisions.ts): the
+ * form's declared date, typed or defaulted to the device's today (the owner's "Prefill today", 22 Nov 2026), against the saved
+ * version's. So an untouched change on a day other than the saved version's date does differ: Save will create a version, and
+ * the line says so. An empty date (the server render, before the device's day is filled) is not a different answer. Render
+ * only: what a save sends, and the server's own "unchanged" refusal, are untouched. The "unsaved" line is not this function's:
+ * it follows `draftSavedAt` (SaveStatus `unsavedShown`), which the mount fill of today does not set.
  */
-export function answerDiffers(d: DecisionDraft, data: QuestionPanelData, today: DateParts | null = null): boolean {
+export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolean {
   const c = data.current;
   if (!isDecision(c)) return true;
   // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
   // the same answer saved against newer wording than the current version's is a new version.
   if (c.content.semver !== data.contentSemver) return true;
-  const o = draftFromCurrent(data, today);
+  const o = draftFromCurrent(data, null);
   const sorted = (a: readonly string[]) => [...a].sort().join('\n');
   if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
   if (sorted(d.optionsInPlace) !== sorted(o.optionsInPlace) || sorted(d.evidenceIds) !== sorted(o.evidenceIds)) return true;
   if (JSON.stringify(d.decidedBy) !== JSON.stringify(o.decidedBy)) return true;
-  if (d.date.day === o.date.day && d.date.month === o.date.month && d.date.year === o.date.year) return false;
   if (d.date.day === '' && d.date.month === '' && d.date.year === '') return false;
   const typed = declaredDateFromParts(d.date);
   return !('date' in typed) || typed.date !== c.declaredDate;
@@ -738,7 +739,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
-  const consequence = consequenceOf(value, data, base, today);
+  const consequence = consequenceOf(value, data, base);
   const isRetry = saveControlIsRetry({
     retry, body: toSaveBody(value, data, base) as unknown as Record<string, unknown>, status, restoredPressed, saving, retrying,
   });

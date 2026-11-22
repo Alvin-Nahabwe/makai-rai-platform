@@ -500,14 +500,30 @@ describe('S-12 answer form before hydration', () => {
     expect(h).not.toContain('id="decision-day"');
   });
 
-  it('answer cost 4: an untouched form with defaults has no unsaved changes, with the device\'s today in it or not', async () => {
-    const { answerDiffers } = await import('@/components/decision/DecisionForm');
+  it('answer cost 4: after the mount fill of today the unsaved line stays off, since only an edit keeps a draft', async () => {
+    const { unsavedShown } = await import('@/components/decision/SaveStatus');
+    // The mount effect fills the date with setValue, not through `edit`, so no draft is kept and `draftSavedAt` stays null.
+    expect(unsavedShown({ status: null, draftSavedAt: null, storageUnavailable: false })).toBe(false);
+    expect(unsavedShown({ status: null, draftSavedAt: '2026-11-22T09:00:00.000Z', storageUnavailable: false })).toBe(true);
+  });
+
+  it('answer cost 4: on an untouched change the consequence line announces the version when the saved date is not today, and not when it is', async () => {
+    const { consequenceOf, answerDiffers } = await import('@/components/decision/DecisionForm');
     const today = { day: '22', month: '11', year: '2026' };
-    const data = { ...PANEL, current: V2 };
-    expect(answerDiffers(draftFromCurrent(data, today), data, today)).toBe(false);
-    expect(answerDiffers(draftFromCurrent(data, null), data, null)).toBe(false);
-    // a typed change still counts: another day than the default is a different answer
-    expect(answerDiffers({ ...draftFromCurrent(data, today), date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: true }, data, today)).toBe(true);
-    expect(answerDiffers({ ...draftFromCurrent(data, today), reason: 'More.' }, data, today)).toBe(true);
+    const C = DECISION_FORM_COPY.consequence;
+    // saved 12 Oct, today 22 Nov: Save sends 22 Nov, a version the server does not call unchanged, so the line says so
+    const other = { ...PANEL, current: V2 };
+    const openedOther = draftFromCurrent(other, today);
+    expect(answerDiffers(openedOther, other)).toBe(true);
+    expect(consequenceOf(openedOther, other, 2).text).toContain(C.version(3));
+    // saved on today's date with nothing else changed: the same answer, no version announced
+    const same = { ...PANEL, current: { ...V2, declaredDate: '2026-11-22' as const, declaredPrecision: 'day' as const } };
+    const openedSame = draftFromCurrent(same, today);
+    expect(answerDiffers(openedSame, same)).toBe(false);
+    expect(consequenceOf(openedSame, same, 2).text).not.toContain(C.version(3));
+    // before the device's day is filled (the server render) an empty date is not a different answer
+    expect(answerDiffers(draftFromCurrent(other, null), other)).toBe(false);
+    // a changed field still counts on the saved date's day
+    expect(answerDiffers({ ...openedSame, reason: 'More.' }, same)).toBe(true);
   });
 });

@@ -3374,5 +3374,13 @@
     "property": "The card's parts keep the sketch's order: saved mark, checklist, status, main reason, reason, who and when, evidence, consequence, Save, Next, More actions. The who-and-when position was marked by the Decided by select and the Day box; it is now marked by the one line (id decision-who-when-summary), because the card's first markup shows the line and a Change button, not the fields (answer cost, design 2026-11-22 section 2 item 1).",
     "proof": "In this case the two needles id=\"decision-decided-by\" and id=\"decision-day\" are replaced by the one needle id=\"decision-who-when-summary\" in the same slot of the order list, and the order is still required to be ascending; the opened fields keep their own order in the 'Decided by and Decided on share one row' case, and __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line pins the line.",
     "task": "answer-cost 4"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/decision-components.test.tsx::answer cost 4: an untouched form with defaults has no unsaved changes, with the device's today in it or not",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::answer cost 4: on an untouched change the consequence line announces the version when the saved date is not today, and not when it is",
+    "property": "An untouched change form carries no misleading state. The first case required answerDiffers, rebased on the device's today, to be false for an untouched change on a day other than the saved version's date; that hid the consequence line's \"version N\" while Save would create one (the server's repeats compares the declared date, lib/data/decisions.ts), and answerDiffers drives only that line, never the unsaved line. The controller's ruling of 22 Nov 2026 restores the v0.9.0 meaning for every field and compares the date, typed or defaulted, with the saved version's, as the server does.",
+    "proof": "__tests__/unit/decision-components.test.tsx::answer cost 4: on an untouched change the consequence line announces the version when the saved date is not today, and not when it is: for a saved date of 12 Oct and today 22 Nov the untouched draft differs and consequenceOf contains 'version 3'; for a saved date of 22 Nov it does not differ and the line has no version; an empty date does not differ; a changed reason does. __tests__/unit/decision-components.test.tsx::answer cost 4: after the mount fill of today the unsaved line stays off, since only an edit keeps a draft: unsavedShown is false while draftSavedAt is null, which is what the mount fill (setValue, not edit) leaves.",
+    "task": "answer-cost 4"
   }
 ]
