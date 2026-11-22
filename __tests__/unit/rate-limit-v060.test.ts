@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { checkRateLimit, resetRateLimitStore, RATE_LIMITS } from '@/lib/rate-limit';
 import { HTTP_COPY } from '@/lib/http/copy';
+import { WORKING_REPORT_RATE_LIMITED_MESSAGE } from '@/lib/documents/copy';
 
 /**
  * `proxy` is driven for real. The token is the only thing stubbed: `getToken` answers with the user named in
@@ -227,6 +228,24 @@ describe('the proxy 303 for an export navigation', () => {
     expect([fetched.status, fetched.headers.get('location')]).toEqual([429, null]);
     const bad = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/not-a-uuid/working-report`, { headers: NAV, userId: 'u-report-bad' });
     expect([bad.status, bad.headers.get('location')]).toEqual([429, null]);
+  });
+
+  it('v0.9.0 security review M1: with no public origin configured, a refused report navigation keeps the JSON 429 and does not fail', async () => {
+    const saved = { nextauth: process.env.NEXTAUTH_URL, auth: process.env.AUTH_URL };
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.AUTH_URL;
+    try {
+      const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report`, { headers: NAV, userId: 'u-report-noorigin' });
+      expect([res.status, res.headers.get('location')]).toEqual([429, null]);
+      expect((await res.json()).code).toBe('rate_limited');
+    } finally {
+      if (saved.nextauth !== undefined) process.env.NEXTAUTH_URL = saved.nextauth;
+      if (saved.auth !== undefined) process.env.AUTH_URL = saved.auth;
+    }
+  });
+
+  it('v0.9.0 security review M1: the report page\'s refusal sentence names the limit the key sets', () => {
+    expect(WORKING_REPORT_RATE_LIMITED_MESSAGE).toContain(`${RATE_LIMITS['GET:/api/v1/orgs/*/projects/*/working-report'].max} reports`);
   });
 
   it('NFR-SEC-20 (owner question B4): the redirect answer has no body', async () => {
