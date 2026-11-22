@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -23,13 +23,11 @@ const LONG_NAME = `Next-step ${RUN} Antenatal-risk-triage-for-district-hospitals
 
 let fx: OrgFixture;
 let project: { id: string };
-const contexts: BrowserContext[] = [];
 let ipSeq = 0;
 const nextClientIp = () => `10.79.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() } });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -58,10 +56,6 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   if (!res.ok()) throw new Error(`seeding Q-IP-02 answered ${res.status()}: ${await res.text()}`);
-});
-
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
 });
 
 test('spec 9.1: an assessor who saved sees the next step above Assigned to you; Continue recording opens the question it names', async ({ browser }) => {

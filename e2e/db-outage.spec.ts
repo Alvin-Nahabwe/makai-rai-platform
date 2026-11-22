@@ -7,6 +7,10 @@ import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
 import { outageContainer } from './helpers/outage';
 import { API_COPY } from '../lib/http/api/copy';
 import { ERRORS_COPY } from '../lib/errors/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * NFR-AVL-04 (fault harness, SRS line 3254) and NFR-OBS-05. With the database stopped, a page shows the support
