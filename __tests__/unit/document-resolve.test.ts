@@ -115,6 +115,19 @@ describe('record fields', () => {
     expect(text(r, 'DC-07')).toContain(NO_EVIDENCE);
   });
 
+  it('answer cost: a decision with reason null prints no Reason line, whatever its status; an erased reason keeps its line', () => {
+    for (const status of ['done', 'partly'] as const) {
+      const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-12': decision({ v: 1, status, reason: null }) }), {});
+      expect(text(r, 'DC-19')).not.toContain('Reason');
+      expect(text(r, 'DC-19')).not.toContain('Not recorded');
+    }
+    const na = resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_applicable', reasonCode: 'na_no_personal_data', reason: null }) }), {});
+    expect(text(na, 'DC-07')).toContain('Not applicable (No personal data is involved).');
+    expect(text(na, 'DC-07')).not.toContain('Reason');
+    const gone = resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_applicable', reasonCode: 'na_no_personal_data', reason: null, reasonErased: { erasedOn: '2026-11-04' } }) }), {});
+    expect(text(gone, 'DC-07')).toContain(`Reason: ${docTextErasedLine('2026-11-04')}`);
+  });
+
   it('D4: a question feeding a second field of one document prints See <first field id>, and the first field prints the whole decision', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-08': decision({ v: 1, status: 'done', reason: 'From the clinic register.', evidence: [file('ev-3')] }) }), {});
     expect(text(r, 'DC-01')).toContain('From the clinic register.');

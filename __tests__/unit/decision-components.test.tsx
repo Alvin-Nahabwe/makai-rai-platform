@@ -215,6 +215,14 @@ describe('S-12 status line and conflict view', () => {
     expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual([DECISION_FORM_COPY.conflict.saveMine, DECISION_FORM_COPY.conflict.editMine, DECISION_FORM_COPY.conflict.discardMine]);
   });
 
+  it('answer cost: ConflictView: reason null shows no \'erased\' text, and an erased reason still shows the erased line', () => {
+    const none = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    expect(none).not.toContain(DECISION_FORM_COPY.conflict.erased);
+    expect(none).not.toContain('Reason: </dt><dd><bdi>Theirs');
+    const erased = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    expect(erased).toContain(DECISION_FORM_COPY.conflict.erased);
+  });
+
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
     const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('memo.pdf');
@@ -300,6 +308,22 @@ describe('S-12 regions', () => {
     const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(none).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
     const erased = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
+    expect(erased).toContain(textErasedLine('2026-11-01').replace(/'/g, '&#x27;'));
+  });
+
+  it('answer cost: CurrentDecision with reason null renders no Reason term', () => {
+    const h = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: null, reasonErased: null, evidence: [] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
+    expect(h).not.toContain('<dt>Reason</dt>');
+    expect(h).toMatch(/<dt>Evidence<\/dt><dd>None<\/dd>/);
+  });
+
+  it('answer cost: DecisionHistoryList: a version with reason null renders no Reason term, and an erased one keeps its line', async () => {
+    const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
+    const none = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[{ version: { ...V2, reason: null, reasonErased: null }, wording: null, seals: [] }]} />);
+    expect(none).not.toContain('<dt>Reason</dt>');
+    expect(none).toContain('<dt>Entered by</dt>');
+    const erased = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[{ version: { ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }, wording: null, seals: [] }]} />);
+    expect(erased).toContain('<dt>Reason</dt>');
     expect(erased).toContain(textErasedLine('2026-11-01').replace(/'/g, '&#x27;'));
   });
 

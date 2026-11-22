@@ -59,8 +59,10 @@ export function CurrentDecision({ orgSlug, current, historyCount, historyHref, s
       <SealMarker seals={seals} />
       {who}
       <dl>
-        <dt>{C.reason}</dt>
-        <dd>{current.reasonErased !== null ? textErasedLine(current.reasonErased.erasedOn) : (current.reason ?? '')}</dd>
+        {current.reasonErased !== null || current.reason !== null ? (<>
+          <dt>{C.reason}</dt>
+          <dd>{current.reasonErased !== null ? textErasedLine(current.reasonErased.erasedOn) : current.reason}</dd>
+        </>) : null}
         <dt>{C.evidence}</dt>
         <dd>{evidence}</dd>
       </dl>

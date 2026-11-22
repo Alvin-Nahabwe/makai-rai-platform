@@ -267,6 +267,24 @@ describe('preview and issue', () => {
     await expect(previewDocument(ctxFor(fx, 'assessor'), actor, body())).rejects.toMatchObject({ name: 'ForbiddenError' });
     await expect(issueDocument(ctxFor(fx, 'assessor'), actor, { ...body(), requestId: randomUUID() }, 'x')).rejects.toMatchObject({ name: 'ForbiddenError' });
   });
+
+  it("a not-applicable decision with no reason prints 'Not applicable (<label>).' with no 'Reason:' and no 'not recorded'", async () => {
+    const p = (await addProject(fx)).id;
+    await addDecision(fx, p, { stage: 'pre-processing', questionId: 'Q-PP-18', contentVersionId, status: 'not_applicable', reasonCode: 'na_no_personal_data', reason: null, decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
+    const r = (await addStageReview(fx, p, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, r, { projectId: p });
+    const out = await previewDocument(ctx(), admin(), { ...body(), projectId: p, reviewId: r, sealId: seal.id });
+    const line = out.text.split('\n').find((l) => l.startsWith('Not applicable ('));
+    expect(line).toBeDefined();
+    expect(line).toBe('Not applicable (No personal data is involved).');
+    // The decision's own block runs from its question stem to its evidence line; a neighbouring field's own gap is not this decision's.
+    const lines = out.text.split('\n');
+    const at = lines.indexOf(line as string);
+    const block = lines.slice(at - 1, lines.findIndex((l, i) => i > at && (l === 'None' || l.startsWith('Evidence:'))) + 1).join('\n');
+    expect(block).toContain('Evidence:');
+    expect(block).not.toMatch(/Reason/);
+    expect(block.toLowerCase()).not.toContain('not recorded');
+  });
 });
 
 describe('lists and downloads', () => {

@@ -159,6 +159,8 @@ export interface FixtureDecision {
   status?: StoredDecisionStatus | null; scopeAnswer?: ScopeAnswer | null; optionsInPlace?: string[];
   reasonCode?: string | null; decidedBy?: Decider; declaredDate?: DeclaredDate; by?: OrgRole;
   evidenceIds?: string[]; withdrawalCode?: string | null;
+  /** The stored reason; omitted is generated text, null is a decision saved with no reason (answer cost). */
+  reason?: string | null;
 }
 
 /** 'YYYY', 'YYYY-MM' or 'YYYY-MM-DD' as the stored date and its precision (W-3 note 7). */
@@ -177,7 +179,7 @@ export async function addDecision(fx: OrgFixture, projectId: string, d: FixtureD
   const row = await testDb.decisionVersion.create({ data: {
     orgId: fx.org.id, projectId, stage: d.stage, questionId: d.questionId, contentVersionId: d.contentVersionId, versionNumber,
     baseVersionNumber: versionNumber > 1 ? versionNumber - 1 : null, status, scopeAnswer, optionsInPlace: d.optionsInPlace ?? [],
-    reasonCode: d.reasonCode ?? null, reason: fx.text('reason', nextSeq()),
+    reasonCode: d.reasonCode ?? null, reason: d.reason !== undefined ? d.reason : fx.text('reason', nextSeq()),
     decidedByUserId: d.decidedBy?.kind === 'member' ? d.decidedBy.userId : null,
     decidedByRole: d.decidedBy?.kind === 'outside_role' ? d.decidedBy.role : null,
     ...(d.declaredDate ? declared(d.declaredDate) : {}),

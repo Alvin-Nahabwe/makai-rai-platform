@@ -282,12 +282,16 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
   return evidenceFileLine(name, e.sha256 === null ? null : formatFingerprint(e.sha256, 'short'));
 }
 
-/** D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason prints the SRS 7.5.6 line without quotes. */
+/**
+ * D2: "Not applicable (<the code's label>). Reason: '<reason>'", the reason read from the decision's own content; an erased reason
+ * prints the SRS 7.5.6 line without quotes. A reason that was never typed (NULL, not erased) prints no "Reason:" part at all.
+ */
 export function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
-  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
-  return d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`;
+  const stem = `Not applicable (${code.label}).`;
+  if (d.reasonErased !== null) return `${stem} Reason: ${docTextErasedLine(d.reasonErased.erasedOn)}`;
+  return d.row.reason === null ? stem : `${stem} Reason: '${d.row.reason}'`;
 }
 
 function evidenceLine(d: SealedDecision, snap: DocumentSnapshot): string {
@@ -306,7 +310,6 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
   if (own === undefined) throw new Error(`documents: question ${d.row.questionId} is not in its own content ${content.semver}`);
   const lines: string[] = [own.text];
   const sources: RowRef[] = [];
-  const reasonText = d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason ?? NOT_RECORDED;
   const wantsReason = parts.has('reason') || parts.has('status');
   if (d.row.status === 'not_applicable' && wantsReason) {
     lines.push(notApplicableLine(d, content));
@@ -322,8 +325,9 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
       }
       lines.push(`Status: ${status}`);
     }
-    if (parts.has('reason')) {
-      lines.push(`Reason: ${reasonText}`);
+    // A reason never typed (NULL, not erased) prints no line; an erased one prints its erasure line.
+    if (parts.has('reason') && (d.reasonErased !== null || d.row.reason !== null)) {
+      lines.push(`Reason: ${d.reasonErased !== null ? docTextErasedLine(d.reasonErased.erasedOn) : d.row.reason}`);
       sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
     }
   }
