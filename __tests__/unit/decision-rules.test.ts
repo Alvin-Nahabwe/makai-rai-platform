@@ -38,7 +38,7 @@ describe('lib/decision/rules.ts', () => {
     expect(validateDecisionFields({ ...base, declaredDate: '2026-11-01' }, latest)).toEqual([{ field: 'declaredDate', message: 'The date cannot be later than today.' }]);
   });
 
-  it('UX-12 FR-DEC-01 M-11: the reason is 1 to 4,000 code points', () => {
+  it('UX-12 FR-DEC-01 M-11: a typed reason is at most 4,000 code points; an empty one is allowed', () => {
     expect(validateDecisionFields({ ...base, reason: 'a'.repeat(4001) }, '2026-10-30')).toEqual([{ field: 'reason', message: 'The reason is 4,001 characters. The limit is 4,000.' }]);
     expect(validateDecisionFields({ ...base, reason: '\u{1F600}'.repeat(4000) }, '2026-10-30')).toEqual([]);
     expect([REASON_MAX, reasonLength('\u{1F600}a')]).toEqual([4000, 2]);

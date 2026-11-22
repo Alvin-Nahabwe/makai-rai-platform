@@ -3286,5 +3286,13 @@
     "property": "The table of server-validation rows names only the inputs the server still refuses. The 'empty reason' row is removed because an empty reason is no longer refused on a decision.",
     "proof": "The 4,001-character and NUL rows stay in the table, and __tests__/integration/decisions-validation.test.ts::answer cost: saveDecision with reason '' stores NULL proves the empty reason saves as NULL.",
     "task": "answer-cost 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-rules.test.ts::UX-12 FR-DEC-01 M-11: the reason is 1 to 4,000 code points",
+    "replacedBy": "__tests__/unit/decision-rules.test.ts::UX-12 FR-DEC-01 M-11: a typed reason is at most 4,000 code points; an empty one is allowed",
+    "property": "A decision's reason is optional (design 2026-11-22 section 2 item 2, section 8): a typed reason is at most 4,000 code points, counted as code points (an emoji counts once), and an empty or white-space reason is no longer an error. The title said 1 to 4,000 and the case's first assertion expected M11.reasonMissing for '   '; that assertion is removed and the title states the new rule.",
+    "proof": "In this case the 4,001-character reason still answers the M-11 too-long message, and 4,000 emoji answer no error, and REASON_MAX and reasonLength('\\u{1F600}a') are still 4000 and 2. __tests__/unit/decision-rules.test.ts::answer cost: a decision with an empty or white-space reason has no reason error, for every status and the gate requires no reason error for '' and '  \\n' under every status and the gate; the case \"answer cost: a decision's typed reason still obeys the limit and the characters\" pins the limit and NUL; withdrawals keep their required reason in __tests__/integration/decisions-withdrawal.test.ts::answer cost: withdrawal with an empty reason is still refused with M11.reasonMissing.",
+    "task": "answer-cost 1"
   }
 ]
