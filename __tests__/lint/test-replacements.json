@@ -3246,5 +3246,13 @@
     "property": "The file's module code serves its case; the case's steps and assertions do not change. The case still opens its own browser context and checks what it checked before.",
     "proof": "Module lines are added: the import of closeOpenedContexts (e2e/helpers/contexts.ts), a two-line comment and a top-level `test.afterEach(closeOpenedContexts)`, declared after the file's database-restart afterEach so the restart runs first. After the case the hook closes every browser context except the `context` fixture's (which the case does not use); here it closes the context the case opens with browser.newContext and never closes. Closing a context changes no assertion, and the file's other afterEach (restarting the database) does not use it. Why: the lint __tests__/lint/e2e-contexts-hook.test.ts now requires the hook, or a stated reason, in every e2e file that opens a browser context, so a context left open is never traced by every later test in the worker (D-419, PR 100: ENOSPC in run 44891338626).",
     "task": "D-419 follow-up (the context-hook lint)"
+  },
+  {
+    "task": "release 0.9.0",
+    "kind": "wording",
+    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
+    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0 and 0.9.0",
+    "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.9.0 records a waiver (the owner deferred the screen-reader walk again on 22 November 2026: \"Defer again\"), so the list and the title gain 0.9.0.",
+    "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.9.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.9.0 the committed file waives the screen-reader walk and nothing else."
   }
 ]
