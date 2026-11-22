@@ -142,18 +142,31 @@ export function isDraftValue(v: unknown): v is StoredDecisionDraft {
  * The draft a stored value restores to on open, or null when it is not a draft (`isDraftValue`). Everything the person
  * typed comes back, and `href` is this page's. Who and when come back only when the draft says the person changed them
  * (`whoWhenChanged`); otherwise they take today's defaults, so a decider or a date from an older day is never trusted
- * unseen (design 2026-11-22 section 4 and section 8). A v0.9.0 draft has no such field and reads as false.
+ * unseen (design 2026-11-22 section 4 and section 8).
+ *
+ * A draft with no such field was saved by v0.9.0, where the date always opened empty: a date in it was typed by the
+ * person, so it is kept with its decider (the default one when the draft has none), and the draft counts as changed.
+ * A flagless draft with an empty date takes the defaults (controller ruling, answer cost 3 fix round 1).
  */
 export function restoreDraft(found: unknown, data: QuestionPanelData, today: DateParts | null): DecisionDraft | null {
   if (!isDraftValue(found)) return null;
   const defaults = draftFromCurrent(data, today);
-  const changed = found.whoWhenChanged === true;
+  const typedDate = found.date.day !== '' || found.date.month !== '' || found.date.year !== '';
+  const changed = found.whoWhenChanged === undefined ? typedDate : found.whoWhenChanged;
   return {
     ...found, href: defaults.href,
-    decidedBy: changed ? found.decidedBy : defaults.decidedBy,
+    decidedBy: changed ? (found.decidedBy ?? defaults.decidedBy) : defaults.decidedBy,
     date: changed ? found.date : defaults.date,
     whoWhenChanged: changed,
   };
+}
+
+/**
+ * A change to the draft's fields. A patch that carries "Decided by" or "Decided on" records that the person changed who
+ * or when, so a restore keeps them (`restoreDraft`); any other patch leaves the record as it was. Pure.
+ */
+export function patchDraft(value: DecisionDraft, patch: Partial<DecisionDraft>): DecisionDraft {
+  return { ...value, ...patch, ...('decidedBy' in patch || 'date' in patch ? { whoWhenChanged: true } : {}) };
 }
 
 /** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your version"). */

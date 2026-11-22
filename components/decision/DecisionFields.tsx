@@ -11,7 +11,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
-import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
+import { dateParts, isDecision, patchDraft, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
 import { OUTSIDE_ROLES, type DecisionStatus, type Decider, type FieldError } from '@/types/record';
@@ -58,8 +58,8 @@ function deciderFrom(v: string): Decider | null {
 export function DecisionFields({ data, value, errors, disabled, onChange }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
-  // Who or when edited: the draft now holds the person's own, which a restore keeps (lib/question/draft.ts `restoreDraft`).
-  const set = (patch: Partial<DecisionDraft>) => onChange({ ...value, ...patch, ...('decidedBy' in patch || 'date' in patch ? { whoWhenChanged: true } : {}) });
+  // A patch to who or when is recorded in the draft (lib/question/draft.ts `patchDraft`), so a restore keeps the person's own.
+  const set = (patch: Partial<DecisionDraft>) => onChange(patchDraft(value, patch));
   const current = isDecision(data.current) ? data.current : null;
 
   // R3 (owner, 15 Nov 2026): four short cards in two columns, each the radio, the mark and the word; each card's sentence

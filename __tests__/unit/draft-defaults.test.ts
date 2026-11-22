@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
-import { draftFromCurrent, EMPTY_DATE, isDraftValue, restoreDraft, toSaveBody } from '@/lib/question/draft';
+import { draftFromCurrent, EMPTY_DATE, isDraftValue, patchDraft, restoreDraft, toSaveBody } from '@/lib/question/draft';
 
 /**
  * Answer cost, Task 3 (design 2026-11-22 section 2 item 1 and section 8 "Browser drafts and the defaults"): the answer
@@ -89,6 +89,26 @@ describe('answer cost 3: a stored draft keeps who and when only if the person ch
     expect(restoreDraft(stored(old), changeOf, T)).toMatchObject({ decidedBy: { kind: 'member', userId: 'u-m' }, date: T });
   });
 
+  it('a flagless (v0.9.0) draft with a typed date keeps its date and decider, and counts as changed', () => {
+    const own = { decidedBy: { kind: 'member', userId: 'u-other' }, date: { day: '3', month: '11', year: '2026' } };
+    expect(restoreDraft(stored(own), PANEL, T)).toMatchObject({ ...own, whoWhenChanged: true });
+    expect(restoreDraft(stored(own), PANEL, null)).toMatchObject({ ...own, whoWhenChanged: true });
+  });
+
+  it('a flagless draft with a typed date and no decider keeps the date and takes the default decider, never an empty one', () => {
+    const date = { day: '3', month: '11', year: '2026' };
+    expect(restoreDraft(stored({ decidedBy: null, date }), PANEL, T)).toMatchObject({ decidedBy: viewer, date, whoWhenChanged: true });
+    expect(restoreDraft(stored({ decidedBy: null, date }), changeOf, T)).toMatchObject({ decidedBy: { kind: 'member', userId: 'u-m' }, date, whoWhenChanged: true });
+  });
+
+  it('a flagless draft with a decider but an empty date takes the defaults for both', () => {
+    expect(restoreDraft(stored({ decidedBy: { kind: 'member', userId: 'u-other' } }), PANEL, T)).toMatchObject({ decidedBy: viewer, date: T, whoWhenChanged: false });
+  });
+
+  it('a flagged draft with whoWhenChanged false and a typed date still gets the defaults', () => {
+    expect(restoreDraft(stored({ date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: false }), PANEL, T)).toMatchObject({ date: T, whoWhenChanged: false });
+  });
+
   it('restoreDraft on a server render (today null) gives an empty date unless the person changed it', () => {
     expect(restoreDraft(stored(), PANEL, null)!.date).toEqual(EMPTY_DATE);
   });
@@ -110,5 +130,33 @@ describe('answer cost 3: the new field never leaves the browser', () => {
   it('toSaveBody does not carry whoWhenChanged', () => {
     const d = { ...draftFromCurrent(PANEL, T), status: 'done' as const };
     expect(Object.keys(toSaveBody(d, PANEL, null))).not.toContain('whoWhenChanged');
+  });
+});
+
+describe('answer cost 3: patchDraft records that the person changed who or when', () => {
+  const base = draftFromCurrent(PANEL, T);
+
+  it('a decidedBy patch sets whoWhenChanged', () => {
+    expect(patchDraft(base, { decidedBy: { kind: 'outside_role', role: 'principal_investigator' } })).toMatchObject({ decidedBy: { kind: 'outside_role', role: 'principal_investigator' }, whoWhenChanged: true });
+  });
+
+  it('a date patch sets whoWhenChanged', () => {
+    const date = { day: '1', month: '2', year: '2026' };
+    expect(patchDraft(base, { date })).toMatchObject({ date, whoWhenChanged: true });
+  });
+
+  it('a status, reason or reasonCode patch leaves the flag as it was, in both states', () => {
+    for (const flag of [false, true]) {
+      const d = { ...base, whoWhenChanged: flag };
+      expect(patchDraft(d, { status: 'done' }).whoWhenChanged).toBe(flag);
+      expect(patchDraft(d, { reason: 'x' }).whoWhenChanged).toBe(flag);
+      expect(patchDraft(d, { reasonCode: 'na_other' }).whoWhenChanged).toBe(flag);
+    }
+  });
+
+  it('keeps the other fields and does not change its input', () => {
+    const out = patchDraft(base, { reason: 'x' });
+    expect(out).toEqual({ ...base, reason: 'x' });
+    expect(base.reason).toBe('');
   });
 });
