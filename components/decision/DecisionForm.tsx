@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
-import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
+import { DecisionFields, FIELD_LABEL, FIELD_TARGET, isWhoWhenError } from '@/components/decision/DecisionFields';
 import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
 import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
 import { cardScroller, SCROLLER_ATTRIBUTE, scrollerView } from '@/components/decision/scroller';
@@ -26,7 +26,8 @@ import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSI
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
-import { declaredDateFromParts } from '@/lib/decision/rules';
+import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
+import { todayParts } from '@/lib/ui/dateParts';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
@@ -93,10 +94,10 @@ export function DecisionForm({ data, nextQuestion = null, stageHref, foot, lead,
  * the corner's mark after a refresh, and a stale base meets the conflict view before any save (review round 1).
  * `finding` is true when the sentence uses the word, so its definition goes beside it.
  */
-export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null): { text: string; finding: boolean; tips: DefinedEntry[] } {
+export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null, today: DateParts | null = null): { text: string; finding: boolean; tips: DefinedEntry[] } {
   const C = F.consequence;
   // Coordinator (T3c item 7): the version line only while the answer differs from the saved version; render only.
-  const version = answerDiffers(d, data) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
+  const version = answerDiffers(d, data, today) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
   const join = (sentence: string) => (version === '' ? sentence : sentence === '' ? version : `${sentence} ${version}`);
   if (data.question.type === 'gate') {
     return { text: join(d.scopeAnswer === null ? '' : C.scope[d.scopeAnswer]), finding: false, tips: [] };
@@ -144,20 +145,24 @@ export function ConsequenceWords({ text, finding, tips }: { text: string; findin
 /**
  * Whether the form's answer differs from the saved version (the coordinator's rule for the version line, T3c item 7): any
  * answer differs when there is no saved decision (none yet, or a withdrawal); otherwise any field the save sends, the
- * evidence in any order, and the date when one is typed (the date opens empty, and an empty date is not a different
- * answer); and every answer while the saved version was answered against other wording (its content version). Render only: what a save sends, and the server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
+ * evidence in any order, and the date when one is typed; and every answer while the saved version was answered against
+ * other wording (its content version). Who and when still at what the form opened with are not a different answer: the
+ * date opens at `today` (the device's date, null before the form has mounted; the owner's "Prefill today", 22 Nov 2026), so
+ * an untouched form is compared with the draft it opened as, and is not "unsaved". Render only: what a save sends, and the
+ * server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
  */
-export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolean {
+export function answerDiffers(d: DecisionDraft, data: QuestionPanelData, today: DateParts | null = null): boolean {
   const c = data.current;
   if (!isDecision(c)) return true;
   // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
   // the same answer saved against newer wording than the current version's is a new version.
   if (c.content.semver !== data.contentSemver) return true;
-  const o = draftFromCurrent(data, null);
+  const o = draftFromCurrent(data, today);
   const sorted = (a: readonly string[]) => [...a].sort().join('\n');
   if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
   if (sorted(d.optionsInPlace) !== sorted(o.optionsInPlace) || sorted(d.evidenceIds) !== sorted(o.evidenceIds)) return true;
   if (JSON.stringify(d.decidedBy) !== JSON.stringify(o.decidedBy)) return true;
+  if (d.date.day === o.date.day && d.date.month === o.date.month && d.date.year === o.date.year) return false;
   if (d.date.day === '' && d.date.month === '' && d.date.year === '') return false;
   const typed = declaredDateFromParts(d.date);
   return !('date' in typed) || typed.date !== c.declaredDate;
@@ -299,6 +304,12 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const [restoredPressed, setRestoredPressed] = useState(false);
   // True once the form has mounted and read the device's draft: before that, a click is not yet the form's.
   const [ready, setReady] = useState(false);
+  // The device's date as three boxes, known only after mount: the server render does not depend on it (no hydration mismatch),
+  // and until then the summary line reads "today". Decided by and Decided on stay closed behind Change until it is pressed,
+  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls).
+  const [today, setToday] = useState<DateParts | null>(null);
+  const [whoWhenOpen, setWhoWhenOpen] = useState(false);
+  const focusWhoWhen = useRef(false);
   // Whether the field holds an answer of the person's that the current version does not: set by every edit and by a
   // restored draft, cleared by a save of exactly what the field holds and by Discard. The form keeps it itself, so it
   // holds in a browser that cannot keep drafts too: a new version replaces the form only when this is false (CR-1, F11).
@@ -324,6 +335,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const latest = useRef({ value, base, retry });
   useLayoutEffect(() => { latest.current = { value, base, retry }; });
 
+  // A server or browser error on Decided by or Decided on opens them for good (the M-11 summary's links need their controls).
+  if (!whoWhenOpen && errors.some(isWhoWhenError)) setWhoWhenOpen(true);
+
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
@@ -333,7 +347,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     // without a word (e2e/decision-save-without-upload.spec.ts); kept, it finishes and edits the answer, so the next Save
     // adds it as the "Saved without" line promises.
     if (conflict === null && !typedSinceCurrent && !uploads.linkAdding && uploads.uploading.length === 0) {
-      setValue(draftFromCurrent(data, null));
+      setValue(draftFromCurrent(data, today));
       setBase(currentNumber);
       setRetry(NO_RETRY);
       setEvidenceInitial(data.current?.evidence ?? []);
@@ -347,16 +361,20 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   useEffect(() => {
     const s = openDraftStore();
     store.current = s;
-    // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
+    // The device's date exists only in the browser, after hydration: filled here while the date is still the default
+    // (whoWhenChanged false), never on the server (the owner's "Prefill today", 22 Nov 2026).
+    const t = todayParts(new Date());
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToday(t);
+    setValue((v) => (v.whoWhenChanged ? v : { ...v, date: t }));
+    // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
     setReady(true);
     if (s === null) { setStorageUnavailable(true); return; }
     const now = new Date();
     s.purgeExpired(now);
     const found = s.read<DecisionDraft>(key, now);
     if (found === null) return;
-    // Task 4 gives this the device's today; until then the date is not defaulted (controller ruling R2).
-    const restored = restoreDraft(found.value, data, null);
+    const restored = restoreDraft(found.value, data, t);
     if (restored === null) return;
     setValue(restored);
     setTypedSinceCurrent(true);
@@ -469,6 +487,11 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     el.focus({ preventScroll: true });
     return true;
   }, [footOfView]);
+
+  // Change opened Decided by and Decided on: focus goes to the select, as the person pressed Change to edit it.
+  useEffect(() => {
+    if (focusWhoWhen.current && whoWhenOpen) { focusWhoWhen.current = false; land('decision-decided-by'); }
+  });
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
@@ -708,7 +731,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
-  const consequence = consequenceOf(value, data, base);
+  const consequence = consequenceOf(value, data, base, today);
   const isRetry = saveControlIsRetry({
     retry, body: toSaveBody(value, data, base) as unknown as Record<string, unknown>, status, restoredPressed, saving, retrying,
   });
@@ -761,7 +784,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
           </div>
         ) : null}
 
-        <DecisionFields data={data} value={value} errors={errors} disabled={false} onChange={edit} />
+        <DecisionFields
+          data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
+          onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }}
+        />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}
         <section data-region="evidence-block">

@@ -22,6 +22,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
 const { DecisionCard } = await import('@/components/decision/DecisionCard');
+const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
 
 const F = DECISION_FORM_COPY;
@@ -70,6 +71,14 @@ const changed = async (p: Partial<QuestionPanelData>, open = 0): Promise<string>
 };
 const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number; all?: number } = {}) =>
   renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...((o.open ?? 0) > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.all ?? o.open ?? 0} />) ?? '';
+/**
+ * The fields with Decided by and Decided on open, as the card shows them after Change (answer cost 4: the card's first markup
+ * shows one line and a Change button instead). The draft is the one the form opens as on the server, the device's date unknown.
+ */
+const opened = (p: Partial<QuestionPanelData> = {}) => {
+  const data = { ...PANEL, ...p };
+  return renderToStaticMarkup(<DecisionFields data={data} value={draftFromCurrent(data, null)} errors={[]} disabled={false} onChange={() => {}} whoWhenOpen onOpenWhoWhen={() => {}} />);
+};
 const words = (h: string) => textOf(h).replace(/\s+/g, ' ');
 /** The words of the one consequence line. */
 const consequence = (h: string) => {
@@ -99,7 +108,7 @@ describe('the decision card (R2)', () => {
     };
     const order = [
       at('id="s12-answer-form"'), at('class="ui-saved'), at('Which of these are in place?'), at(/<legend[^>]*>Status<\/legend>/),
-      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-decided-by"'), at('id="decision-day"'),
+      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-who-when-summary"'),
       at(/<legend>Evidence<\/legend>/), at('data-consequence'), at('>Save decision</button>'), at(`>${F.card.next(NEXT.text)}`),
       at(`<summary>More actions</summary>`),
     ];
@@ -202,7 +211,7 @@ describe('the reason, the main reason and Decided by', () => {
 
   it('answer cost 3: Decided by opens as the viewer on a first decision, with "Choose one" still first and the viewer chosen', () => {
     expect(draftFromCurrent(PANEL, null).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
-    const h = card();
+    const h = opened();
     const select = h.match(/<select[^>]*id="decision-decided-by"[\s\S]*?<\/select>/)![0];
     expect(select).toMatch(/^<select[^>]*>\s*<option value="">Choose one<\/option>\s*<option value="member:u-me" selected="">You \(Amina N\.\)<\/option>/);
   });
@@ -213,7 +222,7 @@ describe('the reason, the main reason and Decided by', () => {
   });
 
   it('Decided by and Decided on share one row; the date keeps three boxes and Today', () => {
-    const h = card();
+    const h = opened();
     expect(h).toMatch(/<div class="decision-fields__row">[\s\S]*id="decision-decided-by"[\s\S]*<legend class="ui-date__legend">Decided on/);
     expect([...h.matchAll(/<input[^>]*inputmode="numeric"/gi)]).toHaveLength(3);
     expect(h).toMatch(/<button[^>]*>Today<\/button>/);
@@ -361,7 +370,7 @@ describe('review round 1', () => {
   });
 
   it('D2 D3: the reason box is four rows; the date\'s hint sits under the row, one line, and every box names it', () => {
-    const h = card();
+    const h = opened();
     expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*rows="4"/);
     expect(h).toMatch(/<\/fieldset><\/div><p id="decision-date-hint" class="decision-fields__date-hint">/);
     for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*aria-describedby="decision-date-hint"`));
@@ -391,7 +400,7 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
 
   it('M3: the two "Same date as" shortcuts are quiet single-line controls, still buttons with their names', () => {
     const lastOwn = '2026-11-01';
-    const h = card({ current: V2, lastOwnSaveDate: lastOwn as never });
+    const h = opened({ current: V2, lastOwnSaveDate: lastOwn as never });
     expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsMyLast('1 Nov 2026'))}</button>`));
     expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsCurrent('12 Oct 2026'))}</button>`));
     // Today stays the date's one bordered button; every button after it (the shortcuts) is drawn quiet: no fill, no border,
@@ -778,7 +787,7 @@ describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the
     for (const [declaredDate, declaredPrecision, shown] of [['2026-11-15', 'day', '15 Nov 2026'], ['2026-11', 'month', 'Nov 2026'], ['2026', 'year', '2026']] as const) {
       const current = { ...V1, declaredDate, declaredPrecision };
       expect(draft(current).date).toEqual({ day: '', month: '', year: '' });
-      const h = card({ current, historyCount: 1 });
+      const h = opened({ current, historyCount: 1 });
       expect(words(h)).toContain(F.lastDecidedOn(shown));
       expect(F.lastDecidedOn(shown)).toBe(`Last decided on ${shown}`);
       // Inside the date's group, under its legend and before the boxes.
@@ -795,9 +804,9 @@ describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the
   });
 
   it('a first decision and a withdrawal as the current version show no such line', () => {
-    expect(words(card())).not.toContain('Last decided on');
+    expect(words(opened())).not.toContain('Last decided on');
     const withdrawn = { ...V2, status: 'withdrawn' as const, reason: 'x', withdrawalCode: 'duplicate' as const, decidedBy: null };
-    const h = card({ current: withdrawn, historyCount: 2 });
+    const h = opened({ current: withdrawn, historyCount: 2 });
     expect(words(h)).not.toContain('Last decided on');
     expect(h).not.toContain('id="decision-hint"');
   });

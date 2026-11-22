@@ -1,5 +1,6 @@
 import { textErasedLine } from '@/lib/documents/copy';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { DecisionDraft } from '@/lib/question/draft';
@@ -19,11 +20,15 @@ import { STATUS_MARK_COPY } from '@/lib/ui/copy';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/x', useParams: () => ({ slug: 'acme' }) }));
 
-const { DecisionFields } = await import('@/components/decision/DecisionFields');
+const { DecisionFields, FIELD_TARGET } = await import('@/components/decision/DecisionFields');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
 const { ConflictView } = await import('@/components/decision/ConflictView');
 const { CurrentDecision } = await import('@/components/decision/CurrentDecision');
-const { draftFromCurrent } = await import('@/lib/question/draft');
+const { draftFromCurrent, draftErrors, toSaveBody } = await import('@/lib/question/draft');
+const { todayParts } = await import('@/lib/ui/dateParts');
+const { Button } = await import('@/components/ui/Button');
+const { Select } = await import('@/components/ui/Select');
+const { DateField } = await import('@/components/ui/DateField');
 const { safeDraftHref } = await import('@/components/decision/DraftsOnThisDevice');
 const { DecisionForm } = await import('@/components/decision/DecisionForm');
 const { QuestionPanelRegions } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page');
@@ -54,8 +59,9 @@ const PANEL: QuestionPanelData = {
 };
 const EMPTY: DecisionDraft = draftFromCurrent(PANEL, null);
 
-const html = (p: Partial<QuestionPanelData> = {}, v: Partial<DecisionDraft> = {}) =>
-  renderToStaticMarkup(<DecisionFields data={{ ...PANEL, ...p }} value={{ ...EMPTY, ...v }} errors={[]} disabled={false} onChange={() => {}} />);
+/** `whoWhenOpen` is true by default: the cases that look into Decided by and Decided on read the opened fields (answer cost 4). */
+const html = (p: Partial<QuestionPanelData> = {}, v: Partial<DecisionDraft> = {}, whoWhenOpen = true) =>
+  renderToStaticMarkup(<DecisionFields data={{ ...PANEL, ...p }} value={{ ...EMPTY, ...v }} errors={[]} disabled={false} onChange={() => {}} whoWhenOpen={whoWhenOpen} onOpenWhoWhen={() => {}} />);
 
 describe('S-12 decision fields', () => {
   it('UX-09 R2: a native radio group named Status, four options in order, and the reason code only with Not applicable or Not yet; the finding note is no longer under the legend', () => {
@@ -115,7 +121,7 @@ describe('S-12 decision fields', () => {
   });
 
   it('M-11 NFR-A11Y-03: a field error is next to its field and linked to it', () => {
-    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={EMPTY} errors={[{ field: 'reason', message: 'Write a reason.' }]} disabled={false} onChange={() => {}} />);
+    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={EMPTY} errors={[{ field: 'reason', message: 'Write a reason.' }]} disabled={false} onChange={() => {}} whoWhenOpen onOpenWhoWhen={() => {}} />);
     expect(h).toMatch(/<textarea[^>]*aria-invalid="true"/);
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*decision-reason-error/);
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
@@ -139,11 +145,104 @@ describe('S-12 decision fields', () => {
   });
 
   it('plan 1A Task 17: a date error keeps its id, and the reason count is not a limit on typing', () => {
-    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={{ ...EMPTY, reason: 'x'.repeat(4001) }} errors={[{ field: 'declaredDate', message: 'February has 28 days.' }]} disabled={false} onChange={() => {}} />);
+    const h = renderToStaticMarkup(<DecisionFields data={PANEL} value={{ ...EMPTY, reason: 'x'.repeat(4001) }} errors={[{ field: 'declaredDate', message: 'February has 28 days.' }]} disabled={false} onChange={() => {}} whoWhenOpen onOpenWhoWhen={() => {}} />);
     expect(h).toMatch(/id="decision-declaredDate-error"[^>]*>February has 28 days\.</);
     expect(h).toMatch(/<input[^>]*id="decision-day"[^>]*aria-describedby="[^"]*decision-declaredDate-error/);
     expect(h).not.toMatch(/<textarea[^>]*maxlength/i);
     expect(h).toContain('4,001 / 4,000 characters');
+  });
+
+  /** Every element of a rendered tree that `pred` accepts; a function component's own output, its children not expanded. */
+  function findAll(node: ReactNode, pred: (e: ReactElement<Record<string, unknown>>) => boolean, out: ReactElement<Record<string, unknown>>[] = []): ReactElement<Record<string, unknown>>[] {
+    if (Array.isArray(node)) { node.forEach((n) => findAll(n, pred, out)); return out; }
+    if (isValidElement<Record<string, unknown>>(node)) { if (pred(node)) out.push(node); findAll(node.props.children as ReactNode, pred, out); }
+    return out;
+  }
+  const noop = () => {};
+  const fieldsFor = (over: Partial<Parameters<typeof DecisionFields>[0]> = {}) =>
+    ({ data: PANEL, value: EMPTY, errors: [], disabled: false, onChange: noop, whoWhenOpen: false, onOpenWhoWhen: noop, ...over });
+
+  describe('answer cost 4: who and when as one line', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('a first answer shows "Decided by you, 22 Nov 2026" and a Change button, and no Decided by select', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-22T12:00:00Z'));   // midday UTC: the 22nd on any device from UTC-12 to UTC+11
+      const h = renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: draftFromCurrent(PANEL, todayParts(new Date())) })} />);
+      expect(h).toContain('Decided by you, 22 Nov 2026');
+      const button = h.match(/<button[^>]*>Change<\/button>/)?.[0] ?? '';
+      expect(button).toContain('aria-expanded="false"');
+      expect(button).toContain('type="button"');
+      expect(h).not.toContain('id="decision-decided-by"');
+      expect(h).not.toContain('id="decision-day"');
+      // before the device's date is known the line says "today", and a change keeps the earlier decider
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor()} />)).toContain('Decided by you, today');
+      const change = draftFromCurrent({ ...PANEL, current: V2 }, todayParts(new Date()));
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ data: { ...PANEL, current: V2 }, value: change })} />))
+        .toContain('Decided by Principal investigator, 22 Nov 2026');
+      // a restored draft's own who and when are what the line shows, not the defaults
+      const own = { ...EMPTY, decidedBy: { kind: 'member' as const, userId: 'u-j' }, date: { day: '12', month: '10', year: '2026' }, whoWhenChanged: true };
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: own })} />)).toContain('Decided by Joseph K., 12 Oct 2026');
+    });
+
+    it('the Change button is named with the line it changes, and Change alone does not edit the answer', () => {
+      const tree = DecisionFields(fieldsFor({ onOpenWhoWhen: noop }));
+      const button = findAll(tree, (e) => e.type === Button)[0];
+      expect(button.props['aria-expanded']).toBe(false);
+      expect(button.props['aria-describedby']).toBe('decision-who-when-summary');
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor()} />)).toMatch(/id="decision-who-when-summary"[^>]*>Decided by you, today</);
+    });
+
+    it('Change shows the select and the date fields; opening alone leaves whoWhenChanged, and the next edit to who or when sets it', () => {
+      const closed = html({}, {}, false);
+      expect(closed).not.toContain('id="decision-decided-by"');
+      const open = html({}, {}, true);
+      expect(open).toMatch(/<select[^>]*id="decision-decided-by"/);
+      for (const part of ['day', 'month', 'year']) expect(open).toMatch(new RegExp(`<input[^>]*id="decision-${part}"`));
+      expect(open).toMatch(/<button[^>]*>Today<\/button>/);
+      expect(open).not.toMatch(/<button[^>]*>Change<\/button>/);
+      // the press only asks the form to open the fields: no edit reaches onChange
+      const opened = vi.fn(); const changed = vi.fn();
+      const closedTree = DecisionFields(fieldsFor({ onOpenWhoWhen: opened, onChange: changed }));
+      (findAll(closedTree, (e) => e.type === Button)[0].props.onClick as () => void)();
+      expect(opened).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+      // an edit to Decided by, or to the date, records the change in the draft
+      const edits = vi.fn();
+      const openTree = DecisionFields(fieldsFor({ whoWhenOpen: true, onChange: edits }));
+      const select = findAll(openTree, (e) => e.type === Select && e.props.id === 'decision-decided-by')[0];
+      (select.props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'member:u-j' } });
+      expect(edits).toHaveBeenLastCalledWith(expect.objectContaining({ decidedBy: { kind: 'member', userId: 'u-j' }, whoWhenChanged: true }));
+      const date = findAll(openTree, (e) => e.type === DateField)[0];
+      (date.props.onChange as (d: { day: string; month: string; year: string }) => void)({ day: '3', month: '11', year: '2026' });
+      expect(edits).toHaveBeenLastCalledWith(expect.objectContaining({ date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: true }));
+      // any other edit leaves the record as it was
+      const reasonField = findAll(openTree, (e) => e.type !== Select && e.type !== DateField && typeof e.props.onChange === 'function' && e.props.name === 'reason')[0];
+      (reasonField.props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'Because' } });
+      expect(edits).toHaveBeenLastCalledWith(expect.objectContaining({ reason: 'Because', whoWhenChanged: false }));
+    });
+
+    it('a server field error on decidedBy or declaredDate opens the fields, and the error link\'s target exists', () => {
+      for (const field of ['decidedBy', 'declaredDate'] as const) {
+        const h = renderToStaticMarkup(<DecisionFields {...fieldsFor({ errors: [{ field, message: 'Fix this.' }] })} />);
+        expect(FIELD_TARGET[field]).toBe(field === 'decidedBy' ? 'decision-decided-by' : 'decision-day');
+        expect(h, field).toContain(`id="${FIELD_TARGET[field]}"`);
+        expect(h, field).toContain('Fix this.');
+      }
+      // an error on another field leaves them closed
+      const other = renderToStaticMarkup(<DecisionFields {...fieldsFor({ errors: [{ field: 'reason', message: 'Fix this.' }] })} />);
+      expect(other).not.toContain('id="decision-decided-by"');
+    });
+
+    it('the reason box is labelled optional, has no required attribute, and Save with Done and no reason sends reason \'\'', () => {
+      const h = html();
+      const label = h.match(/<label[^>]*for="decision-reason"[^>]*>([\s\S]*?)<\/label>/)?.[1] ?? '';
+      expect(label.replace(/<[^>]+>/g, '')).toBe('Reason (optional)');
+      expect(h.match(/<textarea[^>]*id="decision-reason"[^>]*>/)?.[0]).not.toMatch(/\brequired\b/);
+      const done = { ...draftFromCurrent(PANEL, { day: '22', month: '11', year: '2026' }), status: 'done' as const, reason: '' };
+      expect(draftErrors(done, PANEL, new Date('2026-11-22T12:00:00Z'))).toEqual([]);
+      expect(toSaveBody(done, PANEL, null).reason).toBe('');
+    });
   });
 });
 
@@ -380,5 +479,23 @@ describe('S-12 answer form before hydration', () => {
       expect(disabledDepthAt(h, at(control)), String(control)).toBeGreaterThan(0);
     }
     expect(h.match(/type="submit"/g)).toHaveLength(1);
+  });
+
+  it('answer cost 4: the first markup says "today" and shows no Decided by select, so it does not depend on the device\'s date', () => {
+    const h = renderToStaticMarkup(<DecisionForm data={PANEL} />);
+    expect(h).toContain('Decided by you, today');
+    expect(h).not.toContain('id="decision-decided-by"');
+    expect(h).not.toContain('id="decision-day"');
+  });
+
+  it('answer cost 4: an untouched form with defaults has no unsaved changes, with the device\'s today in it or not', async () => {
+    const { answerDiffers } = await import('@/components/decision/DecisionForm');
+    const today = { day: '22', month: '11', year: '2026' };
+    const data = { ...PANEL, current: V2 };
+    expect(answerDiffers(draftFromCurrent(data, today), data, today)).toBe(false);
+    expect(answerDiffers(draftFromCurrent(data, null), data, null)).toBe(false);
+    // a typed change still counts: another day than the default is a different answer
+    expect(answerDiffers({ ...draftFromCurrent(data, today), date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: true }, data, today)).toBe(true);
+    expect(answerDiffers({ ...draftFromCurrent(data, today), reason: 'More.' }, data, today)).toBe(true);
   });
 });

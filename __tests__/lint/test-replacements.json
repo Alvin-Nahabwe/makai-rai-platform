@@ -3310,5 +3310,13 @@
     "property": "A new version opens from the current version's fields, and a withdrawal opens with no status and no reason but the viewer as decider. draftFromCurrent now takes the device's today as a second argument (answer cost, design 2026-11-22 section 2 item 1); the case passes null, the server render's value, so the date is still the empty one it asserted.",
     "proof": "In this case both draftFromCurrent calls gain the argument null and every expectation is unchanged (status, reason, decidedBy, the three empty date boxes); __tests__/unit/draft-defaults.test.ts::answer cost 3: the answer form opens with who and when filled in a server render (today null) leaves the date empty, for every case holds the null behaviour, and the same file's other cases hold the non-null one.",
     "task": "answer-cost 3"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::M-11 NFR-A11Y-03: a field error is next to its field and linked to it",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::M-11 NFR-A11Y-03: a field error is next to its field and linked to it",
+    "property": "A field error on the reason is drawn next to its field, linked to it by aria-describedby, and marked aria-invalid. DecisionFields now takes two props, whoWhenOpen and onOpenWhoWhen (answer cost, design 2026-11-22 section 2 item 1: who and when open as one line behind Change); the case passes whoWhenOpen true and a no-op, so the form renders in the shape it asserted before.",
+    "proof": "In this case the one render call gains the props `whoWhenOpen onOpenWhoWhen={() => {}}` and every expectation is unchanged (aria-invalid on the textarea, the error id in its aria-describedby, the message text); __tests__/unit/decision-components.test.tsx::answer cost 4: who and when as one line holds the new props: the closed line, the opened fields, and a field error on Decided by or Decided on opening them.",
+    "task": "answer-cost 4"
   }
 ]
