@@ -849,8 +849,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             : null}
           </div>
         </div>
-        {/* GUARD: insert no block inside this fieldset on the frame a draft is restored (Chromium leaves .decision-fields 0 px
-            tall, T6 and R6-1); the save bar stays its last child. Such blocks go after it, below. */}
+        {/* GUARD: insert no block inside this fieldset on the frame a draft is restored (Chromium left .decision-fields 0 px
+            tall while it was a size container, T6 and R6-1; D-419 removed the container); the save bar stays its last
+            child. Such blocks go after it, below. */}
         </fieldset>
         {/* R6-1: after the fieldset, as the unsaved line below is: it appears on the frame a draft is restored. */}
         {extraEvidenceIds.length > 0 ? (
@@ -870,7 +871,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             live span reads the whole sentence. Not drawn on a phone, whose fixed bar shows the whole line (DecisionForm.css).
             After the fieldset, not in it, so the bar stays the fieldset's last child: drawn inside it on the frame a restored
             draft is read (the fieldset enabled, the fields refilled), Chromium left the fields' inline-size container
-            (.decision-fields, DecisionFields.css) 0 px tall, every field undrawn, until the next layout. Inside the div the
+            (.decision-fields, DecisionFields.css) 0 px tall, every field undrawn, until the next layout. D-419 removed
+            that container for a related flake; the rule stays. Inside the div the
             conflict view hides, so it is hidden with the form. */}
         {unsavedShown({ status, draftSavedAt, storageUnavailable })
           ? <p className="text-muted decision-unsaved-more" aria-hidden="true" data-unsaved-more>{F.unsavedMore}</p>

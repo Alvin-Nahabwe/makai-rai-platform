@@ -380,8 +380,8 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
 
   it('M2: Decided by keeps at least 16rem beside Decided on, and the two stack when the card is narrower than both', () => {
     const fields = css('components/decision/DecisionFields.css');
-    expect(fields).toMatch(/\.decision-fields\s*\{[^}]*container-type:\s*inline-size/);
-    expect(fields).toMatch(/@container \(min-width: 42rem\)\s*\{\s*\.decision-fields__row\s*\{\s*grid-template-columns:\s*minmax\(16rem, 1fr\) minmax\(0, 1\.5fr\);/);
+    expect(fields).not.toMatch(/container-type:\s*inline-size/);
+    expect(fields).toMatch(/@media \(738px <= width < 1024px\), \(1034px <= width < 1160px\), \(1378px <= width < 1440px\) \{\s*\.decision-fields__row\s*\{\s*grid-template-columns:\s*minmax\(16rem, 1fr\) minmax\(0, 1\.5fr\);/);
     expect(fields).not.toMatch(/minmax\(11rem/);
     expect(fields).toMatch(/\.decision-fields__row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/);
   });

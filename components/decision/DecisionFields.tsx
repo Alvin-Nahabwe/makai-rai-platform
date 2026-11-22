@@ -157,8 +157,8 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
         {erased === null ? null : <p id="decision-reason-erased" className="decision-fields__help">{textErasedLine(erased)}</p>}
       </div>
 
-      {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below about
-          430 px of the card the two stack (DecisionFields.css, a container query). */}
+      {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below 42rem
+          of the fields the two stack (DecisionFields.css, viewport bands measured to match). */}
       <div className="decision-fields__row">
       {/* Starts empty on a first decision (owner OQ1 (a)): the empty first option keeps the browser from showing the first
           member as chosen while the answer holds no one. */}
