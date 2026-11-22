@@ -9,6 +9,10 @@ import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { PERSONAL_DATA_COPY, phraseLabel } from '../lib/account/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-20 and S-21's data actions on a running server, by keyboard alone (FR-EXP-01, FR-EXP-03, UX-29,

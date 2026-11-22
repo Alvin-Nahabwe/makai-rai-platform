@@ -8,6 +8,10 @@ import { recordRequests } from './helpers/requests';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { IDLE_TEXTS } from '../lib/auth/session/copy';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The shell pages (Task U1) checked with the harness helpers: axe in both themes at 1280 and 360, target size at 360,

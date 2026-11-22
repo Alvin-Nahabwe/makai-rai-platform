@@ -7,6 +7,10 @@ import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { IDLE_TEXTS } from '../lib/auth/session/copy';
 import { AUTH_COPY } from '../lib/auth/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Review Focus RF-3 (FR-DEC-06, UX-26, UX-43; call R-53): a draft survives an idle sign-out and returns after sign-in

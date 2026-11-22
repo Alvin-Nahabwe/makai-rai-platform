@@ -41,7 +41,10 @@ export default defineConfig({
   reporter: [['list'], ['html']],
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // The failed attempt's trace, not the retry's: with --fail-on-flaky-tests a flake's retry passes, and its trace shows
+    // nothing of the failure (B3 neighbour, PR 100). Every test's first run is recorded and kept only if it failed;
+    // retries are not traced.
+    trace: 'retain-on-first-failure',
     ...channel,
   },
   webServer: {

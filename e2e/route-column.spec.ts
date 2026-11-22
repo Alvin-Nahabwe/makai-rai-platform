@@ -7,6 +7,10 @@ import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, questio
 import { QUESTION_COPY } from '../lib/question/copy';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 import { STATUS_MARK_COPY } from '../lib/ui/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The question page's column (owner's decision "Route column", 14 November 2026; owner's answer R1, 15 November 2026: the

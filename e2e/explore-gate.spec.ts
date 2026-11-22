@@ -4,6 +4,10 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { failOnDialog } from './helpers/dialogs';
 import { signInWith } from './helpers/session';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Security review 0.7.0, L-1 (UX-01, FR-ACC-04, A7): a client-side navigation from Framework to Controls runs the gates.

@@ -363,7 +363,7 @@ test('R6-1: with the kept-evidence box shown on the frame a draft is restored, w
   await draftHolds(page, '"evidenceIds":["'); // the draft write is debounced: wait for the draft in storage
   await page.reload(); await waitForQuestionPage(page);
   await expect(page.locator('[data-kept-evidence]')).toBeVisible();
-  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the size container is laid out').toBeGreaterThan(0);
+  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the decision fields are laid out').toBeGreaterThan(0);
   const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
   const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
   expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);
@@ -378,10 +378,12 @@ test('M-r7-1: with the "not uploaded before the page closed" line shown on the f
   await page.locator('input[type="file"]').setInputFiles({ name: 'mid-r7.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nmid r7\n') });
   await expect(page.getByText(/^Uploading mid-r7\.pdf/)).toBeVisible();
   await draftHolds(page, '"notUploaded":["');
-  await page.unroute(/\/evidence$/);
+  // The route stays until the reload has replaced the page, which cuts the held request off (M-18 in evidence-block.spec.ts
+  // also reloads mid-upload and never unroutes): an unroute here released it to the server, and its 201 could reach the old
+  // page first, which then named the file as uploaded.
   await page.reload(); await waitForQuestionPage(page);
   await expect(page.getByText('mid-r7.pdf was not uploaded before the page closed. Choose the file again.')).toBeVisible();
-  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the size container is laid out').toBeGreaterThan(0);
+  expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the decision fields are laid out').toBeGreaterThan(0);
   const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
   const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
   expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);

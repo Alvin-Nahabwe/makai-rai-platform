@@ -2,6 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { applyNetworkProfile, type NetworkProfile } from './helpers/network';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, newProject, openQuestion, questionPath, saveStatus, seatOf } from './helpers/session';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-12 on slow links (NFR-PERF-03) and the size of a decision save (NFR-PERF-05). NFR-PERF-03 is verified on the

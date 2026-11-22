@@ -12,6 +12,10 @@ import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { draftKeys, draftValues, fillValid, stageOf, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Version 2 of the three accepted texts reaches an account that accepted version 1 (FR-ACC-04, FR-ACC-03 threat A5,

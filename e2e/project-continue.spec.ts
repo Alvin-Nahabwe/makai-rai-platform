@@ -6,6 +6,10 @@ import { questionsInStage, runningContent } from '../lib/content/loader';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { PROJECT_COPY } from '../lib/project/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The project page's one primary action in a browser (plan 1C C11, cut; spec 9.2): an Assessor on a fresh project sees

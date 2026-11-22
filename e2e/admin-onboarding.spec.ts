@@ -14,6 +14,10 @@ import { COPY_LINK_COPY } from '../lib/invitations/link/copy';
 import { INVITATION_PAGE_COPY, ORG_COPY } from '../lib/org/copy';
 import { ADMIN_FORMS_COPY, INVITATION_STATE_WORDS } from '../lib/admin/forms/copy';
 import { ADMIN_COPY } from '../lib/admin/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * J-01, the MAK-AI administrator's journey (units/ORG.md Task 9): create an organisation with its institution's legal

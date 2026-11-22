@@ -4,6 +4,10 @@ import { GUIDANCE_COPY } from '../lib/guidance/copy';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-26, the framework reference page (FR-CNT-01, UX-32, UX-36, NFR-A11Y-02, NFR-A11Y-05), driven in the browser as a

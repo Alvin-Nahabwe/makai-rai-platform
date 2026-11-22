@@ -13,6 +13,10 @@ import { PROJECT_COPY } from '../lib/project/copy';
 import { PROJECT_WRITE_COPY } from '../lib/project/write/copy';
 import { UI_COPY } from '../lib/ui/copy';
 import { TERM_DOES_NOT_APPLY, TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '../lib/vocabulary/terms';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-10 as three lines of stops in a browser (lane 4 Task A; Route R5; spec 9.2; plan 1C Task 8): side by side at 1280 px

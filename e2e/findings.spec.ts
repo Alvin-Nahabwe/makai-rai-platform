@@ -21,6 +21,10 @@ import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-14 and S-15 in the browser (FR-FND-02 to FR-FND-08, UX-14 to UX-17, UX-29, UX-06, UX-07, NFR-A11Y-02, NFR-A11Y-05, NFR-SEC-11).
@@ -437,7 +441,9 @@ test('R4: on the question page the line reads that the finding can now be closed
   await page.goto(`/orgs/${fx.org.slug}/projects/${project.id}/stages/pre-processing/questions/Q-PP-01`);
   await expect(page.locator('#question-heading')).toBeVisible();
   await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
-  const region = page.locator('[data-region="finding-link"]');
+  // A writer's finding line is in the decision card's foot (components/decision/DecisionCard.tsx, HeldFindingLink); the
+  // page's own finding-link region is a reader's raise link only.
+  const region = page.locator('[data-region="answer-form"]');
   await expect(region.getByText(QUESTION_COPY.findingLink.open)).toBeVisible();
   let loads = 0;
   page.on('load', () => { loads++; });

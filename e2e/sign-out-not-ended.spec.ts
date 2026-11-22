@@ -5,6 +5,10 @@ import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixtur
 import { signInWith } from './helpers/session';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { GATE_COPY, SHELL_COPY } from '../lib/shell/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Lead's ruling L5-11 (d1-sfh F3): when next-auth cannot fetch its CSRF token, its sign-out answers with

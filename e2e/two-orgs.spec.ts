@@ -15,6 +15,10 @@ import type { OrgRole } from '@prisma/client';
 import { can } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Task 12 Step 2.
@@ -184,7 +188,9 @@ test.describe('a member of one organisation joins a second (plan 1B Task 6, spec
     await expect(page.locator('h1')).toHaveText(`You are invited to ${b.org.name}`);
     await page.getByRole('button', { name: INVITATION_COPY.accept }).click();
     await page.waitForURL(`**/orgs/${b.org.slug}/dashboard?welcome=1`);
-    await expect(page.getByText(welcomeLine(b.org.name, roleWithArticle('assessor')))).toBeVisible();
+    // The page's h1, by role: once the route is announced, Next's route announcer repeats the h1's text, and getByText then
+    // matches both (a strict-mode failure in CI run 44891340692).
+    await expect(page.getByRole('heading', { level: 1, name: welcomeLine(b.org.name, roleWithArticle('assessor')), exact: true })).toBeVisible();
 
     const nav = page.getByRole('navigation', { name: 'Main', exact: true });
     // The switcher's list (the rail's Home also links to B's Home, the open organisation).

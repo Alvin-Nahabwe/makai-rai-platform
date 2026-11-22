@@ -6,6 +6,10 @@ import { draftKeys, fixtureOrgId, openQuestion, openQuestionIn, questionPath, se
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DRAFTS_COPY } from '../lib/decision/drafts/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Drafts across accounts and sign-out (UX-26, NFR-PRIV-06, M-41; preventive obligations B2 and B4). Q is a fixture id.

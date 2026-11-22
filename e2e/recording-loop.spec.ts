@@ -4,6 +4,10 @@ import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { actAsSeat, newProject, seatOf, stagePath } from './helpers/session';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Plan 1C Task 3, All questions (page variant): the "Show" filter as chips with JavaScript off and on, the 28-question

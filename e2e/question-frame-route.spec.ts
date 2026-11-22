@@ -348,7 +348,10 @@ test('guidance: the risk areas sit under Why this is asked as links to their car
   await expect(page.locator('.suggested-controls__group')).toHaveCount(await ways.locator('.suggested-controls__group').count());
 });
 
-test('print: the strips, the route column and the form controls are hidden; the question and the guidance stay', async ({ page, baseURL }) => {
+// Quarantined by the owner's decision of 20 Nov 2026 (question box: "Quarantine, design later (Recommended)"): the print
+// rules hide classes the decision card no longer renders, and hiding the form would drop the decision from the printout.
+// Register D-423: print a writer's saved decision as text, then lift this fixme. v0.8.0 shipped it failing (v0.8.0.md:108).
+test.fixme('print: the strips, the route column and the form controls are hidden; the question and the guidance stay', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openQuestion(page, 'assessor', Q, baseURL!);
   await page.emulateMedia({ media: 'print' });

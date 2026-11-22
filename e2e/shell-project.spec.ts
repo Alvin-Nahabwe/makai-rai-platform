@@ -4,6 +4,10 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Stage 1 "Route", lane 3 task 1, in a browser: the rail's logo and project block (owner ruling R4), the narrow top bar's
@@ -264,6 +268,8 @@ test('the shell leaves the question page\'s Save row as it is: fixed to the foot
   await page.goto(questionPath());
   const bar = page.locator('.decision-save-bar');
   await expect(bar).toBeVisible();
+  // FocusOnArrival's focus can land after the scrolls below and scroll the heading back into view (as in D23 below).
+  await expect(page.locator('#question-heading')).toBeFocused();
   const foot = () => bar.evaluate((el) => Math.round(el.getBoundingClientRect().bottom - window.innerHeight));
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
   expect(await foot(), 'the row sits on the screen\'s foot').toBe(0);
@@ -286,6 +292,9 @@ for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
     const page = await signedIn(browser, fx.members.assessor, { viewport: { width, height } });
     await page.goto(questionPath());
     await hydrated(page);
+    // FocusOnArrival focuses the heading by script once the page's effects run, which can be after the rail is hydrated: a
+    // focus after the prepend below scrolls the heading, now 2400 px down, into view, and the probe ends 550 px above the foot.
+    await expect(page.locator('#question-heading')).toBeFocused();
     // A fixture of this spec's own, the rule lane 2's pinned Save row uses from 1024 px (DecisionForm.css on its branch):
     // sticky, its end inset taking back the scroller's 32 px end padding. It ends a block as long as a long form, put first in
     // main itself (the form starts near the top, as the decision form does), so only the shell's boxes stand between it and
@@ -314,6 +323,8 @@ for (const [width, height] of [[1280, 800], [1366, 768]] as const) {
     for (const path of [questionPath(), projectPath(), `/orgs/${fx.org.slug}/dashboard`]) {
       await page.goto(path);
       await hydrated(page);
+      // On the question page FocusOnArrival's focus can land after the scroll below and bring the heading back (as above).
+      if (path === questionPath()) await expect(page.locator('#question-heading')).toBeFocused();
       await expect(page.getByRole('contentinfo'), `${path}: one footer`).toHaveCount(1);
       // The frame keeps two rows for in-flow boxes before the shell (shell.css): a third would land after the band.
       expect(await page.evaluate(() => {

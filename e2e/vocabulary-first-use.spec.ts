@@ -14,6 +14,10 @@ import { readFrameworkNames, runningFrameworkFile } from '../__tests__/helpers/f
 import { cleanText } from '../__tests__/helpers/contentQuestions';
 import { firstUseViolations, type TextNodeInfo } from '../lib/vocabulary/firstUse';
 import * as terms from '../lib/vocabulary/terms';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Plan 1A, Task 9: a screen's first use of a defined term sits beside its definition (lib/vocabulary/firstUse.ts holds

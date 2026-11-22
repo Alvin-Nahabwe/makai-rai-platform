@@ -202,7 +202,15 @@ async function findUnclassifiedControls(page: Page, knownNames: ReadonlyArray<{ 
       // Home's next step is two navigation links (to one question and to its stage's questions), present only when the
       // person has a next step, so it varies with data as the project cards do. That a role which records no decisions
       // never gets it is asserted in this file's case below, and in e2e/home-next-step.spec.ts (T9.5).
-      if (el.closest('.next-step')) return true;
+      if (el.closest('.home-next')) return true;
+      // Home's data lists (owner's choice, 20 Nov 2026: "Ignore links, keep buttons (Recommended)"): their links name the
+      // data they list, so they vary with the data, as S-32's project links below do. Only links, and only inside these
+      // containers: every button and field in Home's sections stays in the census. AssignedToYou's plates (ul.home-plates),
+      // TeamLeadAdditions' rows (ul.home-rows; a shortfall finding's row is its question's text) and its whole-list link
+      // (p.home-more-link), and ChangesSince's list (ol.home-changes__list, no links today). StagesOverview is the
+      // .project-card above. The lead's lists render only for an Owner or Admin (lib/home/load.ts), so they are not the same
+      // for every role: this narrows what O-13 counts on Home, by the owner's decision (D-419).
+      if (el.matches('a[href]') && el.closest('.home-plates, .home-rows, .home-more-link, .home-changes__list')) return true;
       if (el.closest('.members .ui-table')) return true;
       // S-32's project links, S-10's breadcrumb and its stage jump row are read-only navigation, the same for every role.
       // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
@@ -285,11 +293,14 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
         // T9.5: a role that records no decisions never gets Home's next step, whatever the data. Its presence for the roles
         // that record depends on their saves, so it is not asserted here.
         if (!can(role, 'decision:write')) {
-          await expect.soft(page.locator('.next-step'), `${role}: Home shows no next step to a role that records no decisions`).toHaveCount(0);
+          await expect.soft(page.locator('.home-next'), `${role}: Home shows no next step to a role that records no decisions`).toHaveCount(0);
           await expect.soft(page.getByRole('link', { name: HOME_COPY.continueRecording }), `${role}: no Continue recording link`).toHaveCount(0);
         }
 
-        await page.goto(`/orgs/${org.slug}/projects`);
+        // Every row at once: S-32 shows 50 rows, active first, so once other specs fill the fixture organisation the archived
+        // project made above is past the first 50 and its Unarchive button is not rendered. `shown` is the page's own Show more
+        // parameter; nine digits is the most it reads (lib/ui/showMore.ts), so every row of the organisation is listed.
+        await page.goto(`/orgs/${org.slug}/projects?shown=999999999`);
         await assertScreenControls(page, role, PROJECTS_LIST_CONTROLS);
         if (role === 'owner') await assertNoUnclassifiedControls(page, 'projects list', PROJECTS_LIST_CONTROLS);
 

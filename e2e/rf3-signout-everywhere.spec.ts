@@ -8,6 +8,10 @@ import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * Review Focus RF-3 (FR-DEC-06, FR-ACC-07, UX-26): a draft typed in one browser survives **Sign out everywhere** pressed in

@@ -4,6 +4,10 @@ import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-28, the public About page, in a real browser (UX-03, FR-PUB-02, NFR-A11Y-01, NFR-A11Y-02,

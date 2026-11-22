@@ -19,6 +19,10 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * J-03 and the acceptance gate in a browser (FR-ACC-01 to FR-ACC-04, UX-01, UX-22; SRS 3 J-03,

@@ -14,6 +14,10 @@ import { isLegalTextRoute, pageFiles, staticPagesIn, templateRegExp, unaccounted
 import { ownProject, seedCrawlProject } from './helpers/crawlProject';
 import { projectTexts, type ProjectList } from './helpers/projectTexts';
 import { ERRORS_COPY } from '../lib/errors/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit

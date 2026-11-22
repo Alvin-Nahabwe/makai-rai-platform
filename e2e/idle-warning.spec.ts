@@ -4,6 +4,10 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
 import { NOT_FOUND_COPY } from '../lib/errors/not-found/copy';
 import { IDLE_TEXTS } from '../lib/auth/session/copy';
 import { AUTH_COPY } from '../lib/auth/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * UX-43 (SRS 7.6.1, line 2645; WCAG 2.2.1): two minutes before the session cookie's expiry the

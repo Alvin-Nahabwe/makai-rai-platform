@@ -13,6 +13,10 @@ import type { OrgRole } from '@prisma/client';
 import { COPY_LINK_COPY } from '../lib/invitations/link/copy';
 import { MEMBERS_COPY as C } from '../lib/org/members/copy';
 import { memberRoleWords } from '../lib/org/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * S-22 Members and S-30 Organisation details (FR-MEM-01 to FR-MEM-04, UX-23, UX-27, UX-29, NFR-INT-02,

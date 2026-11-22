@@ -5,6 +5,10 @@ import { draftKeys } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { INVITATION_COPY } from '../lib/invitations/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * NFR-PRIV-06 FIX-7: the sign-outs that end this browser's session other than the sidebar's also remove the account's

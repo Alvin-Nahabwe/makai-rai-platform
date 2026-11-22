@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { SIGN_IN_COPY } from '../lib/auth/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * NFR-SEC password-in-URL (unit FIXPW). Before React has hydrated, a native submit of the sign-in form must not put

@@ -10,6 +10,10 @@ import { addProject, buildOrg } from '../__tests__/helpers/recordFixture';
 import { abortIfPendingBackground } from './helpers/pendingLinks';
 import { signInWith } from './helpers/session';
 import type { PerfManifest } from '../scripts/load/seed-perf-fixture';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * NFR-PERF-02 (SRS line 3195): the full first-visit transfer (HTML, page data, CSS, JavaScript, fonts, images) is at

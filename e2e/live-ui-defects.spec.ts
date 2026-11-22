@@ -8,6 +8,10 @@ import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatReques
 import { API_COPY } from '../lib/http/api/copy';
 import { ORG_COPY } from '../lib/org/copy';
 import { ADMIN_COPY } from '../lib/admin/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * v0.6.1 U12 rows (a), (b), (d) and (e): four defects that were broken for people on v0.6.0, each checked at the
