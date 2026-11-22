@@ -2,11 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { actAsSeat, openQuestionIn } from './helpers/session';
 
 /**
- * UX-42 (FocusOnArrival): on arriving at a question its heading takes focus. On the document's first load the page is
- * already at its top, so the focus does not scroll, and a person who scrolled before the page's effects ran stays where
- * they are (the D23 race). After Next or Previous the page frame keeps its scroll (it lives in the root layout), so there
- * the focus does scroll, and that is what brings the new question's heading into view (measured: with preventScroll the
- * frame stayed at 1076 px and the heading was off screen).
+ * UX-42 (FocusOnArrival): on arriving at a question its heading takes focus. On a fresh load the page starts at its top,
+ * so the focus does not scroll, and a person who scrolled before the page's effects ran stays where they are (the D23
+ * race). Every other arrival scrolls: after Next or a link the page frame keeps its scroll (it lives in the root layout;
+ * measured with preventScroll, the frame stayed at 1076 px and the heading was off screen), and after a reload or
+ * back/forward the browser may have restored an old scroll (the owner's choice: the heading is scrolled into view).
  */
 
 /** Records, for every focus() on the question's heading, whether it was asked not to scroll. */
@@ -47,7 +47,27 @@ test('UX-42: on first load the question\'s heading takes focus without scrolling
   await actAsSeat(page, 'admin');
   await openQuestionIn(page, 'Q-PP-01');
   await expect(page.locator('#question-heading')).toBeFocused();
-  expect(await calls(page), 'the first focus asks not to scroll').toEqual([true]);
+  // React Strict Mode runs the effect twice in development, so there may be two calls; each asks not to scroll.
+  const made = await calls(page);
+  expect(made.length, 'the heading was focused').toBeGreaterThan(0);
+  expect(made.every(Boolean), 'every first-load focus asks not to scroll').toBe(true);
+  expect(await headingInView(page), 'the page starts at its top, so the heading is in view').toBe(true);
+});
+
+test('UX-42: on a reload the heading takes focus and is scrolled into view', async ({ page }) => {
+  await recordHeadingFocus(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/login');
+  await actAsSeat(page, 'admin');
+  await openQuestionIn(page, 'Q-PP-01');
+  await expect(page.locator('#question-heading')).toBeFocused();
+  await scrollToFoot(page);
+  await page.reload();
+  await expect(page.locator('#question-heading')).toBeFocused();
+  const made = await calls(page);
+  expect(made.length, 'the heading was focused').toBeGreaterThan(0);
+  expect(made.some(Boolean), 'a reload may restore an old scroll, so the focus scrolls (owner, 22 Nov 2026)').toBe(false);
+  await expect.poll(() => headingInView(page), 'the heading is in view').toBe(true);
 });
 
 for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 812 }]) {
@@ -58,6 +78,7 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 812 }]) 
     await actAsSeat(page, 'admin');
     await openQuestionIn(page, 'Q-PP-01');
     await expect(page.locator('#question-heading')).toBeFocused();
+    const firstLoad = (await calls(page)).length;
 
     // Next (from 1160 px the top strip's link reads "Next: …", below it the strip's "Next question: …"), then back to
     // question 1 by its link in the stage's list of questions, which is there at every width.
@@ -75,7 +96,9 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 812 }]) 
       expect(made.at(-1), `${name}: this focus may scroll`).toBe(false);
       await expect.poll(() => headingInView(page), `${name}: the new question's heading is in view`).toBe(true);
     }
-    expect(await calls(page), 'one focus per arrival: the first load, Next, back to question 1').toEqual([true, false, false]);
+    const made = await calls(page);
+    expect(made.slice(0, firstLoad).every(Boolean), 'the first load asked not to scroll').toBe(true);
+    expect(made.slice(firstLoad).some(Boolean), 'no later arrival asked not to scroll, back on question 1 included').toBe(false);
   });
 }
 
@@ -94,6 +117,8 @@ test('UX-42: arriving from the stage page by a link, the heading takes focus and
   await links.last().click();
   await page.waitForURL((u) => u.toString() !== from);
   await expect(page.locator('#question-heading')).toBeFocused();
-  expect(await calls(page), 'reached by a link, the focus may scroll').toEqual([false]);
+  const made = await calls(page);
+  expect(made.length, 'the heading was focused').toBeGreaterThan(0);
+  expect(made.some(Boolean), 'reached by a link, the focus may scroll').toBe(false);
   await expect.poll(() => headingInView(page), 'the heading is in view').toBe(true);
 });
