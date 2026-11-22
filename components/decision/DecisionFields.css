@@ -91,8 +91,9 @@
  * inline-size container, Chrome 158 sometimes left Status, Reason and this row with computed display but no layout box
  * after hydration, so the Done radio was never drawn (CI flake), and the bands that replaced it held only at a 16 px
  * default font. The two bases and the gap add up to 42rem, so the two share a line exactly when the fields are 42rem or
- * wider, at any default font size; side by side, the space past 42rem goes 1 to 1.5, as before. Wrapped, each grows to
- * the fields' width. min-inline-size 0 lets a lone field narrow on a small phone, as the grid's minmax(0) did.
+ * wider, at any default font size. The bases split 41rem 1 to 1.5 (16.4rem and 24.6rem) and the space past them goes 1 to
+ * 1.5, so side by side the two are as wide as under the old grid's minmax(16rem, 1fr) minmax(0, 1.5fr). Wrapped, each
+ * grows to the fields' width. min-inline-size 0 lets a lone field narrow on a small phone, as the grid's minmax(0) did.
  */
 .decision-fields__row {
   display: flex;
@@ -102,12 +103,12 @@
 }
 
 .decision-fields__row > .ui-field {
-  flex: 1 1 16rem;
+  flex: 1 1 16.4rem;
   min-inline-size: 0;
 }
 
 .decision-fields__row > .ui-date {
-  flex: 1.5 1 calc(26rem - var(--space-4));
+  flex: 1.5 1 calc(25.6rem - var(--space-4));
   min-inline-size: 0;
 }
 

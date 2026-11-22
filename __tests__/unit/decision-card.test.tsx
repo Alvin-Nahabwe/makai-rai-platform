@@ -381,11 +381,11 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
   it('M2: Decided by keeps at least 16rem beside Decided on, and the two stack when the card is narrower than both', () => {
     const fields = css('components/decision/DecisionFields.css');
     expect(fields).not.toMatch(/container-type:\s*inline-size/);
-    // The row wraps by its own width: 16rem + (26rem - the gap) + the gap = 42rem, at any default font size (D-419).
+    // The row wraps by its own width: 16.4rem + (25.6rem - the gap) + the gap = 42rem, at any default font size (D-419).
     expect(fields).not.toMatch(/@media[^{]*width[^{]*\{\s*\.decision-fields__row/);
     expect(fields).toMatch(/\.decision-fields__row\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*column-gap:\s*var\(--space-4\);/);
-    expect(fields).toMatch(/\.decision-fields__row > \.ui-field\s*\{[^}]*flex:\s*1 1 16rem;[^}]*min-inline-size:\s*0;/);
-    expect(fields).toMatch(/\.decision-fields__row > \.ui-date\s*\{[^}]*flex:\s*1\.5 1 calc\(26rem - var\(--space-4\)\);[^}]*min-inline-size:\s*0;/);
+    expect(fields).toMatch(/\.decision-fields__row > \.ui-field\s*\{[^}]*flex:\s*1 1 16\.4rem;[^}]*min-inline-size:\s*0;/);
+    expect(fields).toMatch(/\.decision-fields__row > \.ui-date\s*\{[^}]*flex:\s*1\.5 1 calc\(25\.6rem - var\(--space-4\)\);[^}]*min-inline-size:\s*0;/);
     expect(fields).not.toMatch(/minmax\(11rem/);
   });
 
