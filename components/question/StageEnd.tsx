@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { ButtonLink } from '@/components/ui/Button';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { ListLink } from '@/components/ui/ListLink';
@@ -47,6 +47,8 @@ export type StageEndProps = {
   /** Whether the running content holds the question in the stage; an item on one it does not hold is text, as its page would be not-found. */
   hasQuestion: (stage: Stage, questionId: string) => boolean;
   sealStep: SealStepState;
+  /** The "saved" line a clean Save leaves when it led here (answer cost, design 2 item 3): above the heading, and it takes focus. */
+  arrival?: ReactNode;
 };
 
 /**
@@ -72,6 +74,7 @@ export function StageEnd(p: StageEndProps): ReactElement {
     <div className="page-content stage-end">
       <ArchivedBanner archived={p.projectArchived ?? false} />
       <Breadcrumb items={[{ label: p.projectName, href: base }, { label: STAGE_TITLE[p.stage], href: stageAt }, { label: E.title }]} />
+      {p.arrival ?? null}
       <h1>{E.heading}</h1>
       <p className="stage-end__draft" data-report-draft>{draftLine(p.takenAt)}</p>
       {/* This stage's recorded answers the draft leaves out (fix wave item 10), as page 1 says the project's. */}

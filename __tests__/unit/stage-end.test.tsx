@@ -138,6 +138,13 @@ describe('StageEnd (design G3)', () => {
     expect(render({ sealStep: { kind: 'waiting', reviewId: 'r1' }, canWrite: false })).toContain(REVIEW_COPY.sealStep.waiting);
   });
 
+  it('answer cost 6: the "saved" line, when given, stands above the heading; without it nothing is added', () => {
+    const html = render({ arrival: <p data-saved-arrival>Your answer to question 24 is saved.</p> });
+    expect(html.indexOf('data-saved-arrival')).toBeGreaterThan(html.indexOf('</nav>'));
+    expect(html.indexOf('data-saved-arrival')).toBeLessThan(html.indexOf('<h1'));
+    expect(render()).not.toContain('data-saved-arrival');
+  });
+
   it('a Viewer\'s screen has no button of its own: the report and the stage are links', () => {
     const h = render({ canWrite: false });
     expect(h).not.toMatch(/<button(?![^>]*ui-term-tip__button)/);

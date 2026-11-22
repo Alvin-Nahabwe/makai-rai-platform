@@ -3382,5 +3382,29 @@
     "property": "An untouched change form carries no misleading state. The first case required answerDiffers, rebased on the device's today, to be false for an untouched change on a day other than the saved version's date; that hid the consequence line's \"version N\" while Save would create one (the server's repeats compares the declared date, lib/data/decisions.ts), and answerDiffers drives only that line, never the unsaved line. The controller's ruling of 22 Nov 2026 restores the v0.9.0 meaning for every field and compares the date, typed or defaulted, with the saved version's, as the server does.",
     "proof": "__tests__/unit/decision-components.test.tsx::answer cost 4: on an untouched change the consequence line announces the version when the saved date is not today, and not when it is: for a saved date of 12 Oct and today 22 Nov the untouched draft differs and consequenceOf contains 'version 3'; for a saved date of 22 Nov it does not differ and the line has no version; an empty date does not differ; a changed reason does. __tests__/unit/decision-components.test.tsx::answer cost 4: after the mount fill of today the unsaved line stays off, since only an edit keeps a draft: unsavedShown is false while draftSavedAt is null, which is what the mount fill (setValue, not edit) leaves.",
     "task": "answer-cost 4"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/decision-card.test.tsx::design G3: a saved last question goes to the stage's end screen; any other saved question stays",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03",
+    "property": "Where a save leaves the person. The old case pinned that only a saved last question went to the stage's end screen at /end and any other saved question stayed; Save now moves on after every clean save (answer cost, design 2026-11-22 section 2 item 3), so the push goes to the stage's next page, which chooses the next unanswered question or the end screen on the server. The replacement keeps the null for a card with no stage address.",
+    "proof": "In answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03: hrefAfterSave(stageHref, questionId, clean) is `${stageHref}/next?after=<id>` with the id encoded (Q a&b=1 becomes Q%20a%26b%3D1) and null with no stage address.",
+    "task": "answer-cost 6"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/unit/decision-card.test.tsx::design G3, ruling on risk b: the push happens only on a clean Saved; a message the person must see keeps them on the question",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03",
+    "property": "The save moves on only after a clean Saved: M-03 with nothing left out and nothing typed during the save. A save that carries any other message (a file left out, text typed while the save was out, M-04 already saved) stays on the question. The condition is the one endHrefAfterSave used, unchanged; the function is renamed hrefAfterSave and its result is the next page's address.",
+    "proof": "In answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03: hrefAfterSave is null for M-03 with leftOut ['a.pdf'], for M-03 with typedDuringSave true and for M-04 with nothing left out, and an address for the clean M-03.",
+    "task": "answer-cost 6"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::M4: the next question's words show an ellipsis when cut, and the phone keeps \"Question n of N\" visible in small type",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::M4: the next question's words show an ellipsis when cut, and the phone keeps \"Question n of N\" visible in small type",
+    "property": "The next question's words show an ellipsis when cut and the phone keeps \"Question n of N\" visible in small type; the whole text stays the link's name. The link is now drawn as the kit's secondary button (answer cost, design 2026-11-22 section 2 item 4), so its class attribute reads \"ui-button ui-button--secondary decision-next\" and the case finds it by that.",
+    "proof": "In this case the one markup regex changes from `<a class=\"decision-next\"` to `<a class=\"ui-button ui-button--secondary decision-next\"` and every CSS and text expectation is unchanged; __tests__/unit/decision-card.test.tsx::answer cost 6: the way on to the next question is a link drawn as a button, with the same target, words and position as before pins the classes, the target and the words.",
+    "task": "answer-cost 6"
   }
 ]

@@ -172,6 +172,20 @@ export function savedMessage(v: DecisionVersionView, timeText: string, viewerId:
 }
 
 /**
+ * The line at the top of the question (or the stage's end screen) a clean Save moves the person to (answer cost, design 2 item 3):
+ * UX-11's save confirmation, naming who decided and when, as `savedMessage` does. `decider` is `deciderLabel(…, 'confirmation')`
+ * ("you" for the person's own answer); `declaredDateText` is the declared date as the interface writes it (`formatDeclaredDate`).
+ */
+export function savedArrivalLine(questionNumber: number, decider: string, declaredDateText: string): string {
+  return `Your answer to question ${questionNumber} is saved: decided by ${decider}, ${declaredDateText}.`;
+}
+
+/** The link in that line, back to the question just saved. */
+export function savedArrivalBack(questionNumber: number): string {
+  return `Back to question ${questionNumber}`;
+}
+
+/**
  * UX-29: the inline confirmation of a withdrawal names the object and the consequence; its button repeats the action. Its
  * fields' and buttons' words too: the control shows on the question page and the history page.
  */

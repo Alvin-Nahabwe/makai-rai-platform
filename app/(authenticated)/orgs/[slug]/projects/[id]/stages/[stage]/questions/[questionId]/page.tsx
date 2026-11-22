@@ -34,6 +34,8 @@ import { pageTitle } from '@/lib/ui/title';
 import RememberProject from '@/components/layout/RememberProject';
 import { RouteColumn } from '@/components/question/RouteColumn';
 import { loadStagePage, type StagePageData } from '@/lib/question/stagePage';
+import { SavedArrival, savedArrivalFor } from '@/components/question/SavedArrival';
+import { loadSavedCurrent, savedParam } from '@/lib/question/savedArrival';
 import { isStageFilter, STAGE_TITLE } from '@/lib/question/stageList';
 import '@/components/question/workspace.css';
 
@@ -79,7 +81,8 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  *  1. the archived banner, when the project is archived;
  *  2. the top strip (breadcrumb with the follow-up counts, then the stage's tally), shown from 1160px, and the position
  *     strip (previous, "Question n of N", next), shown under it; both read the stage's data, which is required;
- *  3. the question: the running question's text as the page's one `h1` (FR-CNT-08), which takes focus on arrival (UX-42),
+ *  3. the "saved" line, only when a clean Save has just brought the person here (`arrival`; it takes focus, so the heading's
+ *     own focus on arrival is left out then); the question: the running question's text as the page's one `h1` (FR-CNT-08), which takes focus on arrival (UX-42),
  *     its code line "{Q-ID} · {topic}" after it, the line for a question the personal data answer switched off, and the
  *     earlier-wording disclosure;
  *  4. a reader's reading regions; the seal note (only for a question in a seal); the decision slot (components/question/
@@ -91,8 +94,8 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
  * The page itself renders no part of the decision for a person who may record: no "Current decision", no answer form, no
  * withdraw, no way on. Exported so a unit test renders the markup without the loader.
  */
-export function QuestionPanelRegions({ data, openWork, route, stage }: {
-  data: QuestionPanelData; openWork?: QuestionOpenWork | null; route?: ReactNode; stage: StagePageData;
+export function QuestionPanelRegions({ data, openWork, route, stage, arrival }: {
+  data: QuestionPanelData; openWork?: QuestionOpenWork | null; route?: ReactNode; stage: StagePageData; arrival?: ReactNode;
 }) {
   const question = data.question;
   const count = countFor(data);
@@ -125,10 +128,12 @@ export function QuestionPanelRegions({ data, openWork, route, stage }: {
       <PositionStrip previous={previous} next={next} n={index + 1} total={total} marks={stage.marks} currentId={question.id} scopeAnswer={stage.scopeAnswer} />
       <div className="question-workspace">
         <div className="question-workspace__main">
+          {arrival ?? null}
           <section data-region="question" aria-labelledby="question-heading">
             <h1 id="question-heading" tabIndex={-1} className="question-frame__title">{data.runningQuestion.text}</h1>
             <HeadingFocusCue headingId="question-heading" />
-            <FocusOnArrival targetId="question-heading" />
+            {/* The saved line, when shown, takes the focus on arrival; the heading does not also. The cue stays: the skip link needs it. */}
+            {arrival ? null : <FocusOnArrival targetId="question-heading" />}
             <p className="question-frame__code">{DECISION_COPY.titles.question(question.id, question.moduleTitle)}</p>
             {/* A state the reader must notice (spec 9.7; design fix S5-N6): the switched-off mark and the sentence in ink, semibold. */}
             {doesNotApply ? <p data-does-not-apply className="question-frame__does-not-apply"><MarkShape kind="does_not_apply" size={16} />{Q.doesNotApply}</p> : null}
@@ -241,10 +246,14 @@ export default async function QuestionPage({
   // The project and stage the panel just found: the stage's load answers null only for a project it cannot see, which the
   // panel has already refused (notFound). A null here is a defect, not a page to show without its strips.
   if (stageData === null) throw new Error(`QuestionPage: the stage list of ${stage} was not found for a project the panel found`);
+  // The line a clean Save leaves (answer cost, design 8): only from this project's own current answer to one of this stage's questions.
+  const saved = savedParam(sp.saved);
+  const arrivalData = savedArrivalFor({ ...stageData, current: await loadSavedCurrent(ctx, id, stage as Stage, stageData.rows, saved) }, saved);
+  const arrival = arrivalData === null ? undefined : <SavedArrival key={arrivalData.version.id} {...arrivalData} viewerId={data.viewer.userId} />;
   const route = <RouteColumn data={stageData} currentQuestionId={data.question.id} nextQuestionId={data.position.nextId} show={show} />;
   return (
     <>
-      <QuestionPanelRegions data={data} openWork={openWork} route={route} stage={stageData} />
+      <QuestionPanelRegions data={data} openWork={openWork} route={route} stage={stageData} arrival={arrival} />
       <RememberProject userId={data.viewer.userId} orgSlug={slug} projectId={data.projectId} />
     </>
   );

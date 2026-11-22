@@ -298,18 +298,27 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(bar.indexOf('>Save decision</button>')).toBeLessThan(bar.indexOf(F.card.next(NEXT.text)));
   });
 
-  it('design G3: a saved last question goes to the stage\'s end screen; any other saved question stays', () => {
+  it('answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03', () => {
     const clean = { statusId: 'M-03', leftOut: [] as string[], typedDuringSave: false };
-    expect(endHrefAfterSave(null, STAGE, clean)).toBe(`${STAGE}/end`);
-    expect(endHrefAfterSave(NEXT, STAGE, clean)).toBeNull();
-    expect(endHrefAfterSave(null, undefined, clean)).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', clean)).toBe(`${STAGE}/next?after=Q-PP-04`);
+    // The id is encoded, so it can never end the query or start another.
+    expect(hrefAfterSave(STAGE, 'Q a&b=1', clean)).toBe(`${STAGE}/next?after=Q%20a%26b%3D1`);
+    expect(hrefAfterSave(undefined, 'Q-PP-04', clean)).toBeNull();
+    // "Saved without <file>... save again" (M-03 with a left-out file), text typed during the save (CR-1, UX-25), "already saved" (M-04).
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-03', leftOut: ['a.pdf'], typedDuringSave: false })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-03', leftOut: [], typedDuringSave: true })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
   });
 
-  it('design G3, ruling on risk b: the push happens only on a clean Saved; a message the person must see keeps them on the question', () => {
-    // "Saved without <file>... save again" (M-03 with a left-out file), text typed during the save (CR-1, UX-25), "already saved" (M-04).
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: ['a.pdf'], typedDuringSave: false })).toBeNull();
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: [], typedDuringSave: true })).toBeNull();
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
+  it('answer cost 6: the way on to the next question is a link drawn as a button, with the same target, words and position as before', () => {
+    const live = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />);
+    const link = live.match(/<a [^>]*>/)![0];
+    expect(link).toMatch(/class="[^"]*\bui-button\b[^"]*"/);
+    expect(link).toMatch(/class="[^"]*\bui-button--secondary\b[^"]*"/);
+    expect(link).toMatch(/class="[^"]*\bdecision-next\b[^"]*"/);
+    expect(link).toContain(`href="${NEXT.href}"`);
+    expect(link).toContain('data-held-on-save');
+    expect(words(live)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
   });
 
   it('on the stage\'s last question: the last-question line and All questions', () => {
@@ -420,7 +429,7 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     expect(form).not.toMatch(/\.decision-next__position\s*\{\s*display:\s*none/);
     expect(form).toMatch(/@media \(max-width: 768px\)[\s\S]*\.decision-next__words\s*\{[^}]*white-space:\s*nowrap/);
     // The whole text stays the link's name: the words and the position, never cut in the markup.
-    const link = card().match(/<a class="decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
+    const link = card().match(/<a class="ui-button ui-button--secondary decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
     expect(words.length).toBeGreaterThan(0);
     expect(textOf(link)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
   });
@@ -501,7 +510,7 @@ describe('T3a: the history list (routed items 7 and 9)', () => {
   });
 });
 
-const { saveControlIsRetry, WaitLines, NextWay, endHrefAfterSave } = await import('@/components/decision/DecisionForm');
+const { saveControlIsRetry, WaitLines, NextWay, hrefAfterSave } = await import('@/components/decision/DecisionForm');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
 const { toSaveBody } = await import('@/lib/question/draft');
 const { requestIdFor } = await import('@/lib/client/retrySafeWrite');

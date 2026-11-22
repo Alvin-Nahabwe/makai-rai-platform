@@ -201,7 +201,8 @@ export function WaitLines({ uploading, failed }: { uploading: readonly string[];
 }
 
 /**
- * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", or on the stage's last question the line that
+ * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", a link drawn as the kit's secondary button (answer cost,
+ * design 2 item 4; Save is the one primary), or on the stage's last question the line that
  * says so and All questions. Review B-I1: while a Save waits for an upload or a link, or its request is out (`held`), the
  * next question's words are text, not a link, and quieter, so the card's own control cannot take the person away from a
  * Save that has not gone yet (following it unmounts the form and its uploads). Leaving by the browser or the route column
@@ -212,7 +213,7 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
     const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
     return held
       ? <p className="decision-next decision-next--held" data-next-held>{words}</p>
-      : <Link className="decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
+      : <Link className="ui-button ui-button--secondary decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
   }
   if (stageHref === undefined) return null;
   // Review A I-1: on the stage's last question, All questions is held as Next is. Design G3: so is the way to the stage's end screen.
@@ -234,15 +235,16 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
 export type SavedCarries = { statusId: string; leftOut: readonly string[]; typedDuringSave: boolean };
 
 /**
- * Design G3 and the controller's ruling on risk b: where a save leaves the person. After the stage's last question is saved the
- * person goes to the stage's end screen, where the working report leads, but only on a clean "Saved" (M-03) that carries no other
- * message. "Saved without <file>... save again", text typed while the save was out (CR-1, UX-25: the kept copy must be shown) and
- * "already saved" (M-04) are read on the question, which then links to the end screen. After any other question the card stays
- * open with the new answer (R2). Null: stay. Also null when the card was given no stage address.
+ * Where a save leaves the person (answer cost, design 2 item 3, which replaces design G3's push after the last question only). After a
+ * clean "Saved" they go to the stage's `next` page, which chooses on the server, from what the project holds then, the next question with
+ * no answer, or the stage's end screen when none is left. Clean is M-03 that carries no other message: "Saved without <file>... save
+ * again", text typed while the save was out (CR-1, UX-25: the kept copy must be shown) and "already saved" (M-04) are read on the question,
+ * which stays (R2). The caller pushes this address after the save has resolved, never through a prefetching link: a prefetch would run
+ * the page and choose "next" before the save landed. Null: stay. Also null when the card was given no stage address.
  */
-export function endHrefAfterSave(next: NextQuestion | null, stageHref: string | undefined, saved: SavedCarries): string | null {
-  if (next !== null || stageHref === undefined) return null;
-  return saved.statusId === 'M-03' && saved.leftOut.length === 0 && !saved.typedDuringSave ? stageEndHref(stageHref) : null;
+export function hrefAfterSave(stageHref: string | undefined, questionId: string, saved: SavedCarries): string | null {
+  if (stageHref === undefined) return null;
+  return saved.statusId === 'M-03' && saved.leftOut.length === 0 && !saved.typedDuringSave ? `${stageHref}/next?after=${encodeURIComponent(questionId)}` : null;
 }
 
 /**
@@ -592,10 +594,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
       }
-      // Design G3: the last question of a stage lands on that stage's end screen; the server renders it from what was just saved.
-      // Only a clean "Saved" goes: a message the person must read keeps them here, with the end screen one link away.
-      const end = endHrefAfterSave(nextQuestion, stageHref, { statusId: next.id, leftOut: omitted, typedDuringSave });
-      if (end === null) router.refresh(); else router.push(end);
+      // Answer cost: a clean "Saved" moves on to the next question with no answer (or the stage's end screen), chosen by the server after
+      // this save. A message the person must read keeps them here, so the form is refreshed with the new answer instead.
+      const on = hrefAfterSave(stageHref, data.question.id, { statusId: next.id, leftOut: omitted, typedDuringSave });
+      if (on === null) router.refresh(); else router.push(on);
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
@@ -642,7 +644,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       if (current !== null) setConflict(current);
     }
     setStatus(next);
-  }, [data, key, keep, router, leaveHeldLink, nextQuestion, stageHref]);
+  }, [data, key, keep, router, leaveHeldLink, stageHref]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {

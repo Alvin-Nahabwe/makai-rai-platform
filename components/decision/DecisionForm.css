@@ -309,7 +309,29 @@
   color: var(--color-ink-muted);
 }
 
-/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a quiet link beside it, its words
+/* Answer cost (design 2 item 4): the way on to the next question is a link drawn as the kit's secondary button, so Save stays the
+   view's one orange control. The kit's rules (.ui-button, .ui-button--secondary) draw the box, the border and the colours; the
+   rules here, one class stronger, stack the words over "Question n of N" and centre them in it, whatever order the sheets load in.
+   The words keep their two-line clamp, so the button is as tall as two lines and the position. */
+.ui-button.decision-next {
+  flex-direction: column;
+  gap: 0;
+  padding-block: var(--space-2);
+  color: var(--color-heading);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.ui-button.decision-next .decision-next__words {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.ui-button.decision-next .decision-next__position {
+  color: var(--color-ink-muted);
+}
+
+/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a secondary button beside it, its words
    on one line ending in an ellipsis and "Question n of N" under them in small type (design finish review M4), so the
    bar stays as short as Save. */
 @media (max-width: 768px) {
@@ -329,6 +351,9 @@
   .decision-next {
     flex: 1 1 0;
     min-inline-size: 0;
+  }
+
+  .ui-button.decision-next {
     font-size: var(--font-size-small);
   }
 
