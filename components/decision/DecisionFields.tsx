@@ -58,7 +58,8 @@ function deciderFrom(v: string): Decider | null {
 export function DecisionFields({ data, value, errors, disabled, onChange }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
-  const set = (patch: Partial<DecisionDraft>) => onChange({ ...value, ...patch });
+  // Who or when edited: the draft now holds the person's own, which a restore keeps (lib/question/draft.ts `restoreDraft`).
+  const set = (patch: Partial<DecisionDraft>) => onChange({ ...value, ...patch, ...('decidedBy' in patch || 'date' in patch ? { whoWhenChanged: true } : {}) });
   const current = isDecision(data.current) ? data.current : null;
 
   // R3 (owner, 15 Nov 2026): four short cards in two columns, each the radio, the mark and the word; each card's sentence

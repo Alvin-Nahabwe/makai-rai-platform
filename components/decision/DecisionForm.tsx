@@ -27,7 +27,7 @@ import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
 import { declaredDateFromParts } from '@/lib/decision/rules';
-import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
@@ -153,7 +153,7 @@ export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolea
   // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
   // the same answer saved against newer wording than the current version's is a new version.
   if (c.content.semver !== data.contentSemver) return true;
-  const o = draftFromCurrent(data);
+  const o = draftFromCurrent(data, null);
   const sorted = (a: readonly string[]) => [...a].sort().join('\n');
   if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
   if (sorted(d.optionsInPlace) !== sorted(o.optionsInPlace) || sorted(d.evidenceIds) !== sorted(o.evidenceIds)) return true;
@@ -261,7 +261,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
 
-  const [value, setValue] = useState<DecisionDraft>(() => draftFromCurrent(data));
+  const [value, setValue] = useState<DecisionDraft>(() => draftFromCurrent(data, null));
   const [base, setBase] = useState<number | null>(currentNumber);
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
   const [status, setStatus] = useState<SaveStatusValue | null>(null);
@@ -333,7 +333,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     // without a word (e2e/decision-save-without-upload.spec.ts); kept, it finishes and edits the answer, so the next Save
     // adds it as the "Saved without" line promises.
     if (conflict === null && !typedSinceCurrent && !uploads.linkAdding && uploads.uploading.length === 0) {
-      setValue(draftFromCurrent(data));
+      setValue(draftFromCurrent(data, null));
       setBase(currentNumber);
       setRetry(NO_RETRY);
       setEvidenceInitial(data.current?.evidence ?? []);
@@ -354,8 +354,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     const now = new Date();
     s.purgeExpired(now);
     const found = s.read<DecisionDraft>(key, now);
-    if (found === null || !isDraftValue(found.value)) return;
-    const restored = { ...found.value, href: draftFromCurrent(data).href };
+    if (found === null) return;
+    // Task 4 gives this the device's today; until then the date is not defaulted (controller ruling R2).
+    const restored = restoreDraft(found.value, data, null);
+    if (restored === null) return;
     setValue(restored);
     setTypedSinceCurrent(true);
     setBase(found.baseVersionNumber);

@@ -17,7 +17,16 @@ import type { Decider, DecisionStatus, DeclaredDate, FieldError, ReasonCode, Sco
 export interface DecisionDraft {
   status: DecisionStatus | null; scopeAnswer: ScopeAnswer | null; optionsInPlace: string[]; reasonCode: string | null;
   reason: string; decidedBy: Decider | null; date: DateParts; evidenceIds: string[]; notUploaded: string[]; href: string;
+  /**
+   * Whether the person changed "Decided by" or "Decided on" in this draft. Only then does a restore trust the stored
+   * decider and date; otherwise it applies the defaults (design 2026-11-22 section 8). A draft saved by v0.9.0 has no
+   * such field and counts as false.
+   */
+  whoWhenChanged: boolean;
 }
+
+/** A draft as the store may hold it: one saved by v0.9.0 lacks `whoWhenChanged`, which reads as false. */
+export type StoredDecisionDraft = Omit<DecisionDraft, 'whoWhenChanged'> & { whoWhenChanged?: boolean };
 
 export const EMPTY_DATE: DateParts = Object.freeze({ day: '', month: '', year: '' }) as DateParts;
 
@@ -40,25 +49,25 @@ function deciderOf(v: DeciderView | null): Decider | null {
 export const isDecision = (v: DecisionVersionView | null): v is DecisionVersionView => v !== null && v.status !== 'withdrawn';
 
 /**
- * FR-DEC-01: a new version opens from the current version's fields; FR-DEC-10 and UX-10: the date is always
- * empty on open. With no decision the form is empty: on a first decision "Decided by" is empty too (spec 9.3 item 4,
- * owner OQ1 (a), plan 1C Task 12); after a withdrawal it is the viewer.
+ * FR-DEC-01: a new version opens from the current version's fields. Who and when open filled in (the owner's rulings of
+ * 19 and 22 Nov 2026, design 2026-11-22 section 2 item 1): "Decided by" is the viewer on a first answer and after a
+ * withdrawal, and the current version's decider on a change (the viewer if that version names none); "Decided on" is
+ * `today`, the device's date as three boxes, or empty when `today` is null (the server render, which does not know the
+ * reader's day). `whoWhenChanged` starts false: the person has not yet touched either.
  */
-export function draftFromCurrent(data: QuestionPanelData): DecisionDraft {
+export function draftFromCurrent(data: QuestionPanelData, today: DateParts | null): DecisionDraft {
   const href = questionHref(data, data.question.id);
+  const viewer: Decider = { kind: 'member', userId: data.viewer.userId };
+  const date = { ...(today ?? EMPTY_DATE) };
   const c = data.current;
-  if (c === null) {
-    return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: null,
-      date: { ...EMPTY_DATE }, evidenceIds: [], notUploaded: [], href };
-  }
   if (!isDecision(c)) {
-    return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: { kind: 'member', userId: data.viewer.userId },
-      date: { ...EMPTY_DATE }, evidenceIds: [], notUploaded: [], href };
+    return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: viewer,
+      date, evidenceIds: [], notUploaded: [], href, whoWhenChanged: false };
   }
   return {
     status: c.status as DecisionStatus | null, scopeAnswer: c.scopeAnswer, optionsInPlace: [...c.optionsInPlace], reasonCode: c.reasonCode,
-    reason: c.reason ?? '', decidedBy: deciderOf(c.decidedBy) ?? { kind: 'member', userId: data.viewer.userId },
-    date: { ...EMPTY_DATE }, evidenceIds: c.evidence.map((e) => e.id), notUploaded: [], href,
+    reason: c.reason ?? '', decidedBy: deciderOf(c.decidedBy) ?? viewer,
+    date, evidenceIds: c.evidence.map((e) => e.id), notUploaded: [], href, whoWhenChanged: false,
   };
 }
 
@@ -117,7 +126,7 @@ export function canWithdrawVersion(role: OrgRole, viewerId: string, current: Dec
 }
 
 /** A stored value that has the draft's shape; anything else (an older shape, a hand edit) is ignored (S-12, S-11). */
-export function isDraftValue(v: unknown): v is DecisionDraft {
+export function isDraftValue(v: unknown): v is StoredDecisionDraft {
   if (typeof v !== 'object' || v === null) return false;
   const d = v as Record<string, unknown>;
   const strings = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === 'string');
@@ -125,7 +134,26 @@ export function isDraftValue(v: unknown): v is DecisionDraft {
   return typeof d.reason === 'string' && strings(d.optionsInPlace) && strings(d.evidenceIds) && strings(d.notUploaded)
     && typeof date === 'object' && date !== null && ['day', 'month', 'year'].every((k) => typeof date[k] === 'string')
     && (d.status === null || typeof d.status === 'string') && (d.scopeAnswer === null || typeof d.scopeAnswer === 'string')
-    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object');
+    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object')
+    && (d.whoWhenChanged === undefined || typeof d.whoWhenChanged === 'boolean');
+}
+
+/**
+ * The draft a stored value restores to on open, or null when it is not a draft (`isDraftValue`). Everything the person
+ * typed comes back, and `href` is this page's. Who and when come back only when the draft says the person changed them
+ * (`whoWhenChanged`); otherwise they take today's defaults, so a decider or a date from an older day is never trusted
+ * unseen (design 2026-11-22 section 4 and section 8). A v0.9.0 draft has no such field and reads as false.
+ */
+export function restoreDraft(found: unknown, data: QuestionPanelData, today: DateParts | null): DecisionDraft | null {
+  if (!isDraftValue(found)) return null;
+  const defaults = draftFromCurrent(data, today);
+  const changed = found.whoWhenChanged === true;
+  return {
+    ...found, href: defaults.href,
+    decidedBy: changed ? found.decidedBy : defaults.decidedBy,
+    date: changed ? found.date : defaults.date,
+    whoWhenChanged: changed,
+  };
 }
 
 /** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your version"). */

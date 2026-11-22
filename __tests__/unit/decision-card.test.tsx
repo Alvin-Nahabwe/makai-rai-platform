@@ -66,7 +66,7 @@ const HISTORY = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01/
 const changed = async (p: Partial<QuestionPanelData>, open = 0): Promise<string> => {
   const { consequenceOf } = await import('@/components/decision/DecisionForm');
   const data = { ...PANEL, ...(open > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p };
-  return consequenceOf({ ...draftFromCurrent(data), reason: 'Changed since the saved version.' }, data, data.current?.versionNumber ?? null).text;
+  return consequenceOf({ ...draftFromCurrent(data, null), reason: 'Changed since the saved version.' }, data, data.current?.versionNumber ?? null).text;
 };
 const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number; all?: number } = {}) =>
   renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...((o.open ?? 0) > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.all ?? o.open ?? 0} />) ?? '';
@@ -200,16 +200,16 @@ describe('the reason, the main reason and Decided by', () => {
     expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${QUESTION.reasonPrompt} Say when it is planned.</p>`);
   });
 
-  it('owner OQ1 (a): Decided by starts empty on a first decision, with "Choose one" first and chosen', () => {
-    expect(draftFromCurrent(PANEL).decidedBy).toBeNull();
+  it('answer cost 3: Decided by opens as the viewer on a first decision, with "Choose one" still first and the viewer chosen', () => {
+    expect(draftFromCurrent(PANEL, null).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
     const h = card();
     const select = h.match(/<select[^>]*id="decision-decided-by"[\s\S]*?<\/select>/)![0];
-    expect(select).toMatch(/^<select[^>]*>\s*<option value="" selected="">Choose one<\/option>\s*<option value="member:u-me">You \(Amina N\.\)<\/option>/);
+    expect(select).toMatch(/^<select[^>]*>\s*<option value="">Choose one<\/option>\s*<option value="member:u-me" selected="">You \(Amina N\.\)<\/option>/);
   });
 
   it('after a withdrawal Decided by is still the viewer; a re-decision keeps the recorded decider', () => {
-    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null } }).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
-    expect(draftFromCurrent({ ...PANEL, current: V2 }).decidedBy).toEqual({ kind: 'outside_role', role: 'principal_investigator' });
+    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null } }, null).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
+    expect(draftFromCurrent({ ...PANEL, current: V2 }, null).decidedBy).toEqual({ kind: 'outside_role', role: 'principal_investigator' });
   });
 
   it('Decided by and Decided on share one row; the date keeps three boxes and Today', () => {
@@ -339,16 +339,16 @@ describe('review round 1', () => {
   it('A-minor B-M1: the version is one above the newer of the form\'s base and the version on the page', async () => {
     const { consequenceOf } = await import('@/components/decision/DecisionForm');
     const data = { ...PANEL, current: V2 };
-    const typed = { ...draftFromCurrent(data), reason: 'Typed on version 1.' };
+    const typed = { ...draftFromCurrent(data, null), reason: 'Typed on version 1.' };
     // After a refresh brought version 2 while the person had typed on version 1, the line and the corner agree.
     expect(consequenceOf(typed, data, 1).text).toContain(C.version(3));
     expect(consequenceOf(typed, data, 2).text).toContain(C.version(3));
-    expect(consequenceOf(draftFromCurrent(PANEL), PANEL, null).text).toContain(C.version(1));
+    expect(consequenceOf(draftFromCurrent(PANEL, null), PANEL, null).text).toContain(C.version(1));
   });
 
   it('B-M3: "Your answer" with no decider chosen says so, never "Decided by: , <date>"', async () => {
     const { ConflictView } = await import('@/components/decision/ConflictView');
-    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL), date: { day: '14', month: '11', year: '2026' } }}
+    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL, null), date: { day: '14', month: '11', year: '2026' } }}
       viewerId="u-me" mineDecidedBy="" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(decode(h)).toContain(`${F.conflict.notChosen}, 14 Nov 2026`);
     expect(decode(h)).not.toMatch(/>, 14 Nov 2026</);
@@ -498,7 +498,7 @@ const { toSaveBody } = await import('@/lib/question/draft');
 const { requestIdFor } = await import('@/lib/client/retrySafeWrite');
 
 describe('T3b: one Save/Retry control, the unsaved line, the way on during a save, the wait card, the raise link', () => {
-  const value = { ...draftFromCurrent(PANEL), status: 'done' as const, reason: 'Compared it.' };
+  const value = { ...draftFromCurrent(PANEL, null), status: 'done' as const, reason: 'Compared it.' };
   const body = toSaveBody(value, PANEL, null) as unknown as Record<string, unknown>;
   const sent = requestIdFor({ requestId: null, sentBody: null }, body, () => 'r1').state;
   const failed = { id: 'M-05' as const, text: 'Not saved.', live: 'assertive' as const, next: 'retry' as const };
@@ -626,7 +626,7 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
   it('item 7: the version line only while the answer differs from the saved version; a first decision always has it', async () => {
     const { answerDiffers } = await import('@/components/decision/DecisionForm');
     const data = { ...PANEL, current: V2 };
-    const same = draftFromCurrent(data);
+    const same = draftFromCurrent(data, null);
     expect(answerDiffers(same, data)).toBe(false);
     expect(consequence(card({ current: V2 }))).not.toContain(C.version(3));
     expect(answerDiffers({ ...same, status: 'done' }, data)).toBe(true);
@@ -636,11 +636,11 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
     // the date opens empty: the saved date typed again is no change; another date is
     expect(answerDiffers({ ...same, date: { day: '12', month: '10', year: '2026' } }, data)).toBe(false);
     expect(answerDiffers({ ...same, date: { day: '13', month: '10', year: '2026' } }, data)).toBe(true);
-    expect(answerDiffers(draftFromCurrent(PANEL), PANEL)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(PANEL, null), PANEL)).toBe(true);
     expect(consequence(card({}))).toContain(C.version(1));
     // a withdrawal is not a saved answer: any answer makes the next version
     const withdrawn = { ...PANEL, current: { ...V2, status: 'withdrawn' as const, withdrawalCode: 'duplicate' as const, decidedBy: null, declaredDate: null } };
-    expect(answerDiffers(draftFromCurrent(withdrawn), withdrawn)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(withdrawn, null), withdrawn)).toBe(true);
   });
 
   it('item 8: a link to the platform\'s own host reads "<name> (<host>)"; any other host, or no origin configured, keeps "opens another site"', async () => {
@@ -749,11 +749,11 @@ describe('T5: the last fix round before the hand-in', () => {
     const { answerDiffers } = await import('@/components/decision/DecisionForm');
     const older = { ...V2, content: { ...V2.content, semver: '0.0.0-older' } };
     const data = { ...PANEL, current: older };
-    expect(answerDiffers(draftFromCurrent(data), data)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(data, null), data)).toBe(true);
     expect(consequence(card({ current: older, historyCount: 2 }))).toContain(C.version(3));
     // the same wording and the same answer: no new version, no line
     const same = { ...PANEL, current: V2 };
-    expect(answerDiffers(draftFromCurrent(same), same)).toBe(false);
+    expect(answerDiffers(draftFromCurrent(same, null), same)).toBe(false);
   });
 
   it('design N2: every line of the card that gives a time names one zone, never two side by side', () => {
@@ -772,7 +772,7 @@ describe('T5: the last fix round before the hand-in', () => {
 
 describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the last declared date beside empty boxes', () => {
   const boxes = (h: string) => [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)].map((m) => m[0]);
-  const draft = (current: DecisionVersionView | null) => draftFromCurrent({ ...PANEL, current });
+  const draft = (current: DecisionVersionView | null) => draftFromCurrent({ ...PANEL, current }, null);
 
   it('a current version shows "Last decided on <date>" at its precision, the boxes stay empty, every box names the line, and Today stays', () => {
     for (const [declaredDate, declaredPrecision, shown] of [['2026-11-15', 'day', '15 Nov 2026'], ['2026-11', 'month', 'Nov 2026'], ['2026', 'year', '2026']] as const) {

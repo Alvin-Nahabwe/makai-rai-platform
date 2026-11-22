@@ -52,7 +52,7 @@ const PANEL: QuestionPanelData = {
   canWrite: true, canRaiseFinding: true, lastOwnSaveDate: null, openFinding: null, gateAnswer: null,
   contentSemver: '0.0.1-fixture', orgId: 'o1',
 };
-const EMPTY: DecisionDraft = draftFromCurrent(PANEL);
+const EMPTY: DecisionDraft = draftFromCurrent(PANEL, null);
 
 const html = (p: Partial<QuestionPanelData> = {}, v: Partial<DecisionDraft> = {}) =>
   renderToStaticMarkup(<DecisionFields data={{ ...PANEL, ...p }} value={{ ...EMPTY, ...v }} errors={[]} disabled={false} onChange={() => {}} />);
@@ -72,7 +72,7 @@ describe('S-12 decision fields', () => {
 
   it('UX-10 FR-DEC-10 NFR-A11Y-04: the date fields are empty on open; Same as version N is offered beside Today, not filled in', () => {
     const data = { ...PANEL, current: V2, lastOwnSaveDate: '2026-10' };
-    const h = html({ current: V2, lastOwnSaveDate: '2026-10' }, draftFromCurrent(data));
+    const h = html({ current: V2, lastOwnSaveDate: '2026-10' }, draftFromCurrent(data, null));
     const dateInputs = [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)];
     expect(dateInputs).toHaveLength(3);
     expect(dateInputs.every((m) => !/value="[^"]+"/.test(m[0]))).toBe(true);
@@ -84,9 +84,9 @@ describe('S-12 decision fields', () => {
   });
 
   it('FR-DEC-01: a new version opens from the current version\'s fields, and a withdrawal opens an empty form', () => {
-    const d = draftFromCurrent({ ...PANEL, current: V2 });
+    const d = draftFromCurrent({ ...PANEL, current: V2 }, null);
     expect(d).toMatchObject({ status: 'partly', reason: 'Theirs', decidedBy: { kind: 'outside_role', role: 'principal_investigator' }, date: { day: '', month: '', year: '' } });
-    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', reason: 'x', withdrawalCode: 'duplicate', decidedBy: null } }))
+    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', reason: 'x', withdrawalCode: 'duplicate', decidedBy: null } }, null))
       .toMatchObject({ status: null, reason: '', decidedBy: { kind: 'member', userId: 'u-me' } });
   });
 

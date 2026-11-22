@@ -3294,5 +3294,21 @@
     "property": "A decision's reason is optional (design 2026-11-22 section 2 item 2, section 8): a typed reason is at most 4,000 code points, counted as code points (an emoji counts once), and an empty or white-space reason is no longer an error. The title said 1 to 4,000 and the case's first assertion expected M11.reasonMissing for '   '; that assertion is removed and the title states the new rule.",
     "proof": "In this case the 4,001-character reason still answers the M-11 too-long message, and 4,000 emoji answer no error, and REASON_MAX and reasonLength('\\u{1F600}a') are still 4000 and 2. __tests__/unit/decision-rules.test.ts::answer cost: a decision with an empty or white-space reason has no reason error, for every status and the gate requires no reason error for '' and '  \\n' under every status and the gate; the case \"answer cost: a decision's typed reason still obeys the limit and the characters\" pins the limit and NUL; withdrawals keep their required reason in __tests__/integration/decisions-withdrawal.test.ts::answer cost: withdrawal with an empty reason is still refused with M11.reasonMissing.",
     "task": "answer-cost 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-card.test.tsx::owner OQ1 (a): Decided by starts empty on a first decision, with \"Choose one\" first and chosen",
+    "replacedBy": "__tests__/unit/decision-card.test.tsx::answer cost 3: Decided by opens as the viewer on a first decision, with \"Choose one\" still first and the viewer chosen",
+    "property": "A first answer's \"Decided by\" opens as the signed-in person, not empty (design 2026-11-22 section 2 item 1, the owner's \"Default who and when\" of 19 Nov 2026, replacing OQ1 (a)). The old case required draftFromCurrent(PANEL).decidedBy to be null and the select to show \"Choose one\" chosen; the new one requires the viewer as the decider and the viewer's option selected, with the empty \"Choose one\" option still listed first.",
+    "proof": "In this case draftFromCurrent(PANEL, null).decidedBy equals {kind:'member', userId:'u-me'} and the rendered select starts with the unselected Choose one option followed by the selected \"You (Amina N.)\" option; __tests__/unit/draft-defaults.test.ts::answer cost 3: the answer form opens with who and when filled in a first answer defaults decidedBy to the viewer and date to today holds the default in the draft model. The withdrawal and change cases beside it (\"after a withdrawal Decided by is still the viewer; a re-decision keeps the recorded decider\") are unchanged but for the new second argument, null.",
+    "task": "answer-cost 3"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::FR-DEC-01: a new version opens from the current version's fields, and a withdrawal opens an empty form",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::FR-DEC-01: a new version opens from the current version's fields, and a withdrawal opens an empty form",
+    "property": "A new version opens from the current version's fields, and a withdrawal opens with no status and no reason but the viewer as decider. draftFromCurrent now takes the device's today as a second argument (answer cost, design 2026-11-22 section 2 item 1); the case passes null, the server render's value, so the date is still the empty one it asserted.",
+    "proof": "In this case both draftFromCurrent calls gain the argument null and every expectation is unchanged (status, reason, decidedBy, the three empty date boxes); __tests__/unit/draft-defaults.test.ts::answer cost 3: the answer form opens with who and when filled in a server render (today null) leaves the date empty, for every case holds the null behaviour, and the same file's other cases hold the non-null one.",
+    "task": "answer-cost 3"
   }
 ]
