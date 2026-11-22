@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
@@ -29,14 +29,12 @@ let other: OrgFixture;
 let project: { id: string };
 let foreign: { id: string };
 let typical: { id: string };
-const contexts: BrowserContext[] = [];
 let ipSeq = 0;
 const nextClientIp = () => `10.83.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>,
   opts: Parameters<Browser['newContext']>[0] = {}): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() }, ...opts });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.waitForLoadState('networkidle');
@@ -79,10 +77,6 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   if (!res.ok()) throw new Error(`seeding Q-IP-02 answered ${res.status()}: ${await res.text()}`);
-});
-
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
 });
 
 test('R4: the rail\'s brand is the MAK-AI logo with the platform\'s name, one link to the organisation\'s Home', async ({ browser }) => {
@@ -515,7 +509,6 @@ test('the footer: both logos, named, on a signed-in page and on the public pages
   await page.goto(projectPath());
   await check(page, 'project page');
   const out = await browser.newContext({ viewport: { width: 375, height: 812 } });
-  contexts.push(out);
   const pub = await out.newPage();
   for (const path of ['/login', '/about']) {
     await pub.goto(path);
@@ -536,7 +529,6 @@ test('axe finds nothing serious in light or dark: the block at 1280 px, the bar 
     await expect(page.locator('.shell-topbar__panel')).toBeVisible();
     await expectNoSeriousA11yViolations(page, `question 375 open ${colorScheme}`);
     const out = await browser.newContext({ colorScheme, viewport: { width: 1280, height: 800 } });
-    contexts.push(out);
     const pub = await out.newPage();
     await pub.goto('/login');
     await pub.locator('footer.shell-footer').scrollIntoViewIfNeeded();

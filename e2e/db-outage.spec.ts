@@ -7,6 +7,7 @@ import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
 import { outageContainer } from './helpers/outage';
 import { API_COPY } from '../lib/http/api/copy';
 import { ERRORS_COPY } from '../lib/errors/copy';
+import { closeOpenedContexts } from './helpers/contexts';
 
 /**
  * NFR-AVL-04 (fault harness, SRS line 3254) and NFR-OBS-05. With the database stopped, a page shows the support
@@ -50,6 +51,10 @@ test.afterEach(async () => {
   docker('start', CONTAINER);
   await waitUntilAccepting();
 });
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why). Declared after the restart, so the
+// restart runs first (Playwright runs a file's afterEach hooks in declaration order).
+test.afterEach(closeOpenedContexts);
 
 test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference, writes answer 503 and drafts stay', async ({ browser, baseURL }) => {
   test.setTimeout(240_000);

@@ -3,6 +3,10 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { actAsSeat, fixtureOrgSlug, newProject, questionPath, seatOf, seatRequest, waitForQuestionPage } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
+import { closeOpenedContexts } from './helpers/contexts';
+
+// Every context a test opened is closed after it (helpers/contexts.ts says why).
+test.afterEach(closeOpenedContexts);
 
 /**
  * The reading view for a Reviewer and a Viewer (lane 1 Task 3 of the Route rebuild, to

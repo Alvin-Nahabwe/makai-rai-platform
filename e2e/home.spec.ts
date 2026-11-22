@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
   addFinding, addMitigationVersion, addProject, addStageReview, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
@@ -29,13 +29,11 @@ let fx: OrgFixture;
 let fresh: OrgFixture;
 let starting: OrgFixture;
 let project: { id: string };
-const contexts: BrowserContext[] = [];
 let ipSeq = 0;
 const nextClientIp = () => `10.81.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() } });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -73,10 +71,6 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   if (!res.ok()) throw new Error(`seeding Q-PP-02 answered ${res.status()}: ${await res.text()}`);
-});
-
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
 });
 
 test('spec 9.1: every Home opens with the welcome as its one h1 and has its tab title', async ({ browser }) => {

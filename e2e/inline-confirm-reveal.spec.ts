@@ -74,6 +74,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(() => { if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true }); });
 
 /** What a case opened, closed after it whatever happened: held requests are let go first, then the contexts closed. */
+// closeOpenedContexts not registered: this cleanup must let held requests go before it closes their contexts.
 const cleanup: { contexts: BrowserContext[]; releases: Array<() => void> } = { contexts: [], releases: [] };
 test.afterEach(async () => {
   for (const release of cleanup.releases.splice(0)) release();

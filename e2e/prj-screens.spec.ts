@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import {
   addAcceptedRisk, addDecision, addFinding, addMitigationVersion, addProject, buildOrg, type FixtureAccount, type OrgFixture,
@@ -41,14 +41,12 @@ let retryProject: { id: string };
 let emptyProject: { id: string };
 let hostileProject: { id: string };
 const shelved: Array<{ id: string }> = [];
-const contexts: BrowserContext[] = [];
 
 let ipSeq = 0;
 const nextClientIp = () => `10.78.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() } });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -113,15 +111,10 @@ test.beforeAll(async ({ browser }) => {
   }
 });
 
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
-});
-
 test('UX-36 FR-PRJ-02: S-10 delivers its headings and counts with JavaScript off', async ({ browser }) => {
   const signed = await signedIn(browser, fx.members.owner);
   const state = await signed.context().storageState();
   const context = await browser.newContext({ javaScriptEnabled: false, storageState: state });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto(path(`/projects/${main.id}`));
   for (const h of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { name: h })).toBeVisible();

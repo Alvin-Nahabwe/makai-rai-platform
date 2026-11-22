@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { addProject, buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { questionsInStage, runningContent } from '../lib/content/loader';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
@@ -21,13 +21,11 @@ test.afterEach(closeOpenedContexts);
 let fx: OrgFixture;
 let project: { id: string };
 let archived: { id: string };
-const contexts: BrowserContext[] = [];
 let ipSeq = 0;
 const nextClientIp = () => `10.81.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() } });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -51,10 +49,6 @@ test.beforeAll(async () => {
   fx = await buildOrg({ label: 'cont' });
   project = await addProject(fx, { name: `Continue ${randomUUID().slice(0, 8)}` });
   archived = await addProject(fx, { name: `Archived ${randomUUID().slice(0, 8)}`, archived: true });
-});
-
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
 });
 
 test('C11 G5: an assessor on a fresh project sees the stage link Next: Question 1 · Continue, which opens the first question of Pre-processing', async ({ browser }) => {

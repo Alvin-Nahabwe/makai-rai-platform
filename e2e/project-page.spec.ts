@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
   addFinding, addMitigationVersion, addProject, addSealRow, addStageReview, buildOrg, type FixtureAccount, type OrgFixture,
 } from '../__tests__/helpers/recordFixture';
@@ -32,13 +32,11 @@ const UNBROKEN = `https://example.org/${'a'.repeat(160)}`;
 let fx: OrgFixture;
 let project: { id: string };
 let archiveMe: { id: string };
-const contexts: BrowserContext[] = [];
 let ipSeq = 0;
 const nextClientIp = () => `10.83.${Math.floor(++ipSeq / 250)}.${(ipSeq % 250) + 1}`;
 
 async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' | 'password'>, js = true): Promise<Page> {
   const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': nextClientIp() } });
-  contexts.push(context);
   const page = await context.newPage();
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -47,7 +45,6 @@ async function signedIn(browser: Browser, account: Pick<FixtureAccount, 'email' 
   await page.waitForURL((url) => url.pathname !== '/login');
   if (js) return page;
   const off = await browser.newContext({ javaScriptEnabled: false, storageState: await context.storageState() });
-  contexts.push(off);
   return off.newPage();
 }
 
@@ -86,10 +83,6 @@ test.beforeAll(async ({ browser }) => {
     });
     if (!res.ok()) throw new Error(`seeding ${questionId} answered ${res.status()}: ${await res.text()}`);
   }
-});
-
-test.afterAll(async () => {
-  await Promise.all(contexts.map((c) => c.close()));
 });
 
 /** The top of each line's stop of this kind, in stage order. */
