@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
-import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { exportRefusalLocation, reportRefusalLocation } from '@/lib/http/exportRefusal';
 import { HTTP_COPY } from '@/lib/http/copy';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
@@ -218,9 +218,14 @@ export async function proxy(request: NextRequest) {
     // JSON body would be shown raw. A navigation to it goes back to S-20 of the same scope instead
     // (contract Routes row 20, owner question B4). The slug and project id are checked by
     // `exportRefusalLocation`; when it answers null the JSON 429 below stands.
+    // A working-report download is a plain link on the report page too (v0.9.0 security review M1): a refused navigation goes back
+    // to that page, which says why (`reportRefusalLocation`, the same function the route's own refusals use).
     const exportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/export$/.exec(pathname) : null;
-    if (exportPath && request.headers.get('sec-fetch-mode') === 'navigate') {
-      const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
+    const reportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/projects\/([^/]+)\/working-report$/.exec(pathname) : null;
+    if ((exportPath || reportPath) && request.headers.get('sec-fetch-mode') === 'navigate') {
+      const location = exportPath
+        ? exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited')
+        : reportRefusalLocation(reportPath![1], reportPath![2], 'rate_limited');
       // Absolute, on the public origin: this layer parses a response `Location` with `new URL` and a relative
       // one is an ERR_INVALID_URL, a 500 (verified live), and the request's own origin is the container's
       // behind nginx (lib/publicOrigin.ts says why it is never used).

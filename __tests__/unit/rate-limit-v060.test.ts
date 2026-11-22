@@ -93,6 +93,15 @@ describe('v0.6.0 rate-limit keys', () => {
     expect(checkRateLimit('GET', '/api/v1/orgs/another/export', ip, 'v').success).toBe(true);
   });
 
+  it('v0.9.0 security review M1: working-report downloads are 10 a minute per person, and made-up project ids share that one budget', () => {
+    expect(limitOf('GET', '/api/v1/orgs/a/projects/p/working-report')).toEqual({ window: 60_000, max: 10, keyBy: 'userId' });
+    // Under `default` every project id was its own bucket of 60, so random ids were never limited and each held a render-queue place.
+    for (let i = 0; i < 10; i++) expect(checkRateLimit('GET', `/api/v1/orgs/a/projects/made-up-${i}/working-report`, ip, 'u').success).toBe(true);
+    expect(checkRateLimit('GET', '/api/v1/orgs/b/projects/another/working-report', ip, 'u').success).toBe(false);
+    // another person keeps their own budget
+    expect(checkRateLimit('GET', '/api/v1/orgs/a/projects/made-up-0/working-report', ip, 'v').success).toBe(true);
+  });
+
   it('FR-MEM-01: no proxy key matches invitations or members/leave (the service counts invitations)', () => {
     expect(limitOf('POST', '/api/v1/orgs/a/members')).toEqual(RATE_LIMITS['default']);
     expect(limitOf('POST', '/api/v1/orgs/a/members/leave')).toEqual(RATE_LIMITS['default']);
@@ -207,6 +216,17 @@ describe('the proxy 303 for an export navigation', () => {
     expect([longer.status, longer.headers.get('location')]).toEqual([429, null]);
     const evidence = await exhaustAndCall(proxy, 'POST', `/api/v1/orgs/${ORG}/projects/${PID}/evidence`, { headers: NAV, userId: 'u-other-3' });
     expect([evidence.status, evidence.headers.get('location')]).toEqual([429, null]);
+  });
+
+  it('v0.9.0 security review M1: a refused navigation to a working-report download goes back to the report page with ?refused=rate_limited', async () => {
+    const origin = 'https://vitest.example.invalid';
+    const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report?part=summary`, { headers: NAV, userId: 'u-report-nav' });
+    expect([res.status, res.headers.get('location')]).toEqual([303, `${origin}/orgs/${ORG}/projects/${PID}/report?refused=rate_limited`]);
+    // a fetch keeps the JSON 429, and an id that fails its pattern is never put into a Location
+    const fetched = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report`, { headers: { 'sec-fetch-mode': 'cors' }, userId: 'u-report-fetch' });
+    expect([fetched.status, fetched.headers.get('location')]).toEqual([429, null]);
+    const bad = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/not-a-uuid/working-report`, { headers: NAV, userId: 'u-report-bad' });
+    expect([bad.status, bad.headers.get('location')]).toEqual([429, null]);
   });
 
   it('NFR-SEC-20 (owner question B4): the redirect answer has no body', async () => {
