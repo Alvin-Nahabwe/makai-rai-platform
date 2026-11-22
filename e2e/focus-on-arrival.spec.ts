@@ -40,9 +40,10 @@ async function headingInView(page: Page): Promise<boolean> {
   });
 }
 
-test('UX-42: on first load the question\'s heading takes focus without scrolling the page', async ({ page }) => {
+for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 812 }]) {
+  test(`UX-42: at ${size.width} px, on a fresh load the question's heading takes focus without scrolling the page`, async ({ page }) => {
   await recordHeadingFocus(page);
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(size);
   await page.goto('/login');
   await actAsSeat(page, 'admin');
   await openQuestionIn(page, 'Q-PP-01');
@@ -52,7 +53,8 @@ test('UX-42: on first load the question\'s heading takes focus without scrolling
   expect(made.length, 'the heading was focused').toBeGreaterThan(0);
   expect(made.every(Boolean), 'every first-load focus asks not to scroll').toBe(true);
   expect(await headingInView(page), 'the page starts at its top, so the heading is in view').toBe(true);
-});
+  });
+}
 
 test('UX-42: on a reload the heading takes focus and is scrolled into view', async ({ page }) => {
   await recordHeadingFocus(page);
