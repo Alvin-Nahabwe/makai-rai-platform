@@ -20,9 +20,9 @@ test.beforeEach(async ({ page }) => { failOnDialog(page); });
 const p95 = (xs: number[]): number => { const s = [...xs].sort((a, b) => a - b); return s[Math.ceil(0.95 * s.length) - 1]; };
 
 /**
- * Saves `n` versions in a row through the form, each with a new reason; returns each click-to-"Saved" time, which ends with the save's
- * reply, and each click-to-saved-line time, which ends when the page a clean Save moves to shows its "saved" line (answer cost). After
- * each save the question is opened again, so the next save starts from the new version.
+ * Saves `n` versions in a row through the form, each with a new reason; returns each click-to-reply time (the save's own) and each
+ * click-to-saved-line time: the saved line on the page a clean Save moves to, with focus on it, which is what the person sees as "Saved"
+ * (answer cost). Both are held to the budget. After each save the question is opened again, so the next save starts from the new version.
  */
 async function timeSaves(page: Page, projectId: string, n: number): Promise<{ saved: number[]; arrived: number[] }> {
   const saved: number[] = [];
@@ -35,7 +35,9 @@ async function timeSaves(page: Page, projectId: string, n: number): Promise<{ sa
     await page.getByRole('button', { name: 'Save decision' }).click();
     expect((await reply).status()).toBe(201);
     saved.push(Date.now() - t);
+    // What the person sees as "Saved" after a clean save: the saved line on the next page, with focus on it.
     await expect(page.locator('[data-saved-arrival]')).toContainText(`is saved: decided by you, `, { timeout: 20_000 });
+    await expect(page.locator('[data-saved-arrival]')).toBeFocused({ timeout: 20_000 });
     arrived.push(Date.now() - t);
   }
   return { saved, arrived };
@@ -56,7 +58,8 @@ for (const [profile, readyMs, saveMs] of [['Constrained', 6_000, 2_000], ['Poor'
     const { saved, arrived } = await timeSaves(page, projectId, 20);
     console.log(`[NFR-PERF-03] ${profile}: ready ${ready} ms; saves p95 ${p95(saved)} ms; all ${saved.join(', ')}; to the saved line p95 ${p95(arrived)} ms; all ${arrived.join(', ')}`);
     expect(ready).toBeLessThanOrEqual(readyMs);
-    expect(p95(saved)).toBeLessThanOrEqual(saveMs);
+    expect(p95(saved), 'click to the save reply').toBeLessThanOrEqual(saveMs);
+    expect(p95(arrived), 'click to the saved line, focused, on the next page').toBeLessThanOrEqual(saveMs);
   });
 }
 

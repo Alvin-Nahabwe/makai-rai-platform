@@ -142,6 +142,27 @@ test("the last unanswered question's Save goes to the end screen, with the saved
   expect(await page.evaluate(() => document.querySelectorAll(':focus').length)).toBe(1);
 });
 
+test("between a clean Save's reply and the next page the form is held: the fields and Save are disabled, then the page arrives", async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', 'Q-PP-01', baseURL!);
+  await fillValid(page, { reason: 'Held until the next page' });
+  // Hold the move to the next page (the `next` address), so the time between the reply and the arrival can be looked at.
+  let release!: () => void;
+  const held = new Promise<void>((res) => { release = res; });
+  await page.route((u) => u.pathname.endsWith('/next'), async (route) => { await held; await route.continue(); });
+  const reply = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decisions'));
+  await save(page).click();
+  expect((await reply).status()).toBe(201);
+  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
+  for (const control of [page.getByLabel(`${F.fields.reason} (optional)`, { exact: true }), page.getByRole('radio', { name: 'Done', exact: true }), page.getByRole('button', { name: 'Change', exact: true }), save(page)]) {
+    await expect(control).toBeDisabled();
+  }
+  await expect(page.locator('input[type="file"]')).toBeDisabled();
+  expect(new URL(page.url()).pathname).toBe(questionPath(projectId, 'Q-PP-01'));
+  release();
+  await expect(page).toHaveURL(withSaved(projectId, 'Q-PP-02', 'Q-PP-01'));
+  await expect(arrival(page)).toBeFocused();
+});
+
 test('browser check 1: Change opens Decided by and Decided on in place and focus goes to Decided by', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', 'Q-PP-01', baseURL!);
   await expect(page.locator('#decision-decided-by')).toHaveCount(0);

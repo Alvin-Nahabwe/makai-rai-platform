@@ -205,27 +205,24 @@ test('CR-1 UX-26: with no storage, typing after Saved and before the new version
   await blockStorage(page);
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
   await fillValid(page, { reason: 'Sent reason' });
-  // A clean Save moves on to the next question; the refresh this case holds belongs to a save that stays, so one file is left
-  // out of it: its upload is held, never finishes, and "Save without" sends the answer.
-  let releaseUpload!: () => void;
-  const heldUpload = new Promise<void>((res) => (releaseUpload = res));
-  await page.route('**/evidence', async (r) => { if (r.request().method() === 'POST') { await heldUpload; await r.abort(); } else await r.continue(); });
-  await page.locator('input[type="file"]').setInputFiles({ name: 'costing-sheet.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nheld upload\n') });
+  // A clean Save moves on to the next question, so the stay this case needs is the other clean one: the server commits the first send
+  // but the page sees a failure, and Retry is answered "already saved" (M-04), which stays and refreshes. Nothing was typed during the
+  // save and nothing is in flight, so only the text typed after "Saved" decides whether the new version replaces the form.
+  await page.route('**/decisions', async (r) => { await r.fetch(); await r.abort('failed'); }, { times: 1 });
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(page.locator('[data-upload-wait]')).toBeVisible();
+  await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
   // Hold the refresh that brings version 1 (an RSC request for this page), not the save itself.
   let release!: () => void;
   const held = new Promise<void>((res) => (release = res));
   const path = questionPath(projectId, Q);
   await page.route((u) => u.pathname === path, async (r) => { if (r.request().headers()['rsc'] === '1') await held; await r.continue(); });
-  await page.getByRole('button', { name: DECISION_FORM_COPY.saveWithout(1) }).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1);
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(saveStatus(page)).toHaveText(/^This was already saved at \d{2}:\d{2} \S+ \(version 1\)\.$/);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toHaveCount(0);
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed after it was saved');
   release();
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
   await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed after it was saved');
-  releaseUpload();
 });
 
 for (const [code, text, label, target] of [

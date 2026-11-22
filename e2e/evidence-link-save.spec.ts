@@ -3,9 +3,10 @@ import type { OrgRole } from '@prisma/client';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { applyNetworkProfile } from './helpers/network';
-import { actAsSeat, draftKeys, draftValues, expectMovedOn, fillValid, fixtureOrgSlug, historyPath, newProject, openQuestion, saveStatus } from './helpers/session';
-import { REASON_OPTIONAL, savedLine } from '../lib/decision/copy';
+import { actAsSeat, draftKeys, draftValues, expectMovedOn, fillValid, fixtureOrgSlug, historyPath, newProject, openQuestion, saveAlert, saveStatus } from './helpers/session';
+import { savedLine } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { EVIDENCE_COPY, LINK_REFUSAL_COPY } from '../lib/evidence/copy';
 import { FINDINGS_COPY } from '../lib/findings/copy';
 import { UI_COPY } from '../lib/ui/copy';
@@ -41,19 +42,19 @@ const isDecisionPost = (r: { method(): string; url(): string }) => r.method() ==
 const SAVED_V1 = new RegExp(`^${savedLine('.+', 1, '.+')}$`);
 
 /**
- * A Save that stays on the page. A clean Save moves on to the next question (answer cost), so the cases that watch the page's refresh
- * after "Saved" make the save carry text typed while its request was out, which keeps the person on the question: the form says
- * the field holds a newer answer, and the page refreshes to the version just saved.
+ * A Save that stays on the page with the form clean and nothing in flight. A clean Save moves on to the next question (answer cost), so the
+ * cases that watch the page's refresh after "Saved" use the other clean stay: the server commits the first send but the page sees a
+ * failure, and Retry is answered "already saved" (M-04, which stays and refreshes). Nothing was typed during the save and no file or link
+ * is out, so the guard each case names (a link on its way, typed text, an address in its box) is the only thing deciding whether the
+ * form is replaced when the new version arrives. Two requests reach the server (the second is answered from the first).
  */
+const ALREADY_SAVED_V1 = /^This was already saved at \d{2}:\d{2} \S+ \(version 1\)\.$/;
 async function saveAndStay(page: Page): Promise<void> {
-  let release!: () => void;
-  const held = new Promise<void>((res) => { release = res; });
-  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  await page.route('**/decisions', async (r) => { await r.fetch(); await r.abort('failed'); }, { times: 1 });
   await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText('Saving...');
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
-  release();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
+  await page.getByRole('button', { name: DECISION_FORM_COPY.retry, exact: true }).click();
+  await expect(saveStatus(page)).toHaveText(ALREADY_SAVED_V1, { timeout: 15_000 });
 }
 
 /** Every decision save the page sends, in order, with the evidence ids it carried. */
@@ -317,7 +318,9 @@ test('B3 neighbour: while a save is out, Add link does not start and the link bo
   page.on('request', (r) => { if (r.method() === 'POST' && /\/evidence$/.test(new URL(r.url()).pathname)) evidencePosts++; });
   let release!: () => void;
   const held = new Promise<void>((res) => { release = res; });
-  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  // The first send is held, then committed with its reply lost, so Retry is answered "already saved" (M-04): a clean stay, nothing typed, nothing in flight.
+  let sends = 0;
+  await page.route('**/decisions', async (r) => { if (sends++ === 0) { await held; await r.fetch(); await r.abort('failed'); } else await r.continue(); });
   await page.getByRole('button', { name: EVIDENCE_COPY.addLinkToggle }).click();   // the link form is open and empty
   await saveDecision(page).click();
   await expect(saveStatus(page)).toHaveText('Saving...');
@@ -334,21 +337,21 @@ test('B3 neighbour: while a save is out, Add link does not start and the link bo
   await expect(addLink(page)).toBeFocused();
   await expectNoSeriousA11yViolations(page, 'S-12, the link form while a save is out');
   expect(evidencePosts).toBe(0);
-  // A clean Save would move on; text typed while the request is out keeps the person on the question (the page's refresh is slowed above).
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
   release();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
-  expect(posts).toHaveLength(1);
+  await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
+  await page.getByRole('button', { name: DECISION_FORM_COPY.retry, exact: true }).click();
+  await expect(saveStatus(page)).toHaveText(ALREADY_SAVED_V1, { timeout: 15_000 });
+  expect(posts).toHaveLength(2);
   // "Saved": the hold ends with the save's reply (third commit, J1), before the page shows the new version. The form is
   // not replaced under a link that is on its way (the R3 J1 cases).
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
   await expect(address).toBeEditable();
   await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
-  // The text typed while the save was out is kept, so the form stays as it was: the link form is still open, and it is the person's again.
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed while it was saving');
+  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveCount(0);   // the new version's form: the link form is closed
   expect(evidencePosts).toBe(0);
-  await page.getByLabel(EVIDENCE_COPY.webAddress).fill(LINK);
+  // The link form is the person's again.
+  await typeLink(page);
   await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
   await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
@@ -617,7 +620,7 @@ test('R3 J1 (probe P2): after "Saved", Add link and the boxes are the person\'s 
   const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { evidenceIds: string[] } });
   expect(stored).toHaveLength(1);
   expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { evidenceIds: [id] } });
-  expect(posts).toHaveLength(1);
+  expect(posts).toHaveLength(2);   // the send the page saw fail, and the retry answered "already saved"
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
@@ -660,6 +663,37 @@ test('R3 J1: an address typed after "Saved" and not added yet stays in its box w
   await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
   await expect(page.getByLabel(EVIDENCE_COPY.linkName)).toHaveValue('Labelling guide');
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
+});
+
+test('answer cost: a link still being added when Save\'s reply arrives keeps the person on the question (no move to the next one), and the link is kept', async ({ page, baseURL }) => {
+  // The link's reply is answered here, not by the server, so this case spends none of the account's upload budget.
+  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  const posts = decisionPosts(page);
+  // The first send is lost before it reaches the server; the page arms its one automatic retry, which goes out when the browser reports "online".
+  await page.route('**/decisions', (r) => r.abort('failed'), { times: 1 });
+  await saveDecision(page).click();
+  await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
+  const id = await fakeLinkReply(page, 5000);
+  await typeLink(page);
+  await addLink(page).click();
+  await expect(page.getByText(EVIDENCE_COPY.link.adding)).toBeVisible();
+  const refreshed = page.waitForResponse(isRefresh);
+  await page.evaluate(() => { window.dispatchEvent(new Event('online')); });
+  // The retry's reply arrives with the link's request still out: clean, but moving on would unmount the block that is sending it.
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await refreshed;
+  await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
+  expect(new URL(page.url()).search).toBe('');
+  await expect(page.locator('[data-saved-arrival]')).toHaveCount(0);
+  await expect(page.getByText(EVIDENCE_COPY.link.adding)).toBeVisible();
+  // The link's reply lands in the same form: kept, and the form says it is not saved.
+  await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
+  const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { evidenceIds: string[] } });
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { evidenceIds: [id] } });
+  expect(posts).toHaveLength(2);
+  expect(new URL(page.url()).search).toBe('');
 });
 
 test('R3 J2 (probe P5): the mitigation form: Done with one link as its only evidence, Save pressed while it is on its way, waits for it and then saves with it', async ({ page, baseURL }, info) => {
@@ -709,8 +743,8 @@ test('R3 K1 J1 (probe P6): an address folded away while the refresh hangs: Save 
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
   await address.fill('');
   await saveAndStay(page);
-  expect(posts).toHaveLength(1);
-  expect(posts[0].evidenceIds).toEqual([]);
+  expect(posts).toHaveLength(2);
+  expect(posts.map((p) => p.evidenceIds)).toEqual([[], []]);
   // The refresh never comes; the link form is still the person's.
   await expect(address).toBeEditable();
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');

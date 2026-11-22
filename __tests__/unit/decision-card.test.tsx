@@ -310,6 +310,14 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
   });
 
+  it('answer cost 7: hrefAfterSave stays when a link is being added or a file is uploading as the reply arrives, and moves on when nothing is in flight', () => {
+    const clean = { statusId: 'M-03', leftOut: [] as string[], typedDuringSave: false };
+    // Moving on would unmount the evidence block that sends the link or the file: the person stays and the page refreshes instead.
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { ...clean, workInFlight: true })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { ...clean, workInFlight: false })).toBe(`${STAGE}/next?after=Q-PP-04`);
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-04', leftOut: [], typedDuringSave: false, workInFlight: false })).toBeNull();
+  });
+
   it('answer cost 6: the way on to the next question is a link drawn as a button, with the same target, words and position as before', () => {
     const live = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />);
     const link = live.match(/<a [^>]*>/)![0];
