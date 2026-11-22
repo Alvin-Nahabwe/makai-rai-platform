@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { fillValid, fixtureOrgSlug, newProject, openQuestion, saveStatus, saveViaApi, seatRequest } from './helpers/session';
+import { expectMovedOn, fillValid, fixtureOrgSlug, newProject, openQuestion, saveViaApi, seatRequest } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { UI_COPY } from '../lib/ui/copy';
 
@@ -276,10 +276,9 @@ for (const [width, height] of [[1280, 900], [375, 812]] as const) {
     await openQuestion(page, 'assessor', Q, baseURL!);
     await fillValid(page);
     await page.getByRole('button', { name: 'Save decision', exact: true }).click();
-    await expect(saveStatus(page)).toHaveText(/^Saved at /);
-    // The save refreshes the page from the server, which fills the card's saved mark; measure after that, not between the
-    // two (a race seen once in five runs at 375, fix round 3).
-    await expect(form(page).locator('.decision-card__corner, .decision-card__saved-block').first()).not.toContainText(QUESTION_COPY.current.none);
+    // A clean save moves on to the next unanswered question (answer cost), whose card carries the Next link measured here.
+    await expectMovedOn(page, Q);
+    await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
     // The way on is the merged card's "Next: <question>" link in its Save row (lane 2); the old foot is gone.
     await expect(wayOn(page)).toHaveCount(0);
     const next = page.locator('.decision-save-bar').getByRole('link', { name: /^Next: / });
@@ -292,7 +291,7 @@ for (const [width, height] of [[1280, 900], [375, 812]] as const) {
     // In the save bar (fixed on a phone, pinned or in its place on a wide screen) the link is the bar's, so it ends on the screen.
     expect(seen.y + seen.height, 'the link ends on the screen').toBeLessThanOrEqual(height);
     await next.click();
-    await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
+    await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-03 \u00b7 /);
   });
 }
 

@@ -3406,5 +3406,133 @@
     "property": "The next question's words show an ellipsis when cut and the phone keeps \"Question n of N\" visible in small type; the whole text stays the link's name. The link is now drawn as the kit's secondary button (answer cost, design 2026-11-22 section 2 item 4), so its class attribute reads \"ui-button ui-button--secondary decision-next\" and the case finds it by that.",
     "proof": "In this case the one markup regex changes from `<a class=\"decision-next\"` to `<a class=\"ui-button ui-button--secondary decision-next\"` and every CSS and text expectation is unchanged; __tests__/unit/decision-card.test.tsx::answer cost 6: the way on to the next question is a link drawn as a button, with the same target, words and position as before pins the classes, the target and the words.",
     "task": "answer-cost 6"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as version 1 only after the reply",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as version 1 only after the reply",
+    "property": "The form shows \"Saving...\" with Save disabled while the request is held, and the save is confirmed only after the reply: the page that a clean Save moves to shows the saved line, and no draft is left behind. Before the reply that line is absent.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::FR-DEC-06 UX-25 M-05 NFR-REL-05: offline Save keeps the answer; reload online restores it; Retry saves it as version 1",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-DEC-06 UX-25 M-05 NFR-REL-05: offline Save keeps the answer; reload online restores it; Retry saves it as version 1",
+    "property": "An offline Save keeps the answer on the device, a reload restores it, and Retry saves it as version 1 and leaves no draft behind. The completion signal is now the saved line on the page the Retry moves to.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::NFR-REL-05 UX-27: back online, the pending save is retried once with the same request id",
+    "replacedBy": "e2e/decision-save.spec.ts::NFR-REL-05 UX-27: back online, the pending save is retried once with the same request id",
+    "property": "Back online the pending save is retried once, with the same request id, and completes. The completion signal is the saved line on the next question.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-27: send, fail, edit, retry: the two requests carry different ids",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-27: send, fail, edit, retry: the two requests carry different ids",
+    "property": "After a failed send and an edit, the next send carries a new request id and completes. The completion signal is the saved line on the next question.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::CR-1 UX-26: with no storage, typing after Saved and before the new version arrives is kept",
+    "replacedBy": "e2e/decision-save.spec.ts::CR-1 UX-26: with no storage, typing after Saved and before the new version arrives is kept",
+    "property": "With no storage in the browser, text typed after \"Saved\" and before the page shows the new version is kept in the field. A clean Save now moves on, so the case makes a save that stays (one file left out through \"Save without\") and holds the page refresh as before; the rest of the case is unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-10 FR-DEC-10: month and year only save with month precision; Same as version 2 fills the date",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-10 FR-DEC-10: month and year only save with month precision; Same as version 2 fills the date",
+    "property": "Month and year alone save with month precision, and \"Same date as version 2\" fills the three boxes with that version's date. The owner's \"Prefill today\" (22 Nov 2026) replaces the empty boxes on a new version: the form opens at today as one line, Change opens the boxes holding today's date, then the shortcut fills the date as before.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes",
+    "replacedBy": "e2e/decision-save.spec.ts::NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes",
+    "property": "The stored draft holds the form fields only and no file bytes. The key list gains whoWhenChanged, the flag that records whether the person changed who or when (answer cost, design section 8).",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: fill, upload a PDF, Save: the decision carries the file and the draft held it before Save",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: fill, upload a PDF, Save: the decision carries the file and the draft held it before Save",
+    "property": "The save carries the uploaded file and the draft held it before Save. The completion signal is the saved line on the next question; the history check is unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: upload first, then fill, Save: the decision carries the file",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: upload first, then fill, Save: the decision carries the file",
+    "property": "The save carries the file uploaded first. The completion signal is the saved line on the next question; the history check is unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30: Save while the file is still uploading; the form sends by itself when it finishes, with the file",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: Save while the file is still uploading; the form sends by itself when it finishes, with the file",
+    "property": "Save while a file is uploading waits, then sends once with the file. The completion signal is the saved line on the next question; the request-count checks are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30: the answer on screen when the wait ends is what is saved, with the file",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: the answer on screen when the wait ends is what is saved, with the file",
+    "property": "The answer on screen when the wait ends is what is sent, with the file. The completion signal is the saved line on the next question; the body and history checks are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30 FR-EVD-04: version 2 carries the earlier file and the one uploaded since",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30 FR-EVD-04: version 2 carries the earlier file and the one uploaded since",
+    "property": "Version 2 carries the earlier file and the one uploaded since. A clean Save moves on, so each save is confirmed by the saved line and the case opens the question again before it makes version 2; the request bodies and the history check are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::FR-EVD-01 (control): a link alone is saved with the link's id",
+    "replacedBy": "e2e/decision-save.spec.ts::FR-EVD-01 (control): a link alone is saved with the link's id",
+    "property": "A link alone is saved with its id. The completion signal is the saved line on the next question; the request body and history checks are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: upload, reload, Save: the reloaded form holds the file and the save carries it",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30 FR-EVD-01: upload, reload, Save: the reloaded form holds the file and the save carries it",
+    "property": "After a reload the form holds the uploaded file and the save carries it. The completion signal is the saved line on the next question; the other checks are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/decision-save.spec.ts::UX-30: Save while two files are uploading sends once, after both finished, with both ids",
+    "replacedBy": "e2e/decision-save.spec.ts::UX-30: Save while two files are uploading sends once, after both finished, with both ids",
+    "property": "Save while two files upload sends once, after both finished, with both ids. The completion signal is the saved line on the next question; the other checks are unchanged.",
+    "proof": "In the case, the assertion that waited for the status line \"Saved at <time> as version n\" now waits for expectMovedOn (e2e/helpers/session.ts): the address is the next question's with ?saved=<this question>, and the saved line there reads \"is saved: decided by you\". A clean Save moves on after the reply (answer cost, design 2026-11-22 section 2 item 3), so the old status line is shown only by a save that stays; that path is still covered by the cases that make one (e2e/answer-cost.spec.ts: a save that left a file out stays on the question; e2e/decision-save.spec.ts: UX-30 Save without). The first-pass walk and the arrival line are pinned in e2e/answer-cost.spec.ts.",
+    "task": "answer-cost 7"
+  },
+  {
+    "kind": "structure",
+    "changed": "e2e/decision-conflict.spec.ts::(module)",
+    "replacedBy": "e2e/decision-conflict.spec.ts::FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both reasons, who saved, focus on the announced heading",
+    "property": "The module's import line from helpers/session changes: expectMovedOn joins it and saveStatus leaves it, because the two cases that saved through the conflict view (Save mine, Edit mine first) now confirm by the saved line on the next question instead of the status line. Their other assertions are unchanged.",
+    "proof": "Only the import list differs at module level. In the two conflict cases that save (Save mine, Edit mine first) the line that waited for the status line now calls expectMovedOn (the next question's address with ?saved=<this question>, and the saved line there); every heading, text and draft assertion is unchanged and none is removed.",
+    "task": "answer-cost 7"
   }
 ]

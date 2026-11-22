@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { draftKeys, fillValid, openQuestionIn, saveAlert, seatOf, signInAs, signInOnLoginPage, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { IDLE_TEXTS } from '../lib/auth/session/copy';
 import { AUTH_COPY } from '../lib/auth/copy';
@@ -50,7 +50,7 @@ test('FR-DEC-06 UX-26 UX-43: a draft survives an idle sign-out and returns after
   await signInOnLoginPage(page, 'assessor');
   await expect(page).toHaveURL(new RegExp(`^${escape(new URL(page.url()).origin)}${escape(questionPath)}$`));
   await waitForQuestionPage(page);
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Typed before the idle limit');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed before the idle limit');
   if (PURGE_AT_SIGN_IN) {
     await ctx.clearCookies();
     await signInAs(page, 'viewer');

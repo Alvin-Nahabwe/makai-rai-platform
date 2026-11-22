@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, openQuestionIn, questionPath, saveAlert, saveStatus, stagePath, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, openQuestionIn, ppRange, questionPath, saveAlert, saveStatus, seedAnswers, stagePath, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { STAGE_END_COPY } from '../lib/question/end/copy';
 import { REVIEW_COPY } from '../lib/review/copy';
 import { ERRORS_COPY } from '../lib/errors/copy';
@@ -23,17 +23,22 @@ const endPath = (projectId: string, stage: string): string => `${stagePath(proje
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
 test('G3: saving the last question of Pre-processing lands on Here is where your project stands with Open the working report as the primary action', async ({ page, baseURL }) => {
-  const projectId = await openQuestion(page, 'assessor', LAST, baseURL!);
+  // The save goes to the next unanswered question, going round to earlier ones (answer cost): everything that applies but the last is answered first.
+  const projectId = await newProject(baseURL!);
+  await seedAnswers(baseURL!, projectId, [...ppRange(1, 12), 'Q-PP-GATE-SENSITIVE', ...ppRange(15, 22)]);
+  await actAsSeat(page, 'assessor');
+  await page.goto(questionPath(projectId, LAST));
+  await waitForQuestionPage(page);
   await fillValid(page);
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(page).toHaveURL(new RegExp(`${endPath(projectId, 'pre-processing')}$`));
+  await expect(page).toHaveURL(new RegExp(`${endPath(projectId, 'pre-processing')}\\?saved=${LAST}$`));
   await expect(page.getByRole('heading', { level: 1, name: E.heading })).toBeVisible();
   const primary = page.locator('main .ui-button--primary');
   await expect(primary).toHaveCount(1);
   await expect(primary).toHaveText(E.openReport);
   await expect(primary).toHaveAttribute('href', `/orgs/${fixtureOrgSlug()}/projects/${projectId}/report`);
-  // The save is in the answers the screen reads: one question is decided.
-  await expect(page.locator('main')).toContainText('1\u00A0done');
+  // The save is in the answers the screen reads: the twenty seeded questions and this one are done.
+  await expect(page.locator('main')).toContainText('21\u00A0done');
 });
 
 test('G3, G7 dormant: on fixture content every next stage is offered: Start In-processing after Pre-processing', async ({ page, baseURL }) => {
@@ -124,7 +129,7 @@ test('anti-goal 4: on the end screen, for an Assessor, a Reviewer and a Viewer, 
  * save was out (CR-1, UX-25: the kept copy must be shown), and "already saved" (M-04). Q-PP-23 is the last question of Pre-processing.
  */
 const endLink = (page: Page) => page.locator('[data-region="answer-form"]').getByRole('link', { name: E.link });
-const reasonField = (page: Page) => page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`);
+const reasonField = (page: Page) => page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`);
 
 /**
  * The person is still on the question: a push after the save is a navigation that starts within moments of the "Saved" line, so

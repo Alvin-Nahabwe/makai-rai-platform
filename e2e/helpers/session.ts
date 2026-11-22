@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '../fixtures/manifest';
 import { DECISION_FORM_COPY } from '../../lib/decision/form/copy';
-import { FIELD_COPY } from '../../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../../lib/decision/copy';
 import { AUTH_COPY } from '../../lib/auth/copy';
 
 /**
@@ -154,23 +154,72 @@ export async function waitForQuestionPage(page: Page): Promise<void> {
 }
 
 /**
- * Fills the S-12 form with a valid answer: Done, a reason, decided by the person, Today; `over` changes any part. Decided by
- * starts empty on a first decision (owner OQ1 (a)), so with no `decidedBy` the person is chosen when the field is empty; a
- * re-decision keeps the decider it opened with, as before. The reason box is found by its exact name: "Reason (required)"
- * is also part of "Main reason (required)".
+ * Opens "Decided by" and "Decided on" on S-12: the form opens with one line, "Decided by you, <date> · Change", and the
+ * Change button reveals the two fields (answer cost; one-way, so a second call does nothing).
+ */
+export async function openWhoWhen(page: Page): Promise<void> {
+  const change = page.getByRole('button', { name: 'Change', exact: true });
+  if (await change.count() > 0) await change.click();
+  await page.locator('#decision-decided-by').waitFor();
+}
+
+/**
+ * Fills the S-12 form with a valid answer: Done and a reason; `over` changes any part. Who and when need no filling: the form
+ * opens as the signed-in person (or the earlier decider on a change) and the device's today (answer cost, design 2026-11-22
+ * section 2 item 1). Passing `decidedBy` or a date part opens them with Change first. `reason: ''` leaves the optional reason
+ * empty. The reason box is found by its exact name, "Reason (optional)".
  */
 export async function fillValid(page: Page, over: { status?: string | null; reason?: string; decidedBy?: string; day?: string; month?: string; year?: string } = {}): Promise<void> {
   if (over.status !== null) await page.getByRole('radio', { name: over.status ?? 'Done', exact: true }).check();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill(over.reason ?? 'Compared a rule-based alert with the model.');
-  const decider = page.getByLabel('Decided by (required)');
-  if (over.decidedBy !== undefined) await decider.selectOption({ label: over.decidedBy });
-  else if ((await decider.inputValue()) === '') await decider.selectOption((await decider.locator('option', { hasText: /^You \(/ }).getAttribute('value'))!);
-  if (over.day === undefined && over.month === undefined && over.year === undefined) {
-    await page.getByRole('button', { name: 'Today', exact: true }).click();
-  } else {
+  const reason = over.reason ?? 'Compared a rule-based alert with the model.';
+  if (reason !== '') await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`, { exact: true }).fill(reason);
+  if (over.decidedBy !== undefined || over.day !== undefined || over.month !== undefined || over.year !== undefined) await openWhoWhen(page);
+  if (over.decidedBy !== undefined) await page.getByLabel('Decided by (required)').selectOption({ label: over.decidedBy });
+  if (over.day !== undefined || over.month !== undefined || over.year !== undefined) {
     await page.getByLabel('Day', { exact: true }).fill(over.day ?? '');
     await page.getByLabel('Month', { exact: true }).fill(over.month ?? '');
     await page.getByLabel('Year', { exact: true }).fill(over.year ?? '');
+  }
+}
+
+/**
+ * After a clean Save the page moves on (answer cost): to `?saved=<questionId>` of the next unanswered question, or of the stage's end
+ * screen, where a line says what was saved ("Your answer to question 4 is saved: decided by you, 22 Nov 2026."). `decider` is how
+ * that line names who decided ("you" for the person's own). The old "Saved at ... as version n" line is shown only by a save that
+ * stays (a file left out, text typed during the save, or the refusals).
+ */
+export async function expectMovedOn(page: Page, questionId: string, decider = 'you'): Promise<void> {
+  await expect(page).toHaveURL(new RegExp(`\\?saved=${questionId}$`), { timeout: 30_000 });
+  await expect(page.locator('[data-saved-arrival]')).toContainText(`is saved: decided by ${decider}, `);
+}
+
+/** Opens `questionId` again in the project (after a Save moved the page on) and waits for its form. */
+export async function backToQuestion(page: Page, projectId: string, questionId: string): Promise<void> {
+  await page.goto(questionPath(projectId, questionId));
+  await waitForQuestionPage(page);
+}
+
+/** The ids Q-PP-<from> to Q-PP-<to>. */
+export const ppRange = (from: number, to: number): string[] => Array.from({ length: to - from + 1 }, (_, i) => `Q-PP-${String(from + i).padStart(2, '0')}`);
+
+/**
+ * Answers the Pre-processing questions `ids` as the Assessor through route 1 (the personal-data gate takes a scope answer "no", every
+ * other question Done), so a walk can start where it wants or reach the stage's end. Q-PP-GATE-SENSITIVE at "no" hides Q-PP-13 and Q-PP-14.
+ */
+export async function seedAnswers(baseURL: string, projectId: string, ids: readonly string[]): Promise<void> {
+  const ctx = await seatRequest(baseURL, 'assessor');
+  try {
+    for (const questionId of ids) {
+      const gate = questionId === 'Q-PP-GATE-SENSITIVE';
+      const res = await ctx.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/decisions`, { data: {
+        requestId: crypto.randomUUID(), stage: 'pre-processing', questionId, baseVersionNumber: null,
+        status: gate ? null : 'done', scopeAnswer: gate ? 'no' : null, optionsInPlace: [], reasonCode: null, reason: '',
+        decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10-12', evidenceIds: [],
+      } });
+      expect(res.status(), `seeding ${questionId}`).toBe(201);
+    }
+  } finally {
+    await ctx.dispose();
   }
 }
 

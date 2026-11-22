@@ -6,7 +6,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { AUTH_COPY } from '../lib/auth/copy';
 import { ACCEPTANCES_COPY } from '../lib/legal/acceptances/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { closeOpenedContexts } from './helpers/contexts';
 
 // Every context a test opened is closed after it (helpers/contexts.ts says why).
@@ -78,7 +78,7 @@ test.describe('D16: unsaved text of another account on a shared browser', () => 
     expect(res.status(), 'project create').toBe(201);
     const { id } = (await res.json()) as { id: string };
     const path = `/orgs/${fx.org.slug}/projects/${id}/stages/pre-processing/questions/Q-PP-01`;
-    const reason = page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`);
+    const reason = page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`);
     await page.goto(path);
     await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
     await reason.fill('A typed this and left the room');

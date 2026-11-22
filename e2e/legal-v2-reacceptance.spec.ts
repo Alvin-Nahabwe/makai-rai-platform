@@ -11,7 +11,7 @@ import { LEGAL_KIND_NAMES } from '../lib/legal/kinds';
 import { ACCEPTED_KINDS, CONSENT_TYPE_FOR } from '../types/legal';
 import { draftKeys, draftValues, fillValid, stageOf, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { closeOpenedContexts } from './helpers/contexts';
 
 // Every context a test opened is closed after it (helpers/contexts.ts says why).
@@ -157,7 +157,7 @@ test.describe('version 2 of the terms, the privacy notice and the consent to sto
     await page.waitForURL((url) => url.pathname !== '/acceptances');
     await page.goto(question);
     await waitForQuestionPage(page);
-    await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(REASON);
+    await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue(REASON);
     await page.context().close();
   });
 

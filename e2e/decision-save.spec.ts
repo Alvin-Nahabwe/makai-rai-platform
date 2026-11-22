@@ -2,9 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { applyNetworkProfile } from './helpers/network';
 import {
-  captureDecisionRequestIds, draftKeys, draftValues, fillValid, fixtureOrgId, historyPath, openQuestion, questionPath, saveAlert, saveStatus, saveViaApi, seatOf, waitForQuestionPage,
+  backToQuestion, captureDecisionRequestIds, draftKeys, draftValues, expectMovedOn, fillValid, fixtureOrgId, historyPath, openQuestion, questionPath, saveAlert, saveStatus, saveViaApi, seatOf, waitForQuestionPage,
 } from './helpers/session';
-import { problemSummary, savedLine } from '../lib/decision/copy';
+import { REASON_OPTIONAL, problemSummary, savedLine } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
@@ -29,7 +29,7 @@ test('FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as ver
   await expect(saveStatus(page)).toHaveText('Saving...');
   await expect(page.getByRole('button', { name: 'Save decision' })).toBeDisabled();
   release();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1);
+  await expectMovedOn(page, Q);
   expect(await draftKeys(page)).toHaveLength(0);
 });
 
@@ -44,19 +44,19 @@ test('FR-DEC-06 UX-25 M-05 NFR-REL-05: offline Save keeps the answer; reload onl
   await page.route('**/decisions', (r) => r.abort('failed'));
   await context.setOffline(false); await page.reload(); await waitForQuestionPage(page);
   await page.unroute('**/decisions');
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Offline reason');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Offline reason');
   await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   expect(await draftKeys(page)).toHaveLength(0);
 });
 
 test('NFR-REL-05: the answer survives a closed tab; a new page of the same account restores it', async ({ page, context, baseURL }) => {
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Kept through a closed tab');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Kept through a closed tab');
   await page.close();
   const again = await context.newPage();
   await openQuestion(again, 'assessor', Q, baseURL!, projectId);
-  await expect(again.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Kept through a closed tab');
+  await expect(again.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Kept through a closed tab');
 });
 
 test('NFR-REL-05 UX-27: back online, the pending save is retried once with the same request id', async ({ page, context, baseURL }) => {
@@ -65,7 +65,7 @@ test('NFR-REL-05 UX-27: back online, the pending save is retried once with the s
   await context.setOffline(true); await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
   await context.setOffline(false);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`), { timeout: 10_000 });
+  await expectMovedOn(page, Q);
   expect(new Set(ids.sent)).toEqual(new Set([ids.sent[0]]));
   expect(ids.sent.length).toBeLessThanOrEqual(2);
 });
@@ -102,9 +102,9 @@ test('UX-27: send, fail, edit, retry: the two requests carry different ids', asy
   await page.route('**/decisions', (r) => r.abort('failed'), { times: 1 });
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Edited after the failure');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Edited after the failure');
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   expect(ids.sent).toHaveLength(2);
   expect(ids.sent[1]).not.toBe(ids.sent[0]);
 });
@@ -164,11 +164,11 @@ test('CR-1 7.4.1: typing while a save is out is kept: the field keeps it and the
   await page.route('**/decisions', async (r) => { await held; await r.continue(); });
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveStatus(page)).toHaveText('Saving...');
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Typed while it was saving');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
   release();
   await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Typed while it was saving');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed while it was saving');
   // UX-25 (ruling on CR-1): "Saved" is followed by the line that says the field holds a newer answer, on the device only.
   await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
   const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { reason: string } });
@@ -194,29 +194,38 @@ test('CR-1 UX-26: with no storage, typing while a save is out is kept when the n
   await page.route('**/decisions', async (r) => { await held; await r.continue(); });
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveStatus(page)).toHaveText('Saving...');
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Typed while it was saving');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
   release();
   await expect(saveStatus(page)).toHaveText(SAVED_V1);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Typed while it was saving');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed while it was saving');
 });
 
 test('CR-1 UX-26: with no storage, typing after Saved and before the new version arrives is kept', async ({ page, baseURL }) => {
   await blockStorage(page);
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
   await fillValid(page, { reason: 'Sent reason' });
+  // A clean Save moves on to the next question; the refresh this case holds belongs to a save that stays, so one file is left
+  // out of it: its upload is held, never finishes, and "Save without" sends the answer.
+  let releaseUpload!: () => void;
+  const heldUpload = new Promise<void>((res) => (releaseUpload = res));
+  await page.route('**/evidence', async (r) => { if (r.request().method() === 'POST') { await heldUpload; await r.abort(); } else await r.continue(); });
+  await page.locator('input[type="file"]').setInputFiles({ name: 'costing-sheet.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nheld upload\n') });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(page.locator('[data-upload-wait]')).toBeVisible();
   // Hold the refresh that brings version 1 (an RSC request for this page), not the save itself.
   let release!: () => void;
   const held = new Promise<void>((res) => (release = res));
   const path = questionPath(projectId, Q);
   await page.route((u) => u.pathname === path, async (r) => { if (r.request().headers()['rsc'] === '1') await held; await r.continue(); });
-  await page.getByRole('button', { name: 'Save decision' }).click();
+  await page.getByRole('button', { name: DECISION_FORM_COPY.saveWithout(1) }).click();
   await expect(saveStatus(page)).toHaveText(SAVED_V1);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toHaveCount(0);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Typed after it was saved');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed after it was saved');
   release();
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('Typed after it was saved');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed after it was saved');
+  releaseUpload();
 });
 
 for (const [code, text, label, target] of [
@@ -237,7 +246,7 @@ for (const [code, text, label, target] of [
     await expect(page.getByRole('link', { name: label })).toHaveAttribute('href', `${target}?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
     await page.waitForTimeout(1_000);
     expect(left).toEqual([]);
-    await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('The only copy is in the field');
+    await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('The only copy is in the field');
   });
 }
 
@@ -259,14 +268,14 @@ test('CR-2 rr2: a draft write refused while the save is out leaves nothing on th
   expect(await draftKeys(page)).toHaveLength(1);    // the press-time write worked
   // The quota fills while the save is out: the next write is refused, and the store removes the pressed draft.
   await page.evaluate(() => { Storage.prototype.setItem = function setItem() { throw new DOMException('full', 'QuotaExceededError'); }; });
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('A longer reason pasted while it was saving');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('A longer reason pasted while it was saving');
   expect(await draftKeys(page)).toHaveLength(0);
   release();
   await expect(saveAlert(page)).toHaveText(DECISION_OUTCOME_COPY.gate.terms);
   await expect(page.getByRole('link', { name: DECISION_OUTCOME_COPY.gate.termsLink })).toHaveAttribute('href', `/acceptances?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
   await page.waitForTimeout(1_000);
   expect(left).toEqual([]);
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('A longer reason pasted while it was saving');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('A longer reason pasted while it was saving');
 });
 
 test('NFR-REL-05 B6: after an edit, coming back online sends nothing by itself', async ({ page, context, baseURL }) => {
@@ -275,7 +284,7 @@ test('NFR-REL-05 B6: after an edit, coming back online sends nothing by itself',
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(page)).toContainText(DECISION_OUTCOME_COPY.save.connection);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Edited while offline');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Edited while offline');
   await context.setOffline(false);
   await page.waitForTimeout(2_000);
   expect(ids.sent).toHaveLength(1);   // the offline press only; the edited answer waits for Save
@@ -286,7 +295,7 @@ test('UX-24: typing for 60 seconds without Save sends no write', async ({ page, 
   page.on('request', (r) => { if (r.method() !== 'GET' && r.method() !== 'HEAD') writes.push(r.url()); });
   await page.clock.install();
   await openQuestion(page, 'assessor', Q, baseURL!);
-  for (let i = 0; i < 6; i++) { await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).pressSequentially('abc'); await page.clock.fastForward(10_000); }
+  for (let i = 0; i < 6; i++) { await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).pressSequentially('abc'); await page.clock.fastForward(10_000); }
   expect(writes.filter((u) => new URL(u).pathname.startsWith('/api/'))).toEqual([]);
   expect(await draftKeys(page)).toHaveLength(1);
 });
@@ -309,11 +318,17 @@ test('UX-10 FR-DEC-10: month and year only save with month precision; Same as ve
   const reply = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decisions'));
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await (await reply).json()) as { declaredPrecision: string }).declaredPrecision).toBe('month');
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   expect((await saveViaApi(baseURL!, 'owner', projectId, Q, { baseVersionNumber: 1, reason: 'Version 2 by the owner' })).status).toBe(201);
-  await page.reload(); await waitForQuestionPage(page);
-  for (const f of ['Day', 'Month', 'Year']) await expect(page.getByLabel(f, { exact: true })).toHaveValue('');
+  await backToQuestion(page, projectId, Q);
+  // Answer cost: a new version opens at today's date, shown as one line; Change opens the boxes, filled with today's date.
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
+  await expect(page.getByLabel('Day', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Change', exact: true }).click();
+  const now = new Date();
+  await expect(page.getByLabel('Day', { exact: true })).toHaveValue(String(now.getDate()));
+  await expect(page.getByLabel('Month', { exact: true })).toHaveValue(String(now.getMonth() + 1));
+  await expect(page.getByLabel('Year', { exact: true })).toHaveValue(String(now.getFullYear()));
   await page.getByRole('button', { name: DECISION_FORM_COPY.sameAsCurrent('12 Oct 2026') }).click();
   await expect(page.getByLabel('Day', { exact: true })).toHaveValue('12');
   await expect(page.getByLabel('Month', { exact: true })).toHaveValue('10');
@@ -329,7 +344,7 @@ test('UX-09 UX-11 M-03: choosing Not yet shows the reason code; Ethics committee
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reasonCode} ${FIELD_COPY.required}`).selectOption('ny_planned_later');
   await fillValid(page, { status: null, decidedBy: 'Ethics committee' });
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(/Decided by: Ethics committee\.$/);
+  await expectMovedOn(page, Q, 'Ethics committee');
 });
 
 test('UX-30: Save while a file is uploading waits; Save without it names the file left out', async ({ page, baseURL }) => {
@@ -352,12 +367,12 @@ test('UX-30: Save while a file is uploading waits; Save without it names the fil
 test('NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
   const v = JSON.parse((await draftValues(page))[0]) as { value: Record<string, unknown> };
-  expect(Object.keys(v.value).sort()).toEqual(['date', 'decidedBy', 'evidenceIds', 'href', 'notUploaded', 'optionsInPlace', 'reason', 'reasonCode', 'scopeAnswer', 'status']);
+  expect(Object.keys(v.value).sort()).toEqual(['date', 'decidedBy', 'evidenceIds', 'href', 'notUploaded', 'optionsInPlace', 'reason', 'reasonCode', 'scopeAnswer', 'status', 'whoWhenChanged']);
 });
 
 test('UX-26 B2: the draft key holds the session\'s account, organisation, project and question', async ({ page, baseURL }) => {
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('x');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('x');
   const [key] = await draftKeys(page);
   expect(key).toBe(`makrai.draft.v1:${seatOf('assessor').userId}:${fixtureOrgId()}:${projectId}:q:${Q}`);
 });
@@ -404,7 +419,7 @@ test('UX-30 FR-EVD-01: fill, upload a PDF, Save: the decision carries the file a
   const sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   const text = await historyText(page, projectId);
   expect(text).toContain('kept-one.pdf');
   expect(text).not.toContain('Evidence\nNone');
@@ -417,7 +432,7 @@ test('UX-30 FR-EVD-01: upload first, then fill, Save: the decision carries the f
   const sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   const text = await historyText(page, projectId);
   expect(text).toContain('kept-two.pdf');
   expect(text).not.toContain('Evidence\nNone');
@@ -437,7 +452,7 @@ test('UX-30: Save while the file is still uploading; the form sends by itself wh
   expect(res.status()).toBe(201);
   const { id } = (await res.json()) as { id: string };
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`), { timeout: 60_000 });
+  await expectMovedOn(page, Q);
   // The save that waited is the answer on screen: no draft is left behind and the form does not claim one.
   await expect(page.getByText(DECISION_FORM_COPY.unsaved)).toHaveCount(0);
   expect(await draftKeys(page)).toHaveLength(0);
@@ -455,7 +470,7 @@ test('UX-30: the answer on screen when the wait ends is what is saved, with the 
   await expect(page.getByText(/^Uploading kept-five\.pdf:/)).toBeVisible();
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(page.getByText('Waiting for kept-five.pdf to finish uploading.')).toBeVisible();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Typed while the save was waiting');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while the save was waiting');
   const sent = page.waitForRequest(isDecisionPost, { timeout: 60_000 });
   const res = await reply;
   expect(res.status()).toBe(201);
@@ -463,7 +478,7 @@ test('UX-30: the answer on screen when the wait ends is what is saved, with the 
   const body = (await sent).postDataJSON() as { evidenceIds: string[]; reason: string };
   expect(body.reason).toBe('Typed while the save was waiting');
   expect(body.evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`), { timeout: 60_000 });
+  await expectMovedOn(page, Q);
   await expect(page.getByText(DECISION_FORM_COPY.unsaved)).toHaveCount(0);
   expect(await draftKeys(page)).toHaveLength(0);
   const text = await historyText(page, projectId);
@@ -477,15 +492,16 @@ test('UX-30 FR-EVD-04: version 2 carries the earlier file and the one uploaded s
   let sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([first]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
+  await backToQuestion(page, projectId, Q);
   // FR-EVD-04: the new version starts from the previous version's evidence, which the block shows as attached.
   await expect(page.getByText('kept-four-a.pdf').first()).toBeVisible();
   const second = await uploadAndWait(page, evidencePdf('kept-four-b.pdf'));
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Version 2 with a second file');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Version 2 with a second file');
   sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect([...((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds].sort()).toEqual([first, second].sort());
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 2, '.+')}$`));
+  await expectMovedOn(page, Q);
   const text = await historyText(page, projectId);
   expect(text).toContain('kept-four-a.pdf');
   expect(text).toContain('kept-four-b.pdf');
@@ -501,7 +517,7 @@ test('FR-EVD-01 (control): a link alone is saved with the link\'s id', async ({ 
   const sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   expect(await historyText(page, projectId)).toContain('https://example.org/minutes');
 });
 
@@ -515,7 +531,7 @@ test('UX-30 FR-EVD-01: upload, reload, Save: the reloaded form holds the file an
   const sent = page.waitForRequest(isDecisionPost);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`));
+  await expectMovedOn(page, Q);
   await expect(page.getByText(DECISION_FORM_COPY.unsaved)).toHaveCount(0);
   expect(await draftKeys(page)).toHaveLength(0);
   expect(await historyText(page, projectId)).toContain('kept-six.pdf');
@@ -542,7 +558,7 @@ test('UX-30: Save while two files are uploading sends once, after both finished,
   expect(posts).toBe(0);
   const sent = page.waitForRequest(isDecisionPost, { timeout: 60_000 });
   const body = (await sent).postDataJSON() as { evidenceIds: string[] };
-  await expect(saveStatus(page)).toHaveText(new RegExp(`^${savedLine('.+', 1, '.+')}$`), { timeout: 60_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toBe(1);
   expect(finishedAtSend).toBe(2);
   await expect.poll(() => ids.length).toBe(2);

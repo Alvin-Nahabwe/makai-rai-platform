@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fillValid, openQuestionIn, saveStatus } from './helpers/session';
+import { actAsSeat, expectMovedOn, fillValid, openQuestionIn, saveStatus } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { M11 } from '../lib/decision/copy';
 
@@ -66,7 +66,7 @@ test('I-r4-1: after "Save without this file" the upload left out keeps going whe
   const sent = page.waitForRequest(isDecisionPost);
   await page.locator('.decision-save-bar').getByRole('button', { name: F.save, exact: true }).click();
   expect(((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds).toEqual([id]);
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 2\./, { timeout: 20_000 });
+  await expectMovedOn(page, Q);   // the file went with the answer, so nothing was left out: this Save moves on
   expect(uploads.aborted).toEqual([]);
 });
 

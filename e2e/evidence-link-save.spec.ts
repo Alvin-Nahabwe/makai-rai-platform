@@ -3,8 +3,8 @@ import type { OrgRole } from '@prisma/client';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { applyNetworkProfile } from './helpers/network';
-import { actAsSeat, draftKeys, draftValues, fillValid, fixtureOrgSlug, historyPath, newProject, openQuestion, saveStatus } from './helpers/session';
-import { savedLine } from '../lib/decision/copy';
+import { actAsSeat, draftKeys, draftValues, expectMovedOn, fillValid, fixtureOrgSlug, historyPath, newProject, openQuestion, saveStatus } from './helpers/session';
+import { REASON_OPTIONAL, savedLine } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { EVIDENCE_COPY, LINK_REFUSAL_COPY } from '../lib/evidence/copy';
 import { FINDINGS_COPY } from '../lib/findings/copy';
@@ -39,6 +39,22 @@ function seatFor(info: TestInfo, n: number): Seat {
 const isEvidencePost = (r: { request(): { method(): string }; url(): string }) => r.request().method() === 'POST' && /\/evidence$/.test(new URL(r.url()).pathname);
 const isDecisionPost = (r: { method(): string; url(): string }) => r.method() === 'POST' && /\/decisions$/.test(new URL(r.url()).pathname);
 const SAVED_V1 = new RegExp(`^${savedLine('.+', 1, '.+')}$`);
+
+/**
+ * A Save that stays on the page. A clean Save moves on to the next question (answer cost), so the cases that watch the page's refresh
+ * after "Saved" make the save carry text typed while its request was out, which keeps the person on the question: the form says
+ * the field holds a newer answer, and the page refreshes to the version just saved.
+ */
+async function saveAndStay(page: Page): Promise<void> {
+  let release!: () => void;
+  const held = new Promise<void>((res) => { release = res; });
+  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  await saveDecision(page).click();
+  await expect(saveStatus(page)).toHaveText('Saving...');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
+  release();
+  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+}
 
 /** Every decision save the page sends, in order, with the evidence ids it carried. */
 function decisionPosts(page: Page): Array<{ evidenceIds: string[] }> {
@@ -101,7 +117,7 @@ for (const [n, delayMs] of [[0, 1500], [1, 0]] as const) {
     const res = await reply;
     expect(res.status()).toBe(201);
     const { id } = (await res.json()) as { id: string };
-    await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+    await expectMovedOn(page, Q);
     // One save, and it carried the link: nothing was sent before the link had its id.
     expect(posts).toHaveLength(1);
     expect(posts[0].evidenceIds).toEqual([id]);
@@ -131,7 +147,7 @@ test('B3: Add link and Save decision pressed in the same task: the save still wa
   const res = await reply;
   expect(res.status()).toBe(201);
   const { id } = (await res.json()) as { id: string };
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([id]);
   await expect(page.getByText(DECISION_FORM_COPY.unsaved)).toHaveCount(0);
@@ -163,7 +179,7 @@ test('B3: a link that could not be added while Save waited: nothing is saved, th
   await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible();
   await expect(summary(page)).toHaveCount(0);
   await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   await expect(summary(page)).toHaveCount(0);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([id]);
@@ -205,7 +221,7 @@ test('B3: Cancel while Save waits for a link sends nothing; the link then sits i
   expect(posts).toEqual([]);
   await expect(page.locator('[data-region="answer-form"] .save-status')).toContainText(DECISION_FORM_COPY.unsaved);
   await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([id]);
   expect(await historyText(page, projectId)).toContain(LINK);
@@ -231,7 +247,7 @@ test('B3 UX-30: Save while a file is uploading and a link is being added sends o
   await expect(page.getByText(/^Uploading with-a-link\.pdf:/)).toBeVisible();
   await expect(waitCard(page)).not.toContainText(EVIDENCE_COPY.link.waiting);
   expect(posts).toEqual([]);
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 60_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toHaveLength(1);
   await expect.poll(() => ids.length).toBe(2);
   expect([...posts[0].evidenceIds].sort()).toEqual([...ids].sort());
@@ -262,7 +278,7 @@ test('B3 neighbour: a web address typed and never added: Save decision is refuse
   await expect(page.locator('[data-region="evidence-block"]').getByRole('alert')).toHaveCount(0);
   await expect(summary(page)).toHaveCount(0);   // the box is clear: the summary's line about it is gone too
   await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([]);
   expect(await historyText(page, projectId)).not.toContain(LINK);
@@ -282,7 +298,7 @@ test('B3 neighbour: a web address typed and never added: after the refusal, Add 
   await expect(page.getByRole('button', { name: EVIDENCE_COPY.removeNamed(LINK) })).toBeVisible();
   await expect(summary(page)).toHaveCount(0);   // the link is in: the line that said it was not added is gone
   await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([id]);
   expect(await historyText(page, projectId)).toContain(LINK);
@@ -318,6 +334,8 @@ test('B3 neighbour: while a save is out, Add link does not start and the link bo
   await expect(addLink(page)).toBeFocused();
   await expectNoSeriousA11yViolations(page, 'S-12, the link form while a save is out');
   expect(evidencePosts).toBe(0);
+  // A clean Save would move on; text typed while the request is out keeps the person on the question (the page's refresh is slowed above).
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Typed while it was saving');
   release();
   await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
   expect(posts).toHaveLength(1);
@@ -327,10 +345,10 @@ test('B3 neighbour: while a save is out, Add link does not start and the link bo
   await expect(address).toBeEditable();
   await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveCount(0);   // the new version's form: the link form is closed
+  // The text typed while the save was out is kept, so the form stays as it was: the link form is still open, and it is the person's again.
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('Typed while it was saving');
   expect(evidencePosts).toBe(0);
-  // The link form is the person's again.
-  await typeLink(page);
+  await page.getByLabel(EVIDENCE_COPY.webAddress).fill(LINK);
   await expect(page.getByText(EVIDENCE_COPY.link.waitForSave)).toHaveCount(0);
   await expect(page.getByLabel(EVIDENCE_COPY.webAddress)).toHaveValue(LINK);
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
@@ -442,7 +460,7 @@ test('B3 neighbour: the retry on reconnect does not overtake a Save that waits f
   await expect(waitCard(page)).toContainText(EVIDENCE_COPY.link.waiting);
   await page.evaluate(() => { window.dispatchEvent(new Event('online')); });
   const { id } = (await (await reply).json()) as { id: string };
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await expectMovedOn(page, Q);
   // The lost one and the one that waited: nothing went in between without the link, and the wait is over.
   expect(posts).toHaveLength(2);
   expect(posts[1].evidenceIds).toEqual([id]);
@@ -585,8 +603,7 @@ test('R3 J1 (probe P2): after "Saved", Add link and the boxes are the person\'s 
   const posts = decisionPosts(page);
   await holdRefresh(page, null);
   await toggle(page).click();
-  await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await saveAndStay(page);
   const address = page.getByLabel(EVIDENCE_COPY.webAddress);
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
   await expect(address).toBeEditable();
@@ -608,8 +625,7 @@ test('R3 J1: a link added after "Saved" and still on its way when the page shows
   const [role, index] = seatFor(info, 15);
   await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
   await holdRefresh(page, 3000);
-  await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await saveAndStay(page);
   const id = await fakeLinkReply(page, 6000);
   const refreshed = page.waitForResponse(isRefresh);
   await typeLink(page);
@@ -631,8 +647,7 @@ test('R3 J1: an address typed after "Saved" and not added yet stays in its box w
   const [role, index] = seatFor(info, 16);
   await openQuestion(page, role, Q, baseURL!, undefined, index); await fillValid(page);
   await holdRefresh(page, 2000);
-  await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await saveAndStay(page);
   const refreshed = page.waitForResponse(isRefresh);
   await toggle(page).click();
   const address = page.getByLabel(EVIDENCE_COPY.webAddress);
@@ -693,8 +708,7 @@ test('R3 K1 J1 (probe P6): an address folded away while the refresh hangs: Save 
   await expect(address).toBeEditable();
   await expect(addLink(page)).not.toHaveAttribute('aria-disabled');
   await address.fill('');
-  await saveDecision(page).click();
-  await expect(saveStatus(page)).toHaveText(SAVED_V1, { timeout: 15_000 });
+  await saveAndStay(page);
   expect(posts).toHaveLength(1);
   expect(posts[0].evidenceIds).toEqual([]);
   // The refresh never comes; the link form is still the person's.

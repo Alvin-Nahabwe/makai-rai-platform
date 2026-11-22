@@ -5,7 +5,7 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectStatusMarksInk } from './helpers/noScore';
 import { actAsSeat, draftKeys, draftValues, fillValid, newProject, openQuestion, stagePath } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 
 /**
@@ -48,7 +48,7 @@ test('FR-RM-04 UX-06 UX-07 (S-11, R12-16): each stage page prints its own questi
 
 test('UX-26 FR-DEC-06: a draft is marked on S-11 and listed by Drafts on this device', async ({ page, baseURL }) => {
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('A draft');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('A draft');
   // The breadcrumb's stage link (lane 1 Task 1: from 1160px the breadcrumb leads to the stage page).
   await page.getByRole('navigation', { name: 'Breadcrumb', exact: true }).getByRole('link', { name: 'Pre-processing', exact: true }).click();
   await page.waitForURL(`**${stagePath(projectId, 'pre-processing')}`);
