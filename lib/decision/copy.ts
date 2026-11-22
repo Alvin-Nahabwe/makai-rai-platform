@@ -1,13 +1,11 @@
-import type { DecisionStatus, DeclaredDate, OutsideRole, ScopeAnswer, WithdrawalCode } from '@/types/record';
-import { formatDeclaredDate } from '@/lib/format/dates';
+import type { DecisionStatus, OutsideRole, ScopeAnswer, WithdrawalCode } from '@/types/record';
 import type { DecisionVersionView, DeciderView } from '@/types/api';
 import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
 
 /**
  * The fixed texts of a decision (SRS 7.5.6, 7.5.7 M-03 and M-11, FR-DEC-01's outside roles, FR-DEC-08's
  * withdrawal codes), shared by the decision service and the S-12 form so each text has one copy. Imports
- * only `types/`, the vocabulary's terms and `lib/format/dates` (which imports only `types/`; `whoWhenSummary` writes a date with it),
- * so a client component can import it (00-contract.md, "Further cross-unit
+ * only `types/` and the vocabulary's terms, so a client component can import it (00-contract.md, "Further cross-unit
  * symbols").
  *
  * Texts the SRS does not fix are the defaults of owner question B1 (`reviews/owner-questions.md`):
@@ -54,11 +52,12 @@ export function reasonCount(n: number): string {
 /**
  * The answer form's one line for who and when (design 2026-11-22 section 2 item 1; the owner's "Default who and when",
  * "Prefill today" and "Keep earlier decider" of 19 and 22 Nov 2026): "Decided by you, 22 Nov 2026", then the Change button.
- * `decider` is how the line names the person ("you", a name, or an outside role's label, as M-03 names them); `date` is
- * what the form holds, or null while the device's date is not yet known (the server render), which reads "today".
+ * `decider` is how the line names the person ("you", a name, or an outside role's label, as M-03 names them); `dateText` is
+ * the date the form holds, written as the interface writes a declared date (`formatDeclaredDate`, by the caller), or null while
+ * the device's date is not yet known (the server render), which reads "today".
  */
-export function whoWhenSummary(decider: string, date: DeclaredDate | null): string {
-  return `Decided by ${decider}, ${date === null ? 'today' : formatDeclaredDate(date)}`;
+export function whoWhenSummary(decider: string, dateText: string | null): string {
+  return `Decided by ${decider}, ${dateText === null ? 'today' : dateText}`;
 }
 
 /** The words around that line: the button that opens Decided by and Decided on, and the reason's label once it is optional. */

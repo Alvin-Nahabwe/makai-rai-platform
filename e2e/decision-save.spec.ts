@@ -25,10 +25,13 @@ test('FR-DEC-06 NFR-REL-04 UX-25 M-01 M-03: Save shows Saving, then Saved as ver
   let release!: () => void;
   const held = new Promise<void>((res) => (release = res));
   await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  const reply = page.waitForResponse(isDecisionReply);
   await page.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveStatus(page)).toHaveText('Saving...');
   await expect(page.getByRole('button', { name: 'Save decision' })).toBeDisabled();
   release();
+  // The save's own reply says which version it made (the page moves on, so the status line is not there to read).
+  expect(((await (await reply).json()) as { versionNumber: number }).versionNumber).toBe(1);
   await expectMovedOn(page, Q);
   expect(await draftKeys(page)).toHaveLength(0);
 });
@@ -388,6 +391,7 @@ test('UX-26 B2: the draft key holds the session\'s account, organisation, projec
 const evidencePdf = (name: string, size = 20 * 1024) => ({ name, mimeType: 'application/pdf', buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(size - 9, 0x20)]) });
 const isEvidencePost = (r: { request(): { method(): string }; url(): string }) => r.request().method() === 'POST' && /\/evidence$/.test(new URL(r.url()).pathname);
 const isDecisionPost = (r: { method(): string; url(): string }) => r.method() === 'POST' && /\/decisions$/.test(new URL(r.url()).pathname);
+const isDecisionReply = (r: { request(): { method(): string }; url(): string }) => r.request().method() === 'POST' && /\/decisions$/.test(new URL(r.url()).pathname);
 
 /** Chooses `file` and returns the id the upload's 201 reply gave it, once the block says "Uploaded". */
 async function uploadAndWait(page: Page, file: ReturnType<typeof evidencePdf>): Promise<string> {
@@ -496,8 +500,10 @@ test('UX-30 FR-EVD-04: version 2 carries the earlier file and the one uploaded s
   const second = await uploadAndWait(page, evidencePdf('kept-four-b.pdf'));
   await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Version 2 with a second file');
   sent = page.waitForRequest(isDecisionPost);
+  const reply = page.waitForResponse(isDecisionReply);
   await page.getByRole('button', { name: 'Save decision' }).click();
   expect([...((await sent).postDataJSON() as { evidenceIds: string[] }).evidenceIds].sort()).toEqual([first, second].sort());
+  expect(((await (await reply).json()) as { versionNumber: number }).versionNumber).toBe(2);
   await expectMovedOn(page, Q);
   const text = await historyText(page, projectId);
   expect(text).toContain('kept-four-a.pdf');

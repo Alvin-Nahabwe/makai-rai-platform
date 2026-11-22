@@ -39,7 +39,7 @@ afterEach(() => { harness = null; });
 
 const stage = stageFixture();
 const FOURTH = stage.rows[3].questionId;
-const BASE = { orgSlug: stage.orgSlug, projectId: stage.projectId, stage: stage.stage, rows: stage.rows };
+const BASE = { orgSlug: stage.orgSlug, projectId: stage.projectId, stage: stage.stage, rows: stage.rows, viewerId: 'u-me' };
 
 const version = (over: Partial<DecisionVersionView> = {}): DecisionVersionView => ({
   id: 'dv1', projectId: stage.projectId, stage: stage.stage, questionId: FOURTH, versionNumber: 1, baseVersionNumber: null,
@@ -103,5 +103,18 @@ describe('the "saved" line', () => {
     expect(savedArrivalFor({ ...BASE, current: current(version({ questionId: first })) }, first)!.questionNumber).toBe(1);
     expect(savedArrivalFor({ ...BASE, current: current(version({ decidedBy: null })) }, FOURTH)).toBeNull();
     expect(savedArrivalFor({ ...BASE, current: current(version({ declaredDate: null })) }, FOURTH)).toBeNull();
+  });
+
+  it('answer cost 6: the line shows only to the person who entered the version: another member\'s version gives null, the viewer\'s own gives the line', () => {
+    const theirs = version({ enteredBy: { userId: 'u-other', name: 'Bo K.', formerMember: false } });
+    // The decider alone does not make the version the viewer's: `theirs` still names the viewer as decider.
+    expect(theirs.decidedBy).toEqual(version().decidedBy);
+    expect(savedArrivalFor({ ...BASE, current: current(theirs) }, FOURTH)).toBeNull();
+    const own = savedArrivalFor({ ...BASE, current: current(version()) }, FOURTH)!;
+    expect(own.questionNumber).toBe(4);
+    const html = renderToStaticMarkup(<SavedArrival {...own} viewerId="u-me" />);
+    expect(html.replace(/<[^>]*>/g, '')).toContain('Your answer to question 4 is saved: decided by you, 22 Nov 2026.');
+    // Another viewer opening the same address (the version is still u-me's) gets no line.
+    expect(savedArrivalFor({ ...BASE, viewerId: 'u-other', current: current(version()) }, FOURTH)).toBeNull();
   });
 });

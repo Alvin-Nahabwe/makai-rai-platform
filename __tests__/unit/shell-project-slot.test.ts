@@ -23,6 +23,14 @@ const filesUnder = (dir: string): string[] => readdirSync(dir, { withFileTypes: 
 const pagesOf = (dir: string, skipSlots: boolean) => filesUnder(dir)
   .filter((f) => f.endsWith('/page.tsx') && !(skipSlots && f.slice(dir.length).includes('/@')))
   .map((f) => f.slice(dir.length + 1)).sort();
+/**
+ * Signed-in pages with no slot page, by exact path under app/(authenticated), each with its reason. Only a page that renders
+ * nothing belongs here, so the slot has nothing to mirror; the last test below keeps each entry a real, redirect-only page.
+ * __tests__/lint/page-titles.test.ts exempts the same page in its own REDIRECT_ONLY.
+ */
+const REDIRECT_ONLY: Record<string, string> = {
+  'orgs/[slug]/projects/[id]/stages/[stage]/next/page.tsx': 'redirect-only: renders nothing, so the project slot has nothing to mirror',
+};
 const isProjectPage = (rel: string) => rel.startsWith('orgs/[slug]/projects/[id]/');
 
 /**
@@ -39,9 +47,20 @@ function mirrorProblems(pages: readonly string[], slotPages: readonly string[]):
 
 describe('the @project slot mirrors every signed-in page', () => {
   it('R4: every page of app/(authenticated) has a page at the same path in the slot, and the slot has no other page', () => {
-    const pages = pagesOf(GROUP, true);
+    const pages = pagesOf(GROUP, true).filter((p) => !(p in REDIRECT_ONLY));
     expect(pages.length).toBeGreaterThanOrEqual(25);
     expect(mirrorProblems(pages, pagesOf(SLOT, false)), 'the @project slot must mirror app/(authenticated) page for page').toEqual([]);
+  });
+
+  it('R4: every redirect-only exemption is a signed-in page that exists, gives its reason, calls redirect( and returns no markup', () => {
+    const all = pagesOf(GROUP, true);
+    for (const [rel, reason] of Object.entries(REDIRECT_ONLY)) {
+      expect(all, rel).toContain(rel);
+      expect(reason.length, rel).toBeGreaterThan(0);
+      const src = code(`${GROUP}/${rel}`);
+      expect(src, rel).toMatch(/\bredirect\(/);
+      expect(src, rel).not.toMatch(/<[A-Za-z]/);
+    }
   });
 
   it('(self-test) a missing mirror is named by the path to create, and a slot page with no signed-in page by its own path', () => {

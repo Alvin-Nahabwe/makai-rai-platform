@@ -248,7 +248,7 @@ export default async function QuestionPage({
   if (stageData === null) throw new Error(`QuestionPage: the stage list of ${stage} was not found for a project the panel found`);
   // The line a clean Save leaves (answer cost, design 8): only from this project's own current answer to one of this stage's questions.
   const saved = savedParam(sp.saved);
-  const arrivalData = savedArrivalFor({ ...stageData, current: await loadSavedCurrent(ctx, id, stage as Stage, stageData.rows, saved) }, saved);
+  const arrivalData = savedArrivalFor({ ...stageData, viewerId: data.viewer.userId, current: await loadSavedCurrent(ctx, id, stage as Stage, stageData.rows, saved) }, saved);
   const arrival = arrivalData === null ? undefined : <SavedArrival key={arrivalData.version.id} {...arrivalData} viewerId={data.viewer.userId} />;
   const route = <RouteColumn data={stageData} currentQuestionId={data.question.id} nextQuestionId={data.position.nextId} show={show} />;
   return (

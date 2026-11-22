@@ -171,7 +171,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
 
   // The one line: who and when as the form holds them ("you" for the viewer, as M-03 names them), and "today" while no date is set.
   const parsedDate = declaredDateFromParts(value.date);
-  const summary = whoWhenSummary(deciderName(value.decidedBy, data, extraMember), 'date' in parsedDate ? parsedDate.date : null);
+  const summary = whoWhenSummary(deciderName(value.decidedBy, data, extraMember), 'date' in parsedDate ? formatDeclaredDate(parsedDate.date) : null);
 
   return (
     <div className="decision-fields">

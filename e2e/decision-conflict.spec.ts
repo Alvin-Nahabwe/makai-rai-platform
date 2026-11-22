@@ -24,7 +24,9 @@ test('FR-DEC-05 UX-28 M-10 NFR-A11Y-03: a colleague saved version 2 first: both 
   await expect(page.locator('[data-region="conflict"]').getByRole('heading', { name: DECISION_FORM_COPY.conflict.saved(2), exact: true })).toBeVisible();
   await expect(page.locator('[data-region="conflict"]').getByText('Owner saved first', { exact: true })).toBeVisible();
   await expect(page.locator('[data-region="conflict"]').getByText('Mine', { exact: true })).toBeVisible();
+  const reply = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decisions'));
   await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.saveMine }).click();
+  expect(((await (await reply).json()) as { versionNumber: number }).versionNumber).toBe(3);   // "save mine" makes version 3 over the colleague's version 2
   await expectMovedOn(page, Q, 'Supervisor');   // a new version keeps the earlier decider (the owner's "Keep earlier decider")
   expect(await draftKeys(page)).toHaveLength(0);
 });

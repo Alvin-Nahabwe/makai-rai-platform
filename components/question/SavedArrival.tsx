@@ -7,9 +7,9 @@ import type { StageRow } from '@/lib/question/stageList';
 import type { DecisionVersionView } from '@/types/api';
 import type { Stage } from '@/types/record';
 
-/** What `savedArrivalFor` reads: the stage's rows in order (one per question) and the project's current decisions of the stage, with its address. */
+/** What `savedArrivalFor` reads: the stage's rows in order (one per question), the project's current decisions of the stage, its address and the viewer. */
 export type SavedArrivalInput = {
-  orgSlug: string; projectId: string; stage: Stage;
+  orgSlug: string; projectId: string; stage: Stage; viewerId: string;
   rows: readonly Pick<StageRow, 'questionId'>[];
   current: ReadonlyMap<string, DecisionVersionView>;
 };
@@ -20,7 +20,8 @@ export type SavedArrivalData = { version: DecisionVersionView; questionNumber: n
 /**
  * The line's data for the page's `saved` parameter (answer cost, design 8, "The 'saved' line"): the current version of that question
  * of this project, and only that. Null for no parameter, an id that is not a question of this stage, a question with no current
- * answer or a withdrawn one, and a version that carries no decider or no date (there is nothing true to say about who and when). The
+ * answer or a withdrawn one, a version that carries no decider or no date (there is nothing true to say about who and when), and a
+ * version someone else entered: the line says "Your answer", so it shows only to the person who entered the version. The
  * parameter is never printed: every word on the line comes from the database and the content, so an address cannot put its own text
  * on the page. `current` is read through the viewer's organisation (lib/question/savedArrival.ts), so it never holds another project's answer.
  */
@@ -30,6 +31,7 @@ export function savedArrivalFor(d: SavedArrivalInput, saved: string | undefined)
   if (at < 0) return null;
   const version = d.current.get(saved);
   if (version === undefined || version.status === 'withdrawn' || version.decidedBy === null || version.declaredDate === null) return null;
+  if (version.enteredBy.userId !== d.viewerId) return null;
   return { version, questionNumber: at + 1, href: questionHref(d, saved) };
 }
 

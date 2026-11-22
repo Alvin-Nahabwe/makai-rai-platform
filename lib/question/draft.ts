@@ -20,12 +20,13 @@ export interface DecisionDraft {
   /**
    * Whether the person changed "Decided by" or "Decided on" in this draft. Only then does a restore trust the stored
    * decider and date; otherwise it applies the defaults (design 2026-11-22 section 8). A draft saved by v0.9.0 has no
-   * such field and counts as false.
+   * such field: it counts as changed when its date was typed (any part of it is not empty), and as unchanged otherwise
+   * (`restoreDraft`).
    */
   whoWhenChanged: boolean;
 }
 
-/** A draft as the store may hold it: one saved by v0.9.0 lacks `whoWhenChanged`, which reads as false. */
+/** A draft as the store may hold it: one saved by v0.9.0 lacks `whoWhenChanged`, which `restoreDraft` reads from the typed date. */
 export type StoredDecisionDraft = Omit<DecisionDraft, 'whoWhenChanged'> & { whoWhenChanged?: boolean };
 
 export const EMPTY_DATE: DateParts = Object.freeze({ day: '', month: '', year: '' }) as DateParts;
