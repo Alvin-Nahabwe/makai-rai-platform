@@ -30,7 +30,9 @@ test('M2 D-419: Decided by sits beside Decided on exactly when the fields are 42
       }));
     }));
     if (m.beside) beside++;
-    if (m.beside !== m.fields >= 42 * m.rem - 0.5 || m.overflow) wrong.push(`${width}px: fields ${m.fields.toFixed(1)}px, beside ${m.beside}, overflow ${m.overflow}`);
+    // A width within half a pixel of 42rem could round either way, so it proves nothing; every other width must agree.
+    if (Math.abs(m.fields - 42 * m.rem) < 0.5 && !m.overflow) continue;
+    if (m.beside !== m.fields >= 42 * m.rem || m.overflow) wrong.push(`${width}px: fields ${m.fields.toFixed(1)}px, beside ${m.beside}, overflow ${m.overflow}`);
   }
   expect(wrong).toEqual([]);
   // Both layouts were reached, so the walk tested the switch and not one side of it.
