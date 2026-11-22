@@ -86,27 +86,29 @@
  * its Today and "Same date as" buttons wrap under them inside its column. Design finish review M2: the chosen name never
  * wraps or is cut, so Decided by keeps at least 16rem; side by side needs that, the gap, and room for the three boxes and
  * one shortcut on its line (about 25rem), so below 42rem of the fields the two stack, each the fields' width.
+ *
+ * The row wraps by its own width (D-419), not by a container query or viewport bands: with .decision-fields as an
+ * inline-size container, Chrome 158 sometimes left Status, Reason and this row with computed display but no layout box
+ * after hydration, so the Done radio was never drawn (CI flake), and the bands that replaced it held only at a 16 px
+ * default font. The two bases and the gap add up to 42rem, so the two share a line exactly when the fields are 42rem or
+ * wider, at any default font size; side by side, the space past 42rem goes 1 to 1.5, as before. Wrapped, each grows to
+ * the fields' width. min-inline-size 0 lets a lone field narrow on a small phone, as the grid's minmax(0) did.
  */
 .decision-fields__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   column-gap: var(--space-4);
-  align-items: start;
+  align-items: flex-start;
 }
 
-/*
- * Viewport bands, not a container query (D-419). With .decision-fields as an inline-size container, Chrome 158
- * sometimes left Status, Reason and this row with computed display but no layout box after hydration, so the Done radio
- * was never drawn (CI flake; gone in two CI runs without the container). The bands are the viewport widths at which
- * .decision-fields measured 42rem or more, at 1 px steps from 320 to 3840 px (it holds at 462 px from 1440 up). Limits:
- * measured at a 16 px default font and with no scrollbar, so with a larger default font the row can sit side by side
- * under 42rem, and with a classic scrollbar it switches up to about 17 px early. If the rail (shell.css) or the
- * workspace columns (workspace.css) change width, re-measure the bands.
- */
-@media (738px <= width < 1024px), (1034px <= width < 1160px), (1378px <= width < 1440px) {
-  .decision-fields__row {
-    grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.5fr);
-  }
+.decision-fields__row > .ui-field {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+}
+
+.decision-fields__row > .ui-date {
+  flex: 1.5 1 calc(26rem - var(--space-4));
+  min-inline-size: 0;
 }
 
 /*
