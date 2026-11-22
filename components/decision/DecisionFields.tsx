@@ -158,7 +158,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       </div>
 
       {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below 42rem
-          of the fields the two stack (DecisionFields.css, viewport bands measured to match). */}
+          of the fields the two stack (DecisionFields.css: the row wraps by its own width). */}
       <div className="decision-fields__row">
       {/* Starts empty on a first decision (owner OQ1 (a)): the empty first option keeps the browser from showing the first
           member as chosen while the answer holds no one. */}
