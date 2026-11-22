@@ -426,6 +426,11 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     // Chromium draws no ellipsis on an end-aligned clamped line that ends on a whole word: start-aligned in a box pushed to the end.
     expect(words).toMatch(/text-align:\s*start/);
     expect(words).toMatch(/margin-inline-start:\s*auto/);
+    // No later rule (a button-styled override, a media query) may undo that start alignment on the words: every rule that ends in
+    // .decision-next__words and sets a text-align sets start.
+    const aligned = [...form.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*\.decision-next__words)\s*\{([^}]*)\}/g)]
+      .flatMap((m) => [...m[2].matchAll(/text-align:\s*([^;}\s]+)/g)].map((a) => `${m[1].trim()} -> ${a[1]}`));
+    expect(aligned.filter((a) => !a.endsWith('-> start'))).toEqual([]);
     expect(form).not.toMatch(/\.decision-next__position\s*\{\s*display:\s*none/);
     expect(form).toMatch(/@media \(max-width: 768px\)[\s\S]*\.decision-next__words\s*\{[^}]*white-space:\s*nowrap/);
     // The whole text stays the link's name: the words and the position, never cut in the markup.

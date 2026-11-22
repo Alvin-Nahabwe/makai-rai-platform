@@ -322,9 +322,9 @@
   text-align: center;
 }
 
+/* margin-inline: auto centres the fit-content box; its text stays start-aligned (the ellipsis workaround above). */
 .ui-button.decision-next .decision-next__words {
   margin-inline: auto;
-  text-align: center;
 }
 
 .ui-button.decision-next .decision-next__position {
