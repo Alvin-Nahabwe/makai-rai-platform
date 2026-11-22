@@ -7,7 +7,8 @@ import { expect, it } from 'vitest';
  * with trace 'retain-on-first-failure' every later test traces it, which filled the CI runner's disk. So every e2e file
  * that opens a browser context registers `test.afterEach(closeOpenedContexts)` (e2e/helpers/contexts.ts), or says on
  * one line, with its reason, why it does not. API request contexts (`request.newContext`) are not browser contexts:
- * they carry no pages and no trace, so they do not count.
+ * they carry no pages and no trace, so they do not count. Limits: the scan reads each spec's own text, so a context
+ * opened by a helper that takes `browser`, or through a renamed `browser`, is not seen (no helper does so today).
  */
 
 const OPENS = /\bbrowser\.(?:newContext|newPage)\(/;
