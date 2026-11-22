@@ -5,6 +5,7 @@ import type { FieldError, OutsideRole } from '@/types/record';
 import type { ContentRef, SaveDecisionRequest } from '@/types/api';
 import { requestDigest } from '@/lib/data/idempotency';
 import { saveDecision } from '@/lib/data/decisions';
+import { M11 } from '@/lib/decision/copy';
 import { parseSaveDecisionRequest, parseWithdrawDecisionRequest } from '@/lib/decision/parse';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -48,7 +49,6 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
     ['not yet without a reason code', { status: 'not_yet' }, 'reasonCode'],
     ['done with a reason code', { reasonCode: 'ny_planned_later' }, 'reasonCode'],
     ['reason code of the other status', { status: 'not_yet', reasonCode: 'na_other' }, 'reasonCode'],
-    ['empty reason', { reason: '' }, 'reason'],
     ['4,001 characters', { reason: 'a'.repeat(4001) }, 'reason'],
     ['NUL in the reason', { reason: 'a\u0000b' }, 'reason'],
     ['outside role not on the list', { decidedBy: { kind: 'outside_role', role: 'astrologer' as OutsideRole } }, 'decidedBy'],
@@ -68,8 +68,18 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
     await expect(save('assessor', body({ declaredDate: inTwoDays }))).rejects.toMatchObject({ status: 422 });
   });
 
-  it('FR-DEC-01: no reason answers 422 naming reason', async () => {
-    await expect(save('assessor', body({ reason: '' }))).rejects.toMatchObject({ extra: { fields: [{ field: 'reason' }] } });
+  it("answer cost: saveDecision with reason '' stores NULL", async () => {
+    await save('assessor', body({ reason: '' }));
+    const rows = await testDb.decisionVersion.findMany({ where: { projectId: project.id }, select: { reason: true } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].reason).toBeNull();
+  });
+
+  it("answer cost: a second save identical but for reason '' versus '   ' is refused as unchanged", async () => {
+    await save('assessor', body({ reason: '' }));
+    const e = await save('assessor', body({ baseVersionNumber: 1, reason: '   ' })).catch((x) => x);
+    expect(e).toMatchObject({ status: 422, extra: { fields: [{ field: 'form', message: M11.unchanged(1) }] } });
+    expect(await countVersions()).toBe(1);
   });
 
   it('FR-DEC-01 FR-DEC-02: a decider who never was a member, or is a member of another organisation, is refused', async () => {
@@ -92,7 +102,7 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
   });
 
   it('FR-DEC-02 M-11: every problem found is answered in one 422, in field order', async () => {
-    const e = await save('assessor', body({ status: 'not_yet', reason: '', declaredDate: '2026-13', evidenceIds: ['no-such-evidence'] })).catch((x) => x);
+    const e = await save('assessor', body({ status: 'not_yet', reason: 'a\u0000b', declaredDate: '2026-13', evidenceIds: ['no-such-evidence'] })).catch((x) => x);
     expect(e.extra.fields.map((f: FieldError) => f.field)).toEqual(['reasonCode', 'reason', 'declaredDate', 'evidenceIds']);
     expect(content.semver).toBe('0.0.1-fixture');
   });
@@ -115,8 +125,14 @@ describe('parseSaveDecisionRequest and parseWithdrawDecisionRequest (FR-DEC-02, 
   it('FR-DEC-02: a float baseVersionNumber and wrong-typed fields answer 422 naming every faulty field', () => {
     expect(fieldsOf(() => parseSaveDecisionRequest({ ...good(), baseVersionNumber: 1.5 }))).toEqual(['baseVersionNumber']);
     expect(fieldsOf(() => parseSaveDecisionRequest({ ...good(), requestId: 'nope', stage: 'later', status: 'withdrawn', optionsInPlace: [1],
-      reasonCode: 7, reason: undefined, decidedBy: { kind: 'member' }, declaredDate: 2026, evidenceIds: 'x' })))
+      reasonCode: 7, reason: 7, decidedBy: { kind: 'member' }, declaredDate: 2026, evidenceIds: 'x' })))
       .toEqual(['requestId', 'stage', 'status', 'optionsInPlace', 'reasonCode', 'reason', 'decidedBy', 'declaredDate', 'evidenceIds']);
+  });
+
+  it("answer cost: a missing reason is read as '', so the contract's type stays string", () => {
+    const { reason: _omitted, ...withoutReason } = good();
+    expect(parseSaveDecisionRequest(withoutReason).reason).toBe('');
+    expect(parseSaveDecisionRequest({ ...good(), reason: '' }).reason).toBe('');
   });
 
   it('FR-DEC-09: unknown keys are dropped, so they cannot reach the digest or the row', () => {

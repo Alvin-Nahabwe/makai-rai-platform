@@ -3254,5 +3254,37 @@
     "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0 and 0.9.0",
     "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.9.0 records a waiver (the owner deferred the screen-reader walk again on 22 November 2026: \"Defer again\"), so the list and the title gain 0.9.0.",
     "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.9.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.9.0 the committed file waives the screen-reader walk and nothing else."
+  },
+  {
+    "kind": "rule",
+    "deleted": "__tests__/integration/decisions-validation.test.ts::FR-DEC-01: no reason answers 422 naming reason",
+    "replacedBy": "__tests__/integration/decisions-validation.test.ts::answer cost: saveDecision with reason '' stores NULL",
+    "property": "A decision's reason is optional (design 2026-11-22 section 2 item 2, section 8): an empty or white-space reason saves, is stored as NULL, and a typed reason still obeys the 4,000-code-point limit and the character rule; a withdrawal's reason stays required.",
+    "proof": "__tests__/integration/decisions-validation.test.ts::answer cost: saveDecision with reason '' stores NULL requires the row's reason to be null after a save with reason ''; __tests__/unit/decision-rules.test.ts::answer cost: a decision with an empty or white-space reason has no reason error, for every status and the gate, and the case \"a decision's typed reason still obeys the limit and the characters\" in the same file, hold the rule; the 4,001-character and NUL rows of this file's CASES table still require a 422 naming reason.",
+    "task": "answer-cost 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/decisions-validation.test.ts::FR-DEC-02 M-11: every problem found is answered in one 422, in field order",
+    "replacedBy": "__tests__/integration/decisions-validation.test.ts::FR-DEC-02 M-11: every problem found is answered in one 422, in field order",
+    "property": "Every problem found is answered in one 422, in field order, with reason between reasonCode and declaredDate. The empty reason that raised the reason error is no longer an error, so the case supplies a reason with a NUL, which still is.",
+    "proof": "In this case the reason is 'a\\u0000b' and the expected field list is unchanged: ['reasonCode', 'reason', 'declaredDate', 'evidenceIds']; the other three inputs are unchanged.",
+    "task": "answer-cost 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/decisions-validation.test.ts::FR-DEC-02: a float baseVersionNumber and wrong-typed fields answer 422 naming every faulty field",
+    "replacedBy": "__tests__/integration/decisions-validation.test.ts::FR-DEC-02: a float baseVersionNumber and wrong-typed fields answer 422 naming every faulty field",
+    "property": "A wrong-typed field is named in the 422 for each of the nine fields, reason included. A missing reason (undefined) is now read as '' and is not an error, so the case gives the reason a wrong type (the number 7), which still is.",
+    "proof": "In this case reason is 7 and the expected list is unchanged, all nine names; __tests__/integration/decisions-validation.test.ts::answer cost: a missing reason is read as '', so the contract's type stays string requires an omitted reason to parse as ''.",
+    "task": "answer-cost 1"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/decisions-validation.test.ts::(module)",
+    "replacedBy": "__tests__/integration/decisions-validation.test.ts::answer cost: saveDecision with reason '' stores NULL",
+    "property": "The table of server-validation rows names only the inputs the server still refuses. The 'empty reason' row is removed because an empty reason is no longer refused on a decision.",
+    "proof": "The 4,001-character and NUL rows stay in the table, and __tests__/integration/decisions-validation.test.ts::answer cost: saveDecision with reason '' stores NULL proves the empty reason saves as NULL.",
+    "task": "answer-cost 1"
   }
 ]
