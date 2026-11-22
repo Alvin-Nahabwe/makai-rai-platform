@@ -25,8 +25,8 @@ export function exportRefusalLocation(
 }
 
 /** Why the working report page was given back a refused download (fix wave item 8; silent-failure audit I1). A closed set. */
-export type ReportRefusal = 'report_busy' | 'part' | 'not_found' | 'internal_error';
-const REPORT_REFUSALS: ReadonlySet<string> = new Set<ReportRefusal>(['report_busy', 'part', 'not_found', 'internal_error']);
+export type ReportRefusal = 'report_busy' | 'rate_limited' | 'part' | 'not_found' | 'internal_error';
+const REPORT_REFUSALS: ReadonlySet<string> = new Set<ReportRefusal>(['report_busy', 'rate_limited', 'part', 'not_found', 'internal_error']);
 /** A support reference as lib/http/supportReference.ts makes it: eight lowercase hexadecimal characters. */
 const REFERENCE = /^[0-9a-f]{8}$/;
 

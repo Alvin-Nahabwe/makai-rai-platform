@@ -3,7 +3,7 @@ import { Definition, Term } from '@/components/ui/Definition';
 import { TermTip } from '@/components/ui/TermTip';
 import '@/components/ui/buttonStyles';
 import { draftSnapshot, type DraftRecord } from '@/lib/data/documents';
-import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, PART_MESSAGE, emptyFieldText, STAGE_TERMS, WORKING_REPORT_BUSY_MESSAGE, WORKING_REPORT_PAGE as W, draftLine } from '@/lib/documents/copy';
+import { CONTROLS_AFTER_APPROVAL, DOCUMENT_TITLES, NO_RISK_AREA_GROUP, PART_MESSAGE, emptyFieldText, STAGE_TERMS, WORKING_REPORT_BUSY_MESSAGE, WORKING_REPORT_PAGE as W, WORKING_REPORT_RATE_LIMITED_MESSAGE, draftLine } from '@/lib/documents/copy';
 import { Callout } from '@/components/ui/Callout';
 import { API_COPY } from '@/lib/http/api/copy';
 import type { ReportRefusal } from '@/lib/http/exportRefusal';
@@ -31,6 +31,7 @@ type Props = { orgSlug: string; projectId: string; record: DraftRecord; summary:
 export function DownloadRefusal({ refusal }: { refusal: Refusal | null }): ReactElement | null {
   if (refusal === null) return null;
   const text = refusal.reason === 'report_busy' ? WORKING_REPORT_BUSY_MESSAGE
+    : refusal.reason === 'rate_limited' ? WORKING_REPORT_RATE_LIMITED_MESSAGE
     : refusal.reason === 'part' ? PART_MESSAGE
     : refusal.reason === 'not_found' ? API_COPY.notFound
     : API_COPY.internalError(refusal.reference ?? '');

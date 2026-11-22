@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { checkRateLimit, resetRateLimitStore, RATE_LIMITS } from '@/lib/rate-limit';
 import { HTTP_COPY } from '@/lib/http/copy';
+import { WORKING_REPORT_RATE_LIMITED_MESSAGE } from '@/lib/documents/copy';
 
 /**
  * `proxy` is driven for real. The token is the only thing stubbed: `getToken` answers with the user named in
@@ -91,6 +92,15 @@ describe('v0.6.0 rate-limit keys', () => {
     expect(checkRateLimit('GET', '/api/v1/orgs/another/export', ip, 'u').success).toBe(false);
     // and another user is another budget
     expect(checkRateLimit('GET', '/api/v1/orgs/another/export', ip, 'v').success).toBe(true);
+  });
+
+  it('v0.9.0 security review M1: working-report downloads are 10 a minute per person, and made-up project ids share that one budget', () => {
+    expect(limitOf('GET', '/api/v1/orgs/a/projects/p/working-report')).toEqual({ window: 60_000, max: 10, keyBy: 'userId' });
+    // Under `default` every project id was its own bucket of 60, so random ids were never limited and each held a render-queue place.
+    for (let i = 0; i < 10; i++) expect(checkRateLimit('GET', `/api/v1/orgs/a/projects/made-up-${i}/working-report`, ip, 'u').success).toBe(true);
+    expect(checkRateLimit('GET', '/api/v1/orgs/b/projects/another/working-report', ip, 'u').success).toBe(false);
+    // another person keeps their own budget
+    expect(checkRateLimit('GET', '/api/v1/orgs/a/projects/made-up-0/working-report', ip, 'v').success).toBe(true);
   });
 
   it('FR-MEM-01: no proxy key matches invitations or members/leave (the service counts invitations)', () => {
@@ -207,6 +217,35 @@ describe('the proxy 303 for an export navigation', () => {
     expect([longer.status, longer.headers.get('location')]).toEqual([429, null]);
     const evidence = await exhaustAndCall(proxy, 'POST', `/api/v1/orgs/${ORG}/projects/${PID}/evidence`, { headers: NAV, userId: 'u-other-3' });
     expect([evidence.status, evidence.headers.get('location')]).toEqual([429, null]);
+  });
+
+  it('v0.9.0 security review M1: a refused navigation to a working-report download goes back to the report page with ?refused=rate_limited', async () => {
+    const origin = 'https://vitest.example.invalid';
+    const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report?part=summary`, { headers: NAV, userId: 'u-report-nav' });
+    expect([res.status, res.headers.get('location')]).toEqual([303, `${origin}/orgs/${ORG}/projects/${PID}/report?refused=rate_limited`]);
+    // a fetch keeps the JSON 429, and an id that fails its pattern is never put into a Location
+    const fetched = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report`, { headers: { 'sec-fetch-mode': 'cors' }, userId: 'u-report-fetch' });
+    expect([fetched.status, fetched.headers.get('location')]).toEqual([429, null]);
+    const bad = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/not-a-uuid/working-report`, { headers: NAV, userId: 'u-report-bad' });
+    expect([bad.status, bad.headers.get('location')]).toEqual([429, null]);
+  });
+
+  it('v0.9.0 security review M1: with no public origin configured, a refused report navigation keeps the JSON 429 and does not fail', async () => {
+    const saved = { nextauth: process.env.NEXTAUTH_URL, auth: process.env.AUTH_URL };
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.AUTH_URL;
+    try {
+      const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/projects/${PID}/working-report`, { headers: NAV, userId: 'u-report-noorigin' });
+      expect([res.status, res.headers.get('location')]).toEqual([429, null]);
+      expect((await res.json()).code).toBe('rate_limited');
+    } finally {
+      if (saved.nextauth !== undefined) process.env.NEXTAUTH_URL = saved.nextauth;
+      if (saved.auth !== undefined) process.env.AUTH_URL = saved.auth;
+    }
+  });
+
+  it('v0.9.0 security review M1: the report page\'s refusal sentence names the limit the key sets', () => {
+    expect(WORKING_REPORT_RATE_LIMITED_MESSAGE).toContain(`${RATE_LIMITS['GET:/api/v1/orgs/*/projects/*/working-report'].max} reports`);
   });
 
   it('NFR-SEC-20 (owner question B4): the redirect answer has no body', async () => {

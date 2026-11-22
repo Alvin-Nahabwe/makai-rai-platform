@@ -134,6 +134,8 @@ export const WORKING_REPORT_TITLE = 'Working report';
 /** Page 1 of the working report as a PDF (path to outputs, Task 8): its headings follow the design (G1), the rest is plain labels. */
 /** 503 `report_busy` on a working-report download (lib/data/workingReportPdf.ts), and the report page's line when one comes back. */
 export const WORKING_REPORT_BUSY_MESSAGE = 'Many reports are being prepared right now. Try again in a few seconds.';
+/** 429 on a working-report download (lib/rate-limit.ts, 10 a minute per person), and the report page's line when one comes back. */
+export const WORKING_REPORT_RATE_LIMITED_MESSAGE = 'You can download 10 reports or parts a minute. Wait a minute, then try again.';
 /** 422 on `?part=` of a working-report download, and the report page's line when one comes back. */
 export const PART_MESSAGE = 'Choose the whole report, the summary, the data card, the model card, or the mitigation plan of one stage.';
 

@@ -78,6 +78,14 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * `Sec-Fetch-Mode: navigate`, `proxy.ts` answers a refusal with a 303 to S-20 instead of its JSON 429.
    */
   'GET:/api/v1/orgs/*/export': { window: 60 * 60 * 1000, max: 3, keyBy: 'userId' },
+  /**
+   * v0.9.0 security review M1: working-report downloads, 10 a minute per person across every organisation and project. Under
+   * `default` each project id was a bucket of its own (D-151), so requests for made-up ids were never limited, and each took a
+   * place in the render queue every organisation shares (lib/data/workingReportPdf.ts: 2 running, 40 waiting) before it answered
+   * 404. Ten covers the whole report and its six parts with room for retries. For a navigation, `proxy.ts` answers a refusal with
+   * a 303 to the report page.
+   */
+  'GET:/api/v1/orgs/*/projects/*/working-report': { window: 60 * 1000, max: 10, keyBy: 'userId' },
   'GET:/api/users/me/export': { window: 60 * 60 * 1000, max: 3, keyBy: 'userId' },
   'default': { window: 60 * 1000, max: 60, keyBy: 'userId' },
 };
