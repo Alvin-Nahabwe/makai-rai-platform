@@ -39,8 +39,15 @@ function pagesUnder(dir: string): string[] {
  * (no metadata at all, so a slot can never replace the page's title).
  */
 const isSlotPage = (f: string): boolean => f.split('/').some((seg) => seg.startsWith('@'));
+/**
+ * A page that only redirects renders nothing, so it has no tab to title. Exempt by exact path, with the reason, as
+ * authenticated-page-gate.test.ts exempts a page; the last test below keeps each entry a real, redirect-only page.
+ */
+const REDIRECT_ONLY: Record<string, string> = {
+  'app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/next/page.tsx': 'redirect-only: renders nothing, so it has no title and no project to remember',
+};
 const ALL_PAGES = pagesUnder('app');
-const PAGES = ALL_PAGES.filter((f) => !isSlotPage(f));
+const PAGES = ALL_PAGES.filter((f) => !isSlotPage(f) && !(f in REDIRECT_ONLY));
 const SLOT_PAGES = ALL_PAGES.filter(isSlotPage);
 const code = (f: string): string => readFileSync(f, 'utf8');
 /** The source without comments, so a comment that names a token cannot satisfy a check for it. */
@@ -100,5 +107,15 @@ describe('page titles (spec 7.5)', () => {
     collect(NOT_FOUND_COPY.title);
     expect(words.length).toBeGreaterThan(20);
     expect(words.filter((w) => isClaim(w) || w.includes('Toolkit') || w.trim() === '')).toEqual([]);
+  });
+
+  it('every redirect-only exemption is a page that exists, gives its reason, calls redirect( and returns no markup', () => {
+    for (const [f, reason] of Object.entries(REDIRECT_ONLY)) {
+      expect(ALL_PAGES, f).toContain(f);
+      expect(reason.length, f).toBeGreaterThan(0);
+      const s = withoutComments(code(f));
+      expect(s, f).toMatch(/\bredirect\(/);
+      expect(s, f).not.toMatch(/<[A-Za-z]|\bmetadata\b|generateMetadata/);
+    }
   });
 });

@@ -17,8 +17,17 @@ function pages(dir: string): string[] {
   });
 }
 
+/**
+ * A page that only redirects renders nothing, so there is no project to remember. Exempt by exact path, with the reason, as
+ * authenticated-page-gate.test.ts exempts a page; the last test below keeps each entry a real, redirect-only page.
+ */
+const REDIRECT_ONLY: Record<string, string> = {
+  'app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/next/page.tsx': 'redirect-only: renders nothing, so it has no title and no project to remember',
+};
+
 describe('RememberProject on every project page', () => {
-  const files = pages(ROOT).sort();
+  const all = pages(ROOT).sort();
+  const files = all.filter((f) => !(f in REDIRECT_ONLY));
 
   it('1A Task 12 L2-64: there are at least the twelve project pages of this task', () => {
     expect(files.length).toBeGreaterThanOrEqual(12);
@@ -58,5 +67,15 @@ describe('RememberProject on every project page', () => {
     const refused = /if \(loaded\.refused\)[^\n]*\n?[^\n]*return[^;]*;/.exec(src)?.[0] ?? '';
     expect(refused).not.toBe('');
     expect(refused).not.toMatch(/RememberProject/);
+  });
+
+  it('every redirect-only exemption is a page under projects/[id]/ that exists, gives its reason, calls redirect( and returns no markup', () => {
+    for (const [f, reason] of Object.entries(REDIRECT_ONLY)) {
+      expect(all, f).toContain(f);
+      expect(reason.length, f).toBeGreaterThan(0);
+      const s = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+      expect(s, f).toMatch(/\bredirect\(/);
+      expect(s, f).not.toMatch(/<[A-Za-z]/);
+    }
   });
 });

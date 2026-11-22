@@ -61,6 +61,7 @@ const ROUTES_AT_BASE = [
   '/orgs/[slug]/projects/[id]/report',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]', '/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal', '/orgs/[slug]/projects/[id]/reviews/new', '/orgs/[slug]/projects/[id]/stages/[stage]', '/orgs/[slug]/projects/[id]/stages/[stage]/end',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/next',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history', '/orgs/[slug]/projects/new',
   '/orgs/[slug]/settings/members', '/orgs/[slug]/settings/organisation', '/privacy', '/reset-password', '/terms',
