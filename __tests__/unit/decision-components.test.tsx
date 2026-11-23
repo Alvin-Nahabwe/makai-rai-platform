@@ -185,6 +185,9 @@ describe('S-12 decision fields', () => {
       // a restored draft's own who and when are what the line shows, not the defaults
       const own = { ...EMPTY, decidedBy: { kind: 'member' as const, userId: 'u-j' }, date: { day: '12', month: '10', year: '2026' }, whoWhenChanged: true };
       expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: own })} />)).toContain('Decided by Joseph K., 12 Oct 2026');
+      // and an outside role is named by its label
+      const role = { ...own, decidedBy: { kind: 'outside_role' as const, role: 'principal_investigator' as const } };
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: role })} />)).toContain('Decided by Principal investigator, 12 Oct 2026');
     });
 
     it('D-425: a change of someone else\'s decision opens Decided by (the earlier decider chosen) and Decided on (empty), with no line', () => {

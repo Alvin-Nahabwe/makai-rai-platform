@@ -317,7 +317,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const [ready, setReady] = useState(false);
   // The device's date as three boxes, known only after mount: the server render does not depend on it (no hydration mismatch),
   // and until then the summary line reads "today". Decided by and Decided on stay closed behind Change until it is pressed,
-  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls).
+  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls). On a
+  // change of a decision someone else made they are open from the start, the date empty (D-425: DecisionFields, `fillToday`).
   const [today, setToday] = useState<DateParts | null>(null);
   const [whoWhenOpen, setWhoWhenOpen] = useState(false);
   const focusWhoWhen = useRef(false);

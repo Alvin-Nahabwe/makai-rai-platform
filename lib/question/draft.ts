@@ -89,8 +89,9 @@ export function draftFromCurrent(data: QuestionPanelData, today: DateParts | nul
  * The form's fill of the device's today once it is known, after hydration: only while the date is still the default
  * (`whoWhenChanged` false), and never on a change of a decision someone else made, whose date stays empty (D-425). Pure.
  */
-export function fillToday(v: DecisionDraft, data: Pick<QuestionPanelData, 'current' | 'viewer'>, today: DateParts): DecisionDraft {
-  return v.whoWhenChanged || keptDeciderIsOther(data) ? v : { ...v, date: { ...today } };
+export function fillToday(v: DecisionDraft, data: QuestionPanelData, today: DateParts): DecisionDraft {
+  // The default date is `draftFromCurrent`'s, so the rule has one source.
+  return v.whoWhenChanged ? v : { ...v, date: draftFromCurrent(data, today).date };
 }
 
 /** The three date fields of a declared date at its precision (the form's two date shortcuts). */
