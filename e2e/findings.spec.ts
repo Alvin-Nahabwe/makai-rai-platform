@@ -18,7 +18,7 @@ import { FINDINGS_COPY } from '../lib/findings/copy';
 import { UI_COPY } from '../lib/ui/copy';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { expectStatusMarksInk, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import { closeOpenedContexts } from './helpers/contexts';
@@ -448,9 +448,10 @@ test('R4: on the question page the line reads that the finding can now be closed
   let loads = 0;
   page.on('load', () => { loads++; });
   await page.getByRole('radio', { name: 'Done', exact: true }).check();
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill('The labels were checked again.');
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`, { exact: true }).fill('The labels were checked again.');
   await page.getByRole('button', { name: 'Save decision' }).click();
+  // The save moves on to the next question (answer cost); the way back is the saved line's link, a client navigation, not a reload.
+  await page.locator('[data-saved-arrival]').getByRole('link', { name: 'Back to question 1' }).click();
   await expect(region.getByText(QUESTION_COPY.findingLink.closable)).toBeVisible();
   await expect(region.getByRole('link', { name: QUESTION_COPY.findingLink.view })).toHaveAttribute('href', `/orgs/${fx.org.slug}/projects/${project.id}/findings/${f.id}`);
   expect(loads).toBe(0);

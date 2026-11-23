@@ -8,7 +8,7 @@ import { DOCUMENTS_COPY } from '../lib/documents/copy';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '../lib/evidence/copy';
 import { REVIEW_COPY } from '../lib/review/copy';
@@ -176,7 +176,7 @@ test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
   await pressAll(pages, { save: S12_M12, upload: ARCHIVED_TEXT, mitigation: FINDINGS_COPY.failures.archived, seal: SEAL_ARCHIVED, issue: ISSUE_ARCHIVED });
   expect(await countRows()).toEqual(before);
-  await expect(pages.s12.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
+  await expect(pages.s12.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();
 });
 

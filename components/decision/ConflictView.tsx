@@ -57,7 +57,8 @@ export function ConflictView(p: ConflictViewProps): ReactElement {
   const mineDate = declaredDateFromParts(p.mine.date);
   const theirs: Array<[string, string]> = [
     [C.status, statusWords(c)],
-    [C.reason, c.reason ?? C.erased],
+    // A reason never typed (null, not erased) has no row; an erased one shows the erased line.
+    ...(c.reasonErased !== null || c.reason !== null ? [[C.reason, c.reasonErased !== null ? C.erased : (c.reason as string)] as [string, string]] : []),
     [C.decidedBy, c.decidedBy === null ? C.none : `${deciderLabel(c.decidedBy, p.viewerId, 'record')}${c.declaredDate ? `, ${formatDeclaredDate(c.declaredDate)}` : ''}`],
     [C.evidence, c.evidence.length === 0 ? C.none : c.evidence.map(evidenceDisplayName).join(', ')],
   ];

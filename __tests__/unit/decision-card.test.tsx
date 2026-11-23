@@ -22,6 +22,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
 const { DecisionCard } = await import('@/components/decision/DecisionCard');
+const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
 
 const F = DECISION_FORM_COPY;
@@ -66,10 +67,18 @@ const HISTORY = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01/
 const changed = async (p: Partial<QuestionPanelData>, open = 0): Promise<string> => {
   const { consequenceOf } = await import('@/components/decision/DecisionForm');
   const data = { ...PANEL, ...(open > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p };
-  return consequenceOf({ ...draftFromCurrent(data), reason: 'Changed since the saved version.' }, data, data.current?.versionNumber ?? null).text;
+  return consequenceOf({ ...draftFromCurrent(data, null), reason: 'Changed since the saved version.' }, data, data.current?.versionNumber ?? null).text;
 };
 const card = (p: Partial<QuestionPanelData> = {}, o: { next?: typeof NEXT | null; open?: number; all?: number } = {}) =>
   renderToStaticMarkup(<DecisionCard data={{ ...PANEL, ...((o.open ?? 0) > 0 ? { openFinding: { findingId: 'f1' } } : {}), ...p }} next={o.next === undefined ? NEXT : o.next} stageHref={STAGE} openFindingsOnQuestion={o.all ?? o.open ?? 0} />) ?? '';
+/**
+ * The fields with Decided by and Decided on open, as the card shows them after Change (answer cost 4: the card's first markup
+ * shows one line and a Change button instead). The draft is the one the form opens as on the server, the device's date unknown.
+ */
+const opened = (p: Partial<QuestionPanelData> = {}) => {
+  const data = { ...PANEL, ...p };
+  return renderToStaticMarkup(<DecisionFields data={data} value={draftFromCurrent(data, null)} errors={[]} disabled={false} onChange={() => {}} whoWhenOpen onOpenWhoWhen={() => {}} />);
+};
 const words = (h: string) => textOf(h).replace(/\s+/g, ' ');
 /** The words of the one consequence line. */
 const consequence = (h: string) => {
@@ -99,7 +108,7 @@ describe('the decision card (R2)', () => {
     };
     const order = [
       at('id="s12-answer-form"'), at('class="ui-saved'), at('Which of these are in place?'), at(/<legend[^>]*>Status<\/legend>/),
-      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-decided-by"'), at('id="decision-day"'),
+      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-who-when-summary"'),
       at(/<legend>Evidence<\/legend>/), at('data-consequence'), at('>Save decision</button>'), at(`>${F.card.next(NEXT.text)}`),
       at(`<summary>More actions</summary>`),
     ];
@@ -200,20 +209,20 @@ describe('the reason, the main reason and Decided by', () => {
     expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${QUESTION.reasonPrompt} Say when it is planned.</p>`);
   });
 
-  it('owner OQ1 (a): Decided by starts empty on a first decision, with "Choose one" first and chosen', () => {
-    expect(draftFromCurrent(PANEL).decidedBy).toBeNull();
-    const h = card();
+  it('answer cost 3: Decided by opens as the viewer on a first decision, with "Choose one" still first and the viewer chosen', () => {
+    expect(draftFromCurrent(PANEL, null).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
+    const h = opened();
     const select = h.match(/<select[^>]*id="decision-decided-by"[\s\S]*?<\/select>/)![0];
-    expect(select).toMatch(/^<select[^>]*>\s*<option value="" selected="">Choose one<\/option>\s*<option value="member:u-me">You \(Amina N\.\)<\/option>/);
+    expect(select).toMatch(/^<select[^>]*>\s*<option value="">Choose one<\/option>\s*<option value="member:u-me" selected="">You \(Amina N\.\)<\/option>/);
   });
 
   it('after a withdrawal Decided by is still the viewer; a re-decision keeps the recorded decider', () => {
-    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null } }).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
-    expect(draftFromCurrent({ ...PANEL, current: V2 }).decidedBy).toEqual({ kind: 'outside_role', role: 'principal_investigator' });
+    expect(draftFromCurrent({ ...PANEL, current: { ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null } }, null).decidedBy).toEqual({ kind: 'member', userId: 'u-me' });
+    expect(draftFromCurrent({ ...PANEL, current: V2 }, null).decidedBy).toEqual({ kind: 'outside_role', role: 'principal_investigator' });
   });
 
   it('Decided by and Decided on share one row; the date keeps three boxes and Today', () => {
-    const h = card();
+    const h = opened();
     expect(h).toMatch(/<div class="decision-fields__row">[\s\S]*id="decision-decided-by"[\s\S]*<legend class="ui-date__legend">Decided on/);
     expect([...h.matchAll(/<input[^>]*inputmode="numeric"/gi)]).toHaveLength(3);
     expect(h).toMatch(/<button[^>]*>Today<\/button>/);
@@ -289,18 +298,35 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(bar.indexOf('>Save decision</button>')).toBeLessThan(bar.indexOf(F.card.next(NEXT.text)));
   });
 
-  it('design G3: a saved last question goes to the stage\'s end screen; any other saved question stays', () => {
+  it('answer cost 6: hrefAfterSave goes to next?after= on a clean M-03, and null when something was left out, typed during the save, or the status is not M-03', () => {
     const clean = { statusId: 'M-03', leftOut: [] as string[], typedDuringSave: false };
-    expect(endHrefAfterSave(null, STAGE, clean)).toBe(`${STAGE}/end`);
-    expect(endHrefAfterSave(NEXT, STAGE, clean)).toBeNull();
-    expect(endHrefAfterSave(null, undefined, clean)).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', clean)).toBe(`${STAGE}/next?after=Q-PP-04`);
+    // The id is encoded, so it can never end the query or start another.
+    expect(hrefAfterSave(STAGE, 'Q a&b=1', clean)).toBe(`${STAGE}/next?after=Q%20a%26b%3D1`);
+    expect(hrefAfterSave(undefined, 'Q-PP-04', clean)).toBeNull();
+    // "Saved without <file>... save again" (M-03 with a left-out file), text typed during the save (CR-1, UX-25), "already saved" (M-04).
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-03', leftOut: ['a.pdf'], typedDuringSave: false })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-03', leftOut: [], typedDuringSave: true })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
   });
 
-  it('design G3, ruling on risk b: the push happens only on a clean Saved; a message the person must see keeps them on the question', () => {
-    // "Saved without <file>... save again" (M-03 with a left-out file), text typed during the save (CR-1, UX-25), "already saved" (M-04).
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: ['a.pdf'], typedDuringSave: false })).toBeNull();
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-03', leftOut: [], typedDuringSave: true })).toBeNull();
-    expect(endHrefAfterSave(null, STAGE, { statusId: 'M-04', leftOut: [], typedDuringSave: false })).toBeNull();
+  it('answer cost 7: hrefAfterSave stays when a link is being added or a file is uploading as the reply arrives, and moves on when nothing is in flight', () => {
+    const clean = { statusId: 'M-03', leftOut: [] as string[], typedDuringSave: false };
+    // Moving on would unmount the evidence block that sends the link or the file: the person stays and the page refreshes instead.
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { ...clean, workInFlight: true })).toBeNull();
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { ...clean, workInFlight: false })).toBe(`${STAGE}/next?after=Q-PP-04`);
+    expect(hrefAfterSave(STAGE, 'Q-PP-04', { statusId: 'M-04', leftOut: [], typedDuringSave: false, workInFlight: false })).toBeNull();
+  });
+
+  it('answer cost 6: the way on to the next question is a link drawn as a button, with the same target, words and position as before', () => {
+    const live = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />);
+    const link = live.match(/<a [^>]*>/)![0];
+    expect(link).toMatch(/class="[^"]*\bui-button\b[^"]*"/);
+    expect(link).toMatch(/class="[^"]*\bui-button--secondary\b[^"]*"/);
+    expect(link).toMatch(/class="[^"]*\bdecision-next\b[^"]*"/);
+    expect(link).toContain(`href="${NEXT.href}"`);
+    expect(link).toContain('data-held-on-save');
+    expect(words(live)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
   });
 
   it('on the stage\'s last question: the last-question line and All questions', () => {
@@ -339,16 +365,16 @@ describe('review round 1', () => {
   it('A-minor B-M1: the version is one above the newer of the form\'s base and the version on the page', async () => {
     const { consequenceOf } = await import('@/components/decision/DecisionForm');
     const data = { ...PANEL, current: V2 };
-    const typed = { ...draftFromCurrent(data), reason: 'Typed on version 1.' };
+    const typed = { ...draftFromCurrent(data, null), reason: 'Typed on version 1.' };
     // After a refresh brought version 2 while the person had typed on version 1, the line and the corner agree.
     expect(consequenceOf(typed, data, 1).text).toContain(C.version(3));
     expect(consequenceOf(typed, data, 2).text).toContain(C.version(3));
-    expect(consequenceOf(draftFromCurrent(PANEL), PANEL, null).text).toContain(C.version(1));
+    expect(consequenceOf(draftFromCurrent(PANEL, null), PANEL, null).text).toContain(C.version(1));
   });
 
   it('B-M3: "Your answer" with no decider chosen says so, never "Decided by: , <date>"', async () => {
     const { ConflictView } = await import('@/components/decision/ConflictView');
-    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL), date: { day: '14', month: '11', year: '2026' } }}
+    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL, null), date: { day: '14', month: '11', year: '2026' } }}
       viewerId="u-me" mineDecidedBy="" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(decode(h)).toContain(`${F.conflict.notChosen}, 14 Nov 2026`);
     expect(decode(h)).not.toMatch(/>, 14 Nov 2026</);
@@ -361,7 +387,7 @@ describe('review round 1', () => {
   });
 
   it('D2 D3: the reason box is four rows; the date\'s hint sits under the row, one line, and every box names it', () => {
-    const h = card();
+    const h = opened();
     expect(h).toMatch(/<textarea[^>]*id="decision-reason"[^>]*rows="4"/);
     expect(h).toMatch(/<\/fieldset><\/div><p id="decision-date-hint" class="decision-fields__date-hint">/);
     for (const part of ['day', 'month', 'year']) expect(h).toMatch(new RegExp(`<input[^>]*id="decision-${part}"[^>]*aria-describedby="decision-date-hint"`));
@@ -391,7 +417,7 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
 
   it('M3: the two "Same date as" shortcuts are quiet single-line controls, still buttons with their names', () => {
     const lastOwn = '2026-11-01';
-    const h = card({ current: V2, lastOwnSaveDate: lastOwn as never });
+    const h = opened({ current: V2, lastOwnSaveDate: lastOwn as never });
     expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsMyLast('1 Nov 2026'))}</button>`));
     expect(h).toMatch(new RegExp(`<button class="ui-button ui-button--secondary ui-button--compact" type="button">${esc(F.sameAsCurrent('12 Oct 2026'))}</button>`));
     // Today stays the date's one bordered button; every button after it (the shortcuts) is drawn quiet: no fill, no border,
@@ -408,10 +434,15 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     // Chromium draws no ellipsis on an end-aligned clamped line that ends on a whole word: start-aligned in a box pushed to the end.
     expect(words).toMatch(/text-align:\s*start/);
     expect(words).toMatch(/margin-inline-start:\s*auto/);
+    // No later rule (a button-styled override, a media query) may undo that start alignment on the words: every rule that ends in
+    // .decision-next__words and sets a text-align sets start.
+    const aligned = [...form.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*\.decision-next__words)\s*\{([^}]*)\}/g)]
+      .flatMap((m) => [...m[2].matchAll(/text-align:\s*([^;}\s]+)/g)].map((a) => `${m[1].trim()} -> ${a[1]}`));
+    expect(aligned.filter((a) => !a.endsWith('-> start'))).toEqual([]);
     expect(form).not.toMatch(/\.decision-next__position\s*\{\s*display:\s*none/);
     expect(form).toMatch(/@media \(max-width: 768px\)[\s\S]*\.decision-next__words\s*\{[^}]*white-space:\s*nowrap/);
     // The whole text stays the link's name: the words and the position, never cut in the markup.
-    const link = card().match(/<a class="decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
+    const link = card().match(/<a class="ui-button ui-button--secondary decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
     expect(words.length).toBeGreaterThan(0);
     expect(textOf(link)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
   });
@@ -492,13 +523,13 @@ describe('T3a: the history list (routed items 7 and 9)', () => {
   });
 });
 
-const { saveControlIsRetry, WaitLines, NextWay, endHrefAfterSave } = await import('@/components/decision/DecisionForm');
+const { saveControlIsRetry, WaitLines, NextWay, hrefAfterSave } = await import('@/components/decision/DecisionForm');
 const { SaveStatus } = await import('@/components/decision/SaveStatus');
 const { toSaveBody } = await import('@/lib/question/draft');
 const { requestIdFor } = await import('@/lib/client/retrySafeWrite');
 
 describe('T3b: one Save/Retry control, the unsaved line, the way on during a save, the wait card, the raise link', () => {
-  const value = { ...draftFromCurrent(PANEL), status: 'done' as const, reason: 'Compared it.' };
+  const value = { ...draftFromCurrent(PANEL, null), status: 'done' as const, reason: 'Compared it.' };
   const body = toSaveBody(value, PANEL, null) as unknown as Record<string, unknown>;
   const sent = requestIdFor({ requestId: null, sentBody: null }, body, () => 'r1').state;
   const failed = { id: 'M-05' as const, text: 'Not saved.', live: 'assertive' as const, next: 'retry' as const };
@@ -626,7 +657,7 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
   it('item 7: the version line only while the answer differs from the saved version; a first decision always has it', async () => {
     const { answerDiffers } = await import('@/components/decision/DecisionForm');
     const data = { ...PANEL, current: V2 };
-    const same = draftFromCurrent(data);
+    const same = draftFromCurrent(data, null);
     expect(answerDiffers(same, data)).toBe(false);
     expect(consequence(card({ current: V2 }))).not.toContain(C.version(3));
     expect(answerDiffers({ ...same, status: 'done' }, data)).toBe(true);
@@ -636,11 +667,11 @@ describe('T3c: the fix round on T3b, the owner\'s 14:30 rulings and the routed i
     // the date opens empty: the saved date typed again is no change; another date is
     expect(answerDiffers({ ...same, date: { day: '12', month: '10', year: '2026' } }, data)).toBe(false);
     expect(answerDiffers({ ...same, date: { day: '13', month: '10', year: '2026' } }, data)).toBe(true);
-    expect(answerDiffers(draftFromCurrent(PANEL), PANEL)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(PANEL, null), PANEL)).toBe(true);
     expect(consequence(card({}))).toContain(C.version(1));
     // a withdrawal is not a saved answer: any answer makes the next version
     const withdrawn = { ...PANEL, current: { ...V2, status: 'withdrawn' as const, withdrawalCode: 'duplicate' as const, decidedBy: null, declaredDate: null } };
-    expect(answerDiffers(draftFromCurrent(withdrawn), withdrawn)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(withdrawn, null), withdrawn)).toBe(true);
   });
 
   it('item 8: a link to the platform\'s own host reads "<name> (<host>)"; any other host, or no origin configured, keeps "opens another site"', async () => {
@@ -749,11 +780,11 @@ describe('T5: the last fix round before the hand-in', () => {
     const { answerDiffers } = await import('@/components/decision/DecisionForm');
     const older = { ...V2, content: { ...V2.content, semver: '0.0.0-older' } };
     const data = { ...PANEL, current: older };
-    expect(answerDiffers(draftFromCurrent(data), data)).toBe(true);
+    expect(answerDiffers(draftFromCurrent(data, null), data)).toBe(true);
     expect(consequence(card({ current: older, historyCount: 2 }))).toContain(C.version(3));
     // the same wording and the same answer: no new version, no line
     const same = { ...PANEL, current: V2 };
-    expect(answerDiffers(draftFromCurrent(same), same)).toBe(false);
+    expect(answerDiffers(draftFromCurrent(same, null), same)).toBe(false);
   });
 
   it('design N2: every line of the card that gives a time names one zone, never two side by side', () => {
@@ -772,13 +803,13 @@ describe('T5: the last fix round before the hand-in', () => {
 
 describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the last declared date beside empty boxes', () => {
   const boxes = (h: string) => [...h.matchAll(/<input[^>]*inputmode="numeric"[^>]*>/gi)].map((m) => m[0]);
-  const draft = (current: DecisionVersionView | null) => draftFromCurrent({ ...PANEL, current });
+  const draft = (current: DecisionVersionView | null) => draftFromCurrent({ ...PANEL, current }, null);
 
   it('a current version shows "Last decided on <date>" at its precision, the boxes stay empty, every box names the line, and Today stays', () => {
     for (const [declaredDate, declaredPrecision, shown] of [['2026-11-15', 'day', '15 Nov 2026'], ['2026-11', 'month', 'Nov 2026'], ['2026', 'year', '2026']] as const) {
       const current = { ...V1, declaredDate, declaredPrecision };
       expect(draft(current).date).toEqual({ day: '', month: '', year: '' });
-      const h = card({ current, historyCount: 1 });
+      const h = opened({ current, historyCount: 1 });
       expect(words(h)).toContain(F.lastDecidedOn(shown));
       expect(F.lastDecidedOn(shown)).toBe(`Last decided on ${shown}`);
       // Inside the date's group, under its legend and before the boxes.
@@ -795,9 +826,9 @@ describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the
   });
 
   it('a first decision and a withdrawal as the current version show no such line', () => {
-    expect(words(card())).not.toContain('Last decided on');
+    expect(words(opened())).not.toContain('Last decided on');
     const withdrawn = { ...V2, status: 'withdrawn' as const, reason: 'x', withdrawalCode: 'duplicate' as const, decidedBy: null };
-    const h = card({ current: withdrawn, historyCount: 2 });
+    const h = opened({ current: withdrawn, historyCount: 2 });
     expect(words(h)).not.toContain('Last decided on');
     expect(h).not.toContain('id="decision-hint"');
   });

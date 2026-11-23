@@ -3,7 +3,7 @@ import type { OrgRole } from '@prisma/client';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import { failOnDialog } from './helpers/dialogs';
 import { actAsSeat, fillValid, fixtureOrgSlug, historyPath, newProject, questionPath, saveStatus, saveViaApi, seatRequest, stagePath, waitForQuestionPage } from './helpers/session';
-import { REQUEST_MESSAGES, WITHDRAW_COPY, deciderLabel } from '../lib/decision/copy';
+import { REASON_OPTIONAL, REQUEST_MESSAGES, WITHDRAW_COPY, deciderLabel } from '../lib/decision/copy';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { AUTHZ_COPY } from '../lib/authz/copy';
@@ -158,7 +158,7 @@ test('NFR-SEC-11: hostile reason text shows as text on S-12 and S-13 and opens n
   for (const s of HOSTILE_STRINGS) await expect(page.getByText(s, { exact: true })).toBeVisible();   // failOnDialog is armed in beforeEach
   await actAsSeat(page, 'assessor');
   await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page);
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(HOSTILE_STRINGS[HOSTILE_STRINGS.length - 1]);
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue(HOSTILE_STRINGS[HOSTILE_STRINGS.length - 1]);
 });
 
 test('F12: on S-12 the withdrawal result takes focus, and a new decision saved after it clears that line', async ({ page, baseURL }) => {
@@ -177,7 +177,14 @@ test('F12: on S-12 the withdrawal result takes focus, and a new decision saved a
   await expect(withdrawStatus(page)).toBeFocused();
   // A new decision on the same page, without a reload: the withdrawal's line no longer describes the question.
   await fillValid(page, { reason: 'Decided again after the withdrawal' });
+  // A clean Save moves on to the next question (answer cost); text typed while the request is out keeps the page here for the refresh.
+  let release!: () => void;
+  const held = new Promise<void>((res) => { release = res; });
+  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
   await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText('Saving...');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Decided again after the withdrawal, and typed on');
+  release();
   await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 4\./);
   await expect(page.locator('details.more-menu')).toHaveCount(1);
   await expect(page.getByText('Withdrawn. The question has no current decision.')).toHaveCount(0);

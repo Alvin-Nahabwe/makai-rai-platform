@@ -6,7 +6,7 @@
 // For each server/app/**/page_client-reference-manifest.js it takes the union of build-manifest.json
 // `rootMainFiles` and every chunk listed under `entryJSFiles` (the page and its layouts), and prints
 //
-//   route=<path> firstLoadKB=<n> budgetKB=<160|190|195>
+//   route=<path> firstLoadKB=<n> budgetKB=<160|190|197>
 //
 // where <n> is the gzip (level 9) size of those chunks in KiB. Polyfill files, CSS, fonts, images, the
 // HTML and lazily loaded chunks are not counted: this measures the JavaScript a first visit with an empty
@@ -33,7 +33,9 @@ const SIGNED_IN_BUDGET_KB = 190;
 // The owner's ruling of 15 Nov 2026, 18:25 EAT (box "195 KB, covering the last merges"; it superseded the 18:00 ruling's
 // 192 KB): the question page's signed-in first-load budget is 195 KB; every other route keeps its budget. Trimming the page
 // is on the next release's list.
-const QUESTION_PAGE_KB = 195;
+// The owner's ruling of 23 Nov 2026 (box "Raise to 197 KB"): the answer-cost release measured 195.8 KB (v0.9.0: 194.8 KB) on
+// GitHub's runner (CI 45116371708); the question page's budget is now 197 KB. No trim has been made yet.
+const QUESTION_PAGE_KB = 197;
 // The same page also appears under the rail's parallel slot (app/(authenticated)/@project/...), which the build lists as its
 // own route; it is the question page, so it carries the same budget.
 const ROUTE_BUDGET_KB = new Map([

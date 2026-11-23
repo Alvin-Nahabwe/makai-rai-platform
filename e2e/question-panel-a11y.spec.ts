@@ -5,7 +5,7 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 import {
-  actAsSeat, fillValid, historyPath, newProject, openQuestion, questionPath, saveStatus, saveViaApi, stagePath, waitForQuestionPage,
+  actAsSeat, expectMovedOn, fillValid, historyPath, newProject, openQuestion, openWhoWhen, questionPath, saveViaApi, stagePath, waitForQuestionPage,
 } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { WITHDRAW_COPY } from '../lib/decision/copy';
@@ -114,9 +114,13 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await tabTo(page, 'the reason', (e) => e.tag === 'textarea');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.type('Compared a rule-based alert with the model, by keyboard.');
-  await tabTo(page, 'Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)');
+  // Who and when open as one line, "Decided by you, <date>", with a Change button (answer cost): Enter opens the two fields and focus moves into Decided by.
+  await tabTo(page, 'Change', (e) => e.tag === 'button' && e.name === 'Change');
   await expectFocusVisibleAndUncovered(page);
-  // Decided by starts empty on a first decision (spec 9.3 item 4, owner OQ1 (a)): typing chooses the person, "You (...)".
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#decision-decided-by')).toBeFocused();
+  await expectFocusVisibleAndUncovered(page);
+  // It opens as the signed-in person; typing keeps the choice on "You (...)".
   await page.keyboard.type('You');
   await expect(page.locator('#decision-decided-by option:checked')).toHaveText(/^You \(/);
   await tabTo(page, 'Today', (e) => e.tag === 'button' && e.name === 'Today');
@@ -125,7 +129,7 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await tabTo(page, 'Save decision', (e) => e.tag === 'button' && e.name === 'Save decision');
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
+  await expectMovedOn(page, Q);
 });
 
 for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it${height === 800 ? '' : ' (320 by 568)'}`, async ({ page, baseURL }) => {
@@ -140,7 +144,7 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
   const stops: Array<[string, (e: { tag: string; type: string; name: string; label: string }) => boolean]> = [
     ['the first status radio', (e) => e.tag === 'input' && e.type === 'radio' && e.label === 'Done'],
     ['the reason', (e) => e.tag === 'textarea'],
-    ['Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)'],
+    ['Change', (e) => e.tag === 'button' && e.name === 'Change'],
     ['Day', (e) => e.tag === 'input' && e.label === 'Day'],
     ['Today', (e) => e.tag === 'button' && e.name === 'Today'],
     ['Add a file', (e) => e.tag === 'button' && e.name === 'Add a file'],
@@ -152,12 +156,17 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
     // The first edit adds the unsaved line to the bar, which grows over the field that has focus: it must be scrolled clear.
     if (what === 'the first status radio') { await page.keyboard.press('Space'); await expectFocusVisibleAndUncovered(page); }
     if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
-    // Decided by starts empty on a first decision (owner OQ1 (a)): typing chooses the person, "You (...)".
-    if (what === 'Decided by') await page.keyboard.type('You');
+    // Change opens Decided by and Decided on, and focus goes into Decided by, which is visible and clear of the bar too.
+    if (what === 'Change') {
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#decision-decided-by')).toBeFocused();
+      await expectFocusVisibleAndUncovered(page);
+      await page.keyboard.type('You');
+    }
     if (what === 'Today') await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Enter');
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
+  await expectMovedOn(page, Q);
   // At a wide width the bar is part of the page, not fixed (W-3 wide).
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
@@ -166,7 +175,11 @@ for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 
 for (const height of [800, 568]) test(`SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px a refused save shows its whole summary above the fixed bar, and each of its links lands with the field's label and error in view${height === 800 ? '' : ' (320 by 568, a status chosen first)'}`, async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 320, height });
   await openQuestion(page, 'assessor', Q, baseURL!);
-  // The likeliest refusal in the room: a status chosen, the rest left. The edit grows the bar with the unsaved line.
+  // A refusal with several things to fix: the status (or, once Not yet is chosen, its main reason), and Decided by and the year cleared
+  // after Change (the form opens with who and when filled in). A status chosen first grows the bar with the unsaved line.
+  await openWhoWhen(page);
+  await page.getByLabel('Decided by (required)').selectOption('');
+  await page.getByLabel('Year', { exact: true }).fill('');
   if (height !== 800) await page.getByRole('radio', { name: 'Not yet', exact: true }).check();
   await page.locator('.decision-save-bar').getByRole('button', { name: 'Save decision' }).focus();
   await page.keyboard.press('Enter');
@@ -437,8 +450,9 @@ test('D-398 item 4 (save bar): a pressed Retry keeps focus, busy, while its save
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   await expect(retry).toBeFocused();
   release();
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
-  await expect(page.locator('.decision-save-bar')).toBeFocused();
+  // The save moves on (answer cost): the page that arrives puts focus on its saved line, never on the body.
+  await expectMovedOn(page, Q);
+  await expect(page.locator('[data-saved-arrival]')).toBeFocused();
 });
 
 test('D-398 item 4 (save bar, task 6): a send that removes a focused Retry the person did not press (the automatic retry when the browser is online again) leaves focus on the save bar, not the page body', async ({ page, baseURL }) => {
@@ -456,8 +470,9 @@ test('D-398 item 4 (save bar, task 6): a send that removes a focused Retry the p
   await retry.focus();
   mode = 'pass';
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./);
-  await expect(page.locator('.decision-save-bar')).toBeFocused();
+  // The save moves on (answer cost): the page that arrives puts focus on its saved line, never on the body.
+  await expectMovedOn(page, Q);
+  await expect(page.locator('[data-saved-arrival]')).toBeFocused();
 });
 
 test('D-398 item 4 (React M2, M10): at 320 by 568 a successful withdrawal leaves focus on its result line, visible and not under the save bar', async ({ page, baseURL }) => {

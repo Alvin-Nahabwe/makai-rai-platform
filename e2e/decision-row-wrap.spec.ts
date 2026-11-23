@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { actAsSeat, openQuestionIn } from './helpers/session';
+import { actAsSeat, openQuestionIn, openWhoWhen } from './helpers/session';
 
 /**
  * Design finish review M2 (DecisionFields.css): Decided by sits beside Decided on only when the decision fields are 42rem
@@ -11,6 +11,8 @@ test('M2 D-419: Decided by sits beside Decided on exactly when the fields are 42
   await page.goto('/login');
   await actAsSeat(page, 'admin');
   await openQuestionIn(page, 'Q-PP-01');
+  // Decided by and Decided on open with Change (answer cost); this walk measures them side by side.
+  await openWhoWhen(page);
   await expect(page.locator('.decision-fields__row > .ui-date')).toBeVisible();
   const wrong: string[] = [];
   let beside = 0;

@@ -62,7 +62,9 @@ export function parseSaveDecisionRequest(json: unknown): SaveDecisionRequest {
   check(b.scopeAnswer === null || isScope(b.scopeAnswer), 'scopeAnswer', M11.scopeAnswer);
   check(isStringArray(b.optionsInPlace), 'optionsInPlace', REQUEST_MESSAGES.optionsNotOfQuestion);
   check(b.reasonCode === null || isString(b.reasonCode), 'reasonCode', M11.reasonCodeNotAllowed);
-  check(isString(b.reason), 'reason', M11.reasonMissing);
+  // A decision's reason is optional (FR-DEC-01): a missing one is '', so the contract's type stays string.
+  const reason = b.reason === undefined ? '' : b.reason;
+  check(isString(reason), 'reason', M11.reasonMissing);
   check(isDecider(b.decidedBy), 'decidedBy', M11.decidedBy);
   check(isString(b.declaredDate), 'declaredDate', M11.yearMissing);
   check(isStringArray(b.evidenceIds), 'evidenceIds', REQUEST_MESSAGES.evidenceIds);
@@ -75,7 +77,7 @@ export function parseSaveDecisionRequest(json: unknown): SaveDecisionRequest {
     baseVersionNumber: b.baseVersionNumber as number | null, status: b.status as DecisionStatus | null,
     scopeAnswer: b.scopeAnswer as ScopeAnswer | null, optionsInPlace: [...(b.optionsInPlace as string[])],
     // A code outside the content's list is refused by the service with the field's message (FR-DEC-02).
-    reasonCode: b.reasonCode as ReasonCode | null, reason: b.reason as string, decidedBy: decider(b.decidedBy as Decider),
+    reasonCode: b.reasonCode as ReasonCode | null, reason: reason as string, decidedBy: decider(b.decidedBy as Decider),
     declaredDate: b.declaredDate as string, evidenceIds: [...(b.evidenceIds as string[])],
   };
 }

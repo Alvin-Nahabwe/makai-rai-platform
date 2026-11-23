@@ -6,7 +6,7 @@ import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { failOnDialog } from './helpers/dialogs';
 import { fillValid, saveAlert, signInWith, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { closeOpenedContexts } from './helpers/contexts';
 
@@ -75,7 +75,7 @@ test('FR-DEC-06 FR-ACC-07 UX-26: a draft survives sign out everywhere from a sec
   await signInWith(a, assessor.email, assessor.password);
   await expect(a).toHaveURL(new RegExp(`^${escape(new URL(a.url()).origin)}${escape(questionPath)}$`));
   await waitForQuestionPage(a);
-  await expect(a.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue(TYPED);
+  await expect(a.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue(TYPED);
 
   await a.context().close();
   await b.context().close();

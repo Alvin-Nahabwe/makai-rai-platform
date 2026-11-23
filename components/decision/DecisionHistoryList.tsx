@@ -49,8 +49,10 @@ export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false 
             <dd>{v.status === 'withdrawn'
               ? <span className="status-label">{H.withdrawn(v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode])}</span>
               : <StatusMark kind={markKindOf({ status: v.status, scopeAnswer: v.scopeAnswer, gated: false, isScopeQuestion })} scopeAnswer={v.scopeAnswer ?? undefined} />}</dd>
-            <dt>{H.reason}</dt>
-            <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : (v.reason ?? '')}</dd>
+            {v.reasonErased !== null || v.reason !== null ? (<>
+              <dt>{H.reason}</dt>
+              <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : v.reason}</dd>
+            </>) : null}
             {v.decidedBy !== null ? (<><dt>{H.decidedBy}</dt><dd>{`${deciderLabel(v.decidedBy, '', 'record')}${v.declaredDate === null ? '' : `, ${formatDeclaredDate(v.declaredDate)}`}`}</dd></>) : null}
             <dt>{H.enteredBy}</dt>
             <dd>

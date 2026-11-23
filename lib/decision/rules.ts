@@ -64,9 +64,10 @@ export function reasonLength(reason: string): number {
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /**
- * The reason rule of a decision and of a withdrawal (FR-DEC-01, FR-DEC-08): 1 to 4,000 code points that are
- * not all white space, and no character PostgreSQL cannot store unchanged (U+0000 is refused in `text` with
- * SQLSTATE 22021; a lone surrogate would be replaced). Not a contract symbol: the withdrawal checks share it.
+ * The reason rule of a withdrawal (FR-DEC-08): 1 to 4,000 code points that are not all white space, and no character
+ * PostgreSQL cannot store unchanged (U+0000 is refused in `text` with SQLSTATE 22021; a lone surrogate would be
+ * replaced). A decision's reason is optional and takes `decisionReasonError`, which applies the same limit and
+ * character rules to what is typed. Not a contract symbol: the withdrawal checks share it.
  */
 export function reasonFieldError(reason: string): FieldError | null {
   if (reason.trim() === '') return { field: 'reason', message: M11.reasonMissing };
@@ -74,6 +75,19 @@ export function reasonFieldError(reason: string): FieldError | null {
   if (n > REASON_MAX) return { field: 'reason', message: M11.reasonTooLong(n) };
   if (reason.includes('\u0000') || LONE_SURROGATE.test(reason)) return { field: 'reason', message: M11.reasonNul };
   return null;
+}
+
+/**
+ * The reason rule of a decision (FR-DEC-01): optional. An empty or white-space-only reason is no reason and has no
+ * error; a typed one is held to the withdrawal's limit and character rules.
+ */
+export function decisionReasonError(reason: string): FieldError | null {
+  return reason.trim() === '' ? null : reasonFieldError(reason);
+}
+
+/** What a decision stores for `reason`: NULL for an empty or white-space-only one, else the text as typed. */
+export function storedReason(reason: string): string | null {
+  return reason.trim() === '' ? null : reason;
 }
 
 export interface DecisionFieldsInput {
@@ -139,7 +153,7 @@ export function validateDecisionFields(i: DecisionFieldsInput, latest: CalendarD
     errors.push({ field: 'reasonCode', message: M11.reasonCodeNotAllowed });
   }
 
-  const reason = reasonFieldError(i.reason);
+  const reason = decisionReasonError(i.reason);
   if (reason) errors.push(reason);
   const decider = deciderError(i.decidedBy);
   if (decider) errors.push(decider);

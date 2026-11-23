@@ -30,6 +30,8 @@ vi.mock('@/lib/auth/identity', () => ({ requireIdentity: vi.fn() }));
 vi.mock('@/lib/auth/context', () => ({ requireOrgContextFor: vi.fn() }));
 vi.mock('@/lib/question/panel', () => ({ loadQuestionPanel: vi.fn() }));
 
+import { FocusOnArrival } from '@/components/decision/FocusOnArrival';
+
 const { QuestionPanelRegions } = await import(
   '@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page'
 );
@@ -126,6 +128,26 @@ describe('the heading', () => {
     expect(readFileSync('components/question/HeadingFocusCue.tsx', 'utf8')).toMatch(/^'use client';/);
     // The cue is mounted before FocusOnArrival, so its focus listener is in place when the heading takes focus.
     expect(html).toContain('<h1 id="question-heading"');
+  });
+});
+
+/** Whether an element tree (not rendered: components stay as elements) holds an element of this type. */
+const holds = (node: unknown, type: unknown): boolean => {
+  if (Array.isArray(node)) return node.some((n) => holds(n, type));
+  if (node === null || typeof node !== 'object') return false;
+  const el = node as { type?: unknown; props?: { children?: unknown } };
+  return el.type === type || holds(el.props?.children, type);
+};
+
+describe('the "saved" line (answer cost, design 2 item 3)', () => {
+  it('answer cost 6: the line stands above the question heading, and the heading\'s own focus on arrival is left out while it is shown', async () => {
+    const arrival = <p data-saved-arrival>Your answer to question 3 is saved.</p>;
+    const html = renderToStaticMarkup(await QuestionPanelRegions({ data: PANEL, stage: STAGE, arrival }));
+    expect(html.indexOf('data-saved-arrival')).toBeGreaterThan(html.indexOf('<div class="question-workspace__main">'));
+    expect(html.indexOf('data-saved-arrival')).toBeLessThan(html.indexOf('<h1 id="question-heading"'));
+    expect(holds(await QuestionPanelRegions({ data: PANEL, stage: STAGE, arrival }), FocusOnArrival)).toBe(false);
+    expect(holds(await QuestionPanelRegions({ data: PANEL, stage: STAGE }), FocusOnArrival)).toBe(true);
+    expect(await render()).not.toContain('data-saved-arrival');
   });
 });
 

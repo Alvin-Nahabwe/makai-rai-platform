@@ -4,6 +4,7 @@ import type { OrgRole } from '@prisma/client';
 import type { WithdrawalCode } from '@/types/record';
 import type { ContentRef, SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 import { requestDigest } from '@/lib/data/idempotency';
+import { M11 } from '@/lib/decision/copy';
 import { decisionHistory, saveDecision, withdrawDecision } from '@/lib/data/decisions';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -63,6 +64,14 @@ describe('withdrawDecision and decisionHistory (FR-DEC-04, FR-DEC-08)', () => {
     await expect(wd('assessor', { baseVersionNumber: 3 })).rejects.toMatchObject({ extra: { fields: [{ field: 'baseVersionNumber' }] } });
     await expect(wd('assessor', { baseVersionNumber: 2 })).rejects.toMatchObject({ code: 'base_version_moved' });
     expect(await countVersions()).toBe(3);
+  });
+
+  it('answer cost: withdrawal with an empty reason is still refused with M11.reasonMissing', async () => {
+    await save('assessor', body());
+    await save('assessor', body({ baseVersionNumber: 1, status: 'partly' }));
+    await expect(wd('assessor', { reason: '' })).rejects.toMatchObject({ extra: { fields: [{ field: 'reason', message: M11.reasonMissing }] } });
+    await expect(wd('assessor', { reason: '   ' })).rejects.toMatchObject({ extra: { fields: [{ field: 'reason', message: M11.reasonMissing }] } });
+    expect(await countVersions()).toBe(2);
   });
 
   it('FR-DEC-05 FR-DEC-08: a withdrawal that loses the version number on the unique index answers 409 with the winner, not 500', async () => {

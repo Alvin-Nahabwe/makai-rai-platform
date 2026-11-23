@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ReasonCodeEntry } from '@/types/content';
-import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, reasonLength, REASON_MAX, type DecisionFieldsInput } from '@/lib/decision/rules';
+import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, reasonLength, storedReason, REASON_MAX, type DecisionFieldsInput } from '@/lib/decision/rules';
 import { M11 } from '@/lib/decision/copy';
 
 /** Two codes of SRS 10.1.5 (lines 3986-3999), one per status that takes a code. */
@@ -38,11 +38,34 @@ describe('lib/decision/rules.ts', () => {
     expect(validateDecisionFields({ ...base, declaredDate: '2026-11-01' }, latest)).toEqual([{ field: 'declaredDate', message: 'The date cannot be later than today.' }]);
   });
 
-  it('UX-12 FR-DEC-01 M-11: the reason is 1 to 4,000 code points', () => {
-    expect(validateDecisionFields({ ...base, reason: '   ' }, '2026-10-30')).toEqual([{ field: 'reason', message: 'Write a reason. Say what is in place, where it is recorded, and what is missing.' }]);
+  it('UX-12 FR-DEC-01 M-11: a typed reason is at most 4,000 code points; an empty one is allowed', () => {
     expect(validateDecisionFields({ ...base, reason: 'a'.repeat(4001) }, '2026-10-30')).toEqual([{ field: 'reason', message: 'The reason is 4,001 characters. The limit is 4,000.' }]);
     expect(validateDecisionFields({ ...base, reason: '\u{1F600}'.repeat(4000) }, '2026-10-30')).toEqual([]);
     expect([REASON_MAX, reasonLength('\u{1F600}a')]).toEqual([4000, 2]);
+  });
+
+  it('answer cost: a decision with an empty or white-space reason has no reason error, for every status and the gate', () => {
+    const inputs: DecisionFieldsInput[] = [
+      { ...base, status: 'done' }, { ...base, status: 'partly' },
+      { ...base, status: 'not_yet', reasonCode: 'ny_planned_later' }, { ...base, status: 'not_applicable', reasonCode: 'na_other' },
+      { ...base, questionType: 'gate', status: null, scopeAnswer: 'yes' },
+    ];
+    for (const input of inputs) {
+      for (const reason of ['', '  \n']) {
+        expect(validateDecisionFields({ ...input, reason }, '2026-10-30').filter((e) => e.field === 'reason')).toEqual([]);
+      }
+    }
+  });
+
+  it("answer cost: a decision's typed reason still obeys the limit and the characters", () => {
+    expect(validateDecisionFields({ ...base, reason: 'a'.repeat(4001) }, '2026-10-30')).toEqual([{ field: 'reason', message: M11.reasonTooLong(4001) }]);
+    expect(validateDecisionFields({ ...base, reason: '\u0000' }, '2026-10-30')).toEqual([{ field: 'reason', message: M11.reasonNul }]);
+  });
+
+  it("answer cost: storedReason: '' and '  ' give null; 'x ' stays 'x '", () => {
+    expect(storedReason('')).toBeNull();
+    expect(storedReason('  ')).toBeNull();
+    expect(storedReason('x ')).toBe('x ');
   });
 
   it('UX-09 FR-DEC-01: a reason code is required with not applicable and not yet, from that status list, and refused with done and partly', () => {

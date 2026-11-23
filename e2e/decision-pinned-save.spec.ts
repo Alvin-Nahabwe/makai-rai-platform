@@ -1,9 +1,9 @@
 import { appendFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fillValid, openQuestion, openQuestionIn, saveStatus, saveViaApi, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, backToQuestion, expectMovedOn, fillValid, openQuestion, openQuestionIn, openWhoWhen, saveViaApi, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { WITHDRAW_COPY } from '../lib/decision/copy';
+import { REASON_OPTIONAL, WITHDRAW_COPY } from '../lib/decision/copy';
 import { EVIDENCE_COPY } from '../lib/evidence/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 
@@ -105,6 +105,13 @@ test('Option A SC 2.4.11: at 1280 by 800 every control from the status choices t
       await page.keyboard.press('Enter');
       if (await expectFocusClear(page)) pinnedChecks++;
     }
+    // Change opens Decided by and Decided on (answer cost) and moves focus into the select: it is reached, and above the row too.
+    if (p.what.startsWith('button') && p.what.includes('Change')) {
+      await page.keyboard.press('Enter');
+      const into = await focusPlace(page);
+      seen.push(into.what);
+      if (await expectFocusClear(page)) pinnedChecks++;
+    }
     if (p.what.startsWith('summary')) { await page.keyboard.press('Enter'); if (await expectFocusClear(page)) pinnedChecks++; }
     await page.keyboard.press('Tab');
   }
@@ -121,7 +128,7 @@ for (const [w, h] of [[1280, 800], [1440, 900]] as const) {
     await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
     const row = page.locator('.decision-save-bar');
     const before = await row.evaluate((el) => el.getBoundingClientRect().height);
-    const reason = page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true });
+    const reason = page.getByLabel(`${F.fields.reason} ${REASON_OPTIONAL}`, { exact: true });
     await reason.focus();
     await page.keyboard.type('Typed and not saved');
     // C7: the live span holds the whole sentence (its accessible text), and the unsaved line is showing.
@@ -145,6 +152,12 @@ for (const [w, h] of [[1280, 800], [1440, 900]] as const) {
       seen.push(p.what);
       if (p.what.startsWith('button') && p.what.includes(EVIDENCE_COPY.addLinkToggle)) {
         await page.keyboard.press('Enter');
+        if (await expectFocusClear(page)) pinnedChecks++;
+      }
+      if (p.what.startsWith('button') && p.what.includes('Change')) {
+        await page.keyboard.press('Enter');
+        const into = await focusPlace(page);
+        seen.push(into.what);
         if (await expectFocusClear(page)) pinnedChecks++;
       }
       if (p.what.startsWith('summary')) { await page.keyboard.press('Enter'); if (await expectFocusClear(page)) pinnedChecks++; }
@@ -173,6 +186,10 @@ for (const [w, h] of [[1280, 800], [1440, 900]] as const) {
 test('Option A SC 2.4.11: at 1280 by 800 each error summary link lands its field above the pinned row', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await actAsSeat(page, 'admin'); await openQuestionIn(page, Q);
+  // The form opens with who and when filled in; clearing them (after Change) leaves three things to fix: the status, Decided by and the date.
+  await openWhoWhen(page);
+  await page.getByLabel('Decided by (required)').selectOption('');
+  await page.getByLabel('Year', { exact: true }).fill('');
   await page.locator('.decision-save-bar').getByRole('button', { name: F.save, exact: true }).click();
   const links = page.locator('[data-error-summary] a');
   await expect(links.first()).toBeVisible();
@@ -256,7 +273,8 @@ test('B-I1 C5: while a Save waits for an upload the way on is text, not a link; 
   await expect(page.locator('.decision-save-bar a[href*="/questions/"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: F.saveWithout(1) })).toHaveCount(1);
   release();
-  await expect(saveStatus(page)).toHaveText(/^Saved at .+ as version 1\./, { timeout: 20_000 });
+  await expectMovedOn(page, Q);
+  // The way on is a link again on the question the save moved to.
   await expect(page.locator('.decision-save-bar a.decision-next')).toHaveAttribute('href', /questions\//);
 });
 
@@ -269,7 +287,7 @@ test('C4: after a lost save the one control reads Retry; an edit turns it back t
   await expect(submit).toHaveText(F.retry);
   await expect(submit).toHaveCount(1);
   await expect(page.getByRole('button', { name: F.save, exact: true })).toHaveCount(0);
-  await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).fill('Edited while offline');
+  await page.getByLabel(`${F.fields.reason} ${REASON_OPTIONAL}`, { exact: true }).fill('Edited while offline');
   await expect(submit).toHaveText(F.save);
   await expect(page.getByRole('button', { name: F.retry, exact: true })).toHaveCount(0);
   await context.setOffline(false);
@@ -327,7 +345,7 @@ test('M-1: Next has focus when the automatic retry goes out; it becomes text and
   await expect(page.locator('.decision-save-bar [data-next-held]')).toBeVisible();
   await expect(page.locator('.decision-save-bar')).toBeFocused();
   release();
-  await expect(saveStatus(page)).toHaveText(/as version 1\./, { timeout: 20_000 });
+  await expectMovedOn(page, Q);
 });
 
 test('M-r4-3: the foot\'s History link has focus when the automatic retry goes out; the foot\'s links are text and the save bar takes focus', async ({ page, baseURL, context }) => {
@@ -348,7 +366,8 @@ test('M-r4-3: the foot\'s History link has focus when the automatic retry goes o
   await expect(page.locator('.decision-card__meta [data-link-held]').first()).toBeVisible();
   await expect(page.locator('.decision-save-bar')).toBeFocused();
   release();
-  await expect(saveStatus(page)).toHaveText(/as version 2\./, { timeout: 20_000 });
+  await expectMovedOn(page, Q, 'Supervisor');   // version 1 was saved through the API, decided by the Supervisor; a new version keeps that decider
+  await backToQuestion(page, projectId, Q);
   await expect(page.locator('.decision-card__meta a[href$="/history"]').first()).toBeVisible();
 });
 
@@ -365,7 +384,7 @@ test('R6-1: with the kept-evidence box shown on the frame a draft is restored, w
   await expect(page.locator('[data-kept-evidence]')).toBeVisible();
   expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the decision fields are laid out').toBeGreaterThan(0);
   const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
-  const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
+  const reason = await page.getByLabel(`${F.fields.reason} ${REASON_OPTIONAL}`, { exact: true }).boundingBox();
   expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);
   expect(reason?.height ?? 0, 'Reason box is drawn').toBeGreaterThan(0);
 });
@@ -385,7 +404,7 @@ test('M-r7-1: with the "not uploaded before the page closed" line shown on the f
   await expect(page.getByText('mid-r7.pdf was not uploaded before the page closed. Choose the file again.')).toBeVisible();
   expect((await page.locator('.decision-fields').boundingBox())?.height ?? 0, 'the decision fields are laid out').toBeGreaterThan(0);
   const done = await page.getByRole('radio', { name: 'Done', exact: true }).boundingBox();
-  const reason = await page.getByLabel(`${F.fields.reason} ${FIELD_COPY.required}`, { exact: true }).boundingBox();
+  const reason = await page.getByLabel(`${F.fields.reason} ${REASON_OPTIONAL}`, { exact: true }).boundingBox();
   expect(done?.height ?? 0, 'Done radio is drawn').toBeGreaterThan(0);
   expect(reason?.height ?? 0, 'Reason box is drawn').toBeGreaterThan(0);
 });

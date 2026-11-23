@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
 import { ConflictView } from '@/components/decision/ConflictView';
-import { DecisionFields, FIELD_LABEL, FIELD_TARGET } from '@/components/decision/DecisionFields';
+import { DecisionFields, FIELD_LABEL, FIELD_TARGET, isWhoWhenError, whoWhenUnreadable } from '@/components/decision/DecisionFields';
 import { SaveStatus, unsavedShown } from '@/components/decision/SaveStatus';
 import { HELD_ON_SAVE, SaveHeldContext } from '@/components/decision/SaveHeld';
 import { cardScroller, SCROLLER_ATTRIBUTE, scrollerView } from '@/components/decision/scroller';
@@ -26,8 +26,9 @@ import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSI
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
-import { declaredDateFromParts } from '@/lib/decision/rules';
-import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
+import { todayParts } from '@/lib/ui/dateParts';
+import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
@@ -144,8 +145,13 @@ export function ConsequenceWords({ text, finding, tips }: { text: string; findin
 /**
  * Whether the form's answer differs from the saved version (the coordinator's rule for the version line, T3c item 7): any
  * answer differs when there is no saved decision (none yet, or a withdrawal); otherwise any field the save sends, the
- * evidence in any order, and the date when one is typed (the date opens empty, and an empty date is not a different
- * answer); and every answer while the saved version was answered against other wording (its content version). Render only: what a save sends, and the server's own "unchanged" refusal (lib/data/decisions.ts), are untouched.
+ * evidence in any order, and the date when the form holds one; and every answer while the saved version was answered against
+ * other wording (its content version). The date is compared as the server's `repeats` compares it (lib/data/decisions.ts): the
+ * form's declared date, typed or defaulted to the device's today (the owner's "Prefill today", 22 Nov 2026), against the saved
+ * version's. So an untouched change on a day other than the saved version's date does differ: Save will create a version, and
+ * the line says so. An empty date (the server render, before the device's day is filled) is not a different answer. Render
+ * only: what a save sends, and the server's own "unchanged" refusal, are untouched. The "unsaved" line is not this function's:
+ * it follows `draftSavedAt` (SaveStatus `unsavedShown`), which the mount fill of today does not set.
  */
 export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolean {
   const c = data.current;
@@ -153,7 +159,7 @@ export function answerDiffers(d: DecisionDraft, data: QuestionPanelData): boolea
   // Review A A3c-3: the server's "unchanged" rule also needs the same content version (lib/data/decisions.ts `repeats`), so
   // the same answer saved against newer wording than the current version's is a new version.
   if (c.content.semver !== data.contentSemver) return true;
-  const o = draftFromCurrent(data);
+  const o = draftFromCurrent(data, null);
   const sorted = (a: readonly string[]) => [...a].sort().join('\n');
   if (d.status !== o.status || d.scopeAnswer !== o.scopeAnswer || d.reasonCode !== o.reasonCode || d.reason !== o.reason) return true;
   if (sorted(d.optionsInPlace) !== sorted(o.optionsInPlace) || sorted(d.evidenceIds) !== sorted(o.evidenceIds)) return true;
@@ -195,7 +201,8 @@ export function WaitLines({ uploading, failed }: { uploading: readonly string[];
 }
 
 /**
- * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", or on the stage's last question the line that
+ * The way on beside Save (R2, R9): "Next: <question>" with "Question n of N", a link drawn as the kit's secondary button (answer cost,
+ * design 2 item 4; Save is the one primary), or on the stage's last question the line that
  * says so and All questions. Review B-I1: while a Save waits for an upload or a link, or its request is out (`held`), the
  * next question's words are text, not a link, and quieter, so the card's own control cannot take the person away from a
  * Save that has not gone yet (following it unmounts the form and its uploads). Leaving by the browser or the route column
@@ -206,7 +213,7 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
     const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
     return held
       ? <p className="decision-next decision-next--held" data-next-held>{words}</p>
-      : <Link className="decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
+      : <Link className="ui-button ui-button--secondary decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;
   }
   if (stageHref === undefined) return null;
   // Review A I-1: on the stage's last question, All questions is held as Next is. Design G3: so is the way to the stage's end screen.
@@ -224,19 +231,24 @@ export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; 
   );
 }
 
-/** What a saved outcome carries that the person must see: its status line, the files the save left out, and text typed while it was out. */
-export type SavedCarries = { statusId: string; leftOut: readonly string[]; typedDuringSave: boolean };
+/**
+ * What a saved outcome carries that the person must see: its status line, the files the save left out, text typed while it was out, and
+ * whether a link was being added or a file uploading when the reply arrived (`workInFlight`: moving on would unmount the block that
+ * sends it, and the link or file would be lost, so the person stays and the page refreshes, as in B I-r4-1).
+ */
+export type SavedCarries = { statusId: string; leftOut: readonly string[]; typedDuringSave: boolean; workInFlight?: boolean };
 
 /**
- * Design G3 and the controller's ruling on risk b: where a save leaves the person. After the stage's last question is saved the
- * person goes to the stage's end screen, where the working report leads, but only on a clean "Saved" (M-03) that carries no other
- * message. "Saved without <file>... save again", text typed while the save was out (CR-1, UX-25: the kept copy must be shown) and
- * "already saved" (M-04) are read on the question, which then links to the end screen. After any other question the card stays
- * open with the new answer (R2). Null: stay. Also null when the card was given no stage address.
+ * Where a save leaves the person (answer cost, design 2 item 3, which replaces design G3's push after the last question only). After a
+ * clean "Saved" they go to the stage's `next` page, which chooses on the server, from what the project holds then, the next question with
+ * no answer, or the stage's end screen when none is left. Clean is M-03 that carries no other message: "Saved without <file>... save
+ * again", text typed while the save was out (CR-1, UX-25: the kept copy must be shown), a link being added or a file uploading when the reply
+ * arrives, and "already saved" (M-04) are read on the question, which stays (R2). The caller pushes this address after the save has resolved, never through a prefetching link: a prefetch would run
+ * the page and choose "next" before the save landed. Null: stay. Also null when the card was given no stage address.
  */
-export function endHrefAfterSave(next: NextQuestion | null, stageHref: string | undefined, saved: SavedCarries): string | null {
-  if (next !== null || stageHref === undefined) return null;
-  return saved.statusId === 'M-03' && saved.leftOut.length === 0 && !saved.typedDuringSave ? stageEndHref(stageHref) : null;
+export function hrefAfterSave(stageHref: string | undefined, questionId: string, saved: SavedCarries): string | null {
+  if (stageHref === undefined) return null;
+  return saved.statusId === 'M-03' && saved.leftOut.length === 0 && !saved.typedDuringSave && saved.workInFlight !== true ? `${stageHref}/next?after=${encodeURIComponent(questionId)}` : null;
 }
 
 /**
@@ -261,7 +273,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
 
-  const [value, setValue] = useState<DecisionDraft>(() => draftFromCurrent(data));
+  const [value, setValue] = useState<DecisionDraft>(() => draftFromCurrent(data, null));
   const [base, setBase] = useState<number | null>(currentNumber);
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
   const [status, setStatus] = useState<SaveStatusValue | null>(null);
@@ -275,6 +287,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   // its own press and the block's report reads the second inside an effect flush, and in both places the state can be a
   // render behind.
   const linkAdding = useRef(false);
+  // How many files are uploading, as the evidence block last reported: read when a save's reply arrives, to decide between moving on and staying.
+  const uploadingNow = useRef(0);
+  // A clean reply has been answered with a move to the next page: from then until the page lands the form is held, so nothing is typed into it.
+  const [moving, setMoving] = useState(false);
   const waitingNow = useRef(false);
   // The open link form holds an address that was never added (the block reports it), and how often a save was refused for
   // it: the block shows each refusal at the box.
@@ -299,6 +315,12 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const [restoredPressed, setRestoredPressed] = useState(false);
   // True once the form has mounted and read the device's draft: before that, a click is not yet the form's.
   const [ready, setReady] = useState(false);
+  // The device's date as three boxes, known only after mount: the server render does not depend on it (no hydration mismatch),
+  // and until then the summary line reads "today". Decided by and Decided on stay closed behind Change until it is pressed,
+  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls).
+  const [today, setToday] = useState<DateParts | null>(null);
+  const [whoWhenOpen, setWhoWhenOpen] = useState(false);
+  const focusWhoWhen = useRef(false);
   // Whether the field holds an answer of the person's that the current version does not: set by every edit and by a
   // restored draft, cleared by a save of exactly what the field holds and by Discard. The form keeps it itself, so it
   // holds in a browser that cannot keep drafts too: a new version replaces the form only when this is false (CR-1, F11).
@@ -324,6 +346,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const latest = useRef({ value, base, retry });
   useLayoutEffect(() => { latest.current = { value, base, retry }; });
 
+  // An error on Decided by or Decided on, or a who or when the line cannot state (a restored draft's half-typed date), opens
+  // them for good: the M-11 summary's links need their controls, and the fields must not close under the person's typing.
+  if (!whoWhenOpen && (errors.some(isWhoWhenError) || whoWhenUnreadable(value))) setWhoWhenOpen(true);
+
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
@@ -333,7 +359,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     // without a word (e2e/decision-save-without-upload.spec.ts); kept, it finishes and edits the answer, so the next Save
     // adds it as the "Saved without" line promises.
     if (conflict === null && !typedSinceCurrent && !uploads.linkAdding && uploads.uploading.length === 0) {
-      setValue(draftFromCurrent(data));
+      setValue(draftFromCurrent(data, today));
       setBase(currentNumber);
       setRetry(NO_RETRY);
       setEvidenceInitial(data.current?.evidence ?? []);
@@ -347,15 +373,21 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   useEffect(() => {
     const s = openDraftStore();
     store.current = s;
-    // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
+    // The device's date exists only in the browser, after hydration: filled here while the date is still the default
+    // (whoWhenChanged false), never on the server (the owner's "Prefill today", 22 Nov 2026).
+    const t = todayParts(new Date());
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToday(t);
+    setValue((v) => (v.whoWhenChanged ? v : { ...v, date: t }));
+    // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
     setReady(true);
     if (s === null) { setStorageUnavailable(true); return; }
     const now = new Date();
     s.purgeExpired(now);
     const found = s.read<DecisionDraft>(key, now);
-    if (found === null || !isDraftValue(found.value)) return;
-    const restored = { ...found.value, href: draftFromCurrent(data).href };
+    if (found === null) return;
+    const restored = restoreDraft(found.value, data, t);
+    if (restored === null) return;
     setValue(restored);
     setTypedSinceCurrent(true);
     setBase(found.baseVersionNumber);
@@ -467,6 +499,17 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     el.focus({ preventScroll: true });
     return true;
   }, [footOfView]);
+
+  // Change opened Decided by and Decided on: focus goes to the select, as the person pressed Change to edit it. The page moves
+  // only if the select is out of view (`reveal`), not to the field group's top as an M-11 link's jump does (`land`).
+  useEffect(() => {
+    if (!focusWhoWhen.current || !whoWhenOpen) return;
+    focusWhoWhen.current = false;
+    const select = document.getElementById('decision-decided-by');
+    if (select === null) return;
+    select.focus({ preventScroll: true });
+    reveal(select);
+  });
   useEffect(() => {
     const bar = saveBar.current;
     if (bar === null || typeof ResizeObserver === 'undefined') return;
@@ -559,10 +602,11 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
         setExtraEvidenceIds([]);
         setTypedSinceCurrent(false);
       }
-      // Design G3: the last question of a stage lands on that stage's end screen; the server renders it from what was just saved.
-      // Only a clean "Saved" goes: a message the person must read keeps them here, with the end screen one link away.
-      const end = endHrefAfterSave(nextQuestion, stageHref, { statusId: next.id, leftOut: omitted, typedDuringSave });
-      if (end === null) router.refresh(); else router.push(end);
+      // Answer cost: a clean "Saved" moves on to the next question with no answer (or the stage's end screen), chosen by the server after
+      // this save. A message the person must read keeps them here, so the form is refreshed with the new answer instead.
+      const on = hrefAfterSave(stageHref, data.question.id, { statusId: next.id, leftOut: omitted, typedDuringSave, workInFlight: linkAdding.current || uploadingNow.current > 0 });
+      if (on === null) router.refresh();
+      else { setMoving(true); router.push(on); }
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
@@ -609,7 +653,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       if (current !== null) setConflict(current);
     }
     setStatus(next);
-  }, [data, key, keep, router, leaveHeldLink, nextQuestion, stageHref]);
+  }, [data, key, keep, router, leaveHeldLink, stageHref]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {
@@ -669,6 +713,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     afterUploads.current = (s) => {
       const linkEnded = linkAdding.current && !s.linkAdding;
       linkAdding.current = s.linkAdding;
+      uploadingNow.current = s.uploading.length;
       linkTyped.current = s.linkTyped;
       // The summary's lines about the link form are true of the form as it was at the press. Once a link is being sent, or
       // the box is empty, they are not, and they go; a field's own line stays until the next Save, as it always has.
@@ -712,7 +757,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   });
   useLayoutEffect(() => { retryLabel.current = isRetry; });
 
-  const held = waiting || saving;
+  const held = waiting || saving || moving;
   return (
     <SaveHeldContext.Provider value={held}>
     {lead}
@@ -743,7 +788,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
       <div hidden={conflict !== null}>
         {/* Until the form has hydrated and read the device's draft, its controls refuse input visibly: a pick, a click or a
             native submit before then would be lost (F5, CR-3). */}
-        <fieldset disabled={!ready} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <fieldset disabled={!ready || moving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {errors.length > 0 ? (
           <div role="alert" className="card" data-error-summary>
             <p tabIndex={-1} ref={summary} style={{ fontWeight: 700 }}>{problemSummary(errors.length)}</p>
@@ -759,7 +804,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
           </div>
         ) : null}
 
-        <DecisionFields data={data} value={value} errors={errors} disabled={false} onChange={edit} />
+        <DecisionFields
+          data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
+          onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }}
+        />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}
         <section data-region="evidence-block">
@@ -786,7 +834,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
             fromVersionNumber={isDecision(data.current) ? data.current.versionNumber : null}
-            saveOut={saving}
+            saveOut={saving || moving}
             unaddedLinkRefusals={linkRefusals}
             initialLink={typedLink}
             onLinkInput={(l) => setTypedLink((o) => (o.url === l.url && o.label === l.label ? o : l))}
@@ -835,7 +883,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
           <div className="form-actions">
             {/* C4: one control, "Save decision" or "Retry". A pressed Retry is busy, not disabled, while its request is out, so
                 it keeps focus (D-398 item 4); Save is disabled while its request is out. */}
-            <Button variant="primary" type="submit" ref={submit} disabled={saving && !retrying} busy={saving && retrying}>{isRetry ? F.retry : F.save}</Button>
+            <Button variant="primary" type="submit" ref={submit} disabled={(saving && !retrying) || moving} busy={saving && retrying}>{isRetry ? F.retry : F.save}</Button>
             {/* Native links in the kit's button classes: ButtonLink is next/link, and the gate link carries data-gate-link. */}
             {status?.next === 'sign_in' ? <a className="ui-button ui-button--secondary" href={signInHref}>{F.signInAgain}</a> : null}
             {status?.next === 'go' && status.action !== undefined ? <a className="ui-button ui-button--secondary" href={status.action.href} data-gate-link>{status.action.label}</a> : null}

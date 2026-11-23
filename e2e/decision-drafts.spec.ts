@@ -4,7 +4,7 @@ import { expect, test, type BrowserContext } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { draftKeys, fixtureOrgId, openQuestion, openQuestionIn, questionPath, seatOf, signInAs, waitForQuestionPage } from './helpers/session';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FIELD_COPY } from '../lib/ui/field/copy';
+import { REASON_OPTIONAL } from '../lib/decision/copy';
 import { DRAFTS_COPY } from '../lib/decision/drafts/copy';
 import { closeOpenedContexts } from './helpers/contexts';
 
@@ -34,7 +34,7 @@ test('UX-26 NFR-PRIV-06 B2: a second account on the same browser, on the same qu
   failOnDialog(page);
   await signInAs(page, 'assessor');
   const projectId = await openQuestionIn(page, Q);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Assessor draft');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Assessor draft');
   const assessorKey = `makrai.draft.v1:${seatOf('assessor').userId}:${fixtureOrgId()}:${projectId}:q:${Q}`;
   const stored = await page.evaluate((k) => localStorage.getItem(k), assessorKey);
   expect(stored).not.toBeNull();
@@ -44,7 +44,7 @@ test('UX-26 NFR-PRIV-06 B2: a second account on the same browser, on the same qu
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [assessorKey, stored!] as const);
   await page.goto(questionPath(projectId, Q));
   await waitForQuestionPage(page);
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('');
   expect(await draftKeys(page, seatOf('assessor').userId)).toEqual([assessorKey]);   // still there, never read
   expect(await draftKeys(page, seatOf('admin').userId)).toEqual([]);
   await ctx.close();
@@ -55,7 +55,7 @@ test('UX-26 NFR-PRIV-06: sign-in removes the first account\'s draft keys', async
   const ctx = await browser.newContext(); const page = await ctx.newPage();
   await signInAs(page, 'assessor');
   await openQuestionIn(page, Q);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('Assessor draft');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('Assessor draft');
   await signOutViaMenuKeepingDrafts(ctx);
   await signInAs(page, 'admin');
   expect(await draftKeys(page, seatOf('assessor').userId)).toEqual([]);
@@ -64,7 +64,7 @@ test('UX-26 NFR-PRIV-06: sign-in removes the first account\'s draft keys', async
 
 test('UX-26 M-41 B4: signing out with a draft warns, and Delete them and sign out leaves no draft key', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('x');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('x');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByText(DRAFTS_COPY.signOut.warning(1))).toBeVisible();
   await expect(page.getByRole('alertdialog')).toBeFocused();
@@ -83,20 +83,20 @@ test('M-41: with no draft, Sign out signs out at once', async ({ page, baseURL }
 test('NFR-PRIV-06 B4: a draft older than 7 days is gone after reload', async ({ page, baseURL }) => {
   await page.clock.install();
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('old');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('old');
   expect(await draftKeys(page)).toHaveLength(1);
   await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);   // 8 days
   await page.reload();
   await expect(page.locator('#question-heading')).toBeVisible();
   await page.waitForFunction(() => document.querySelector('[data-region="answer-form"] form')?.getAttribute('data-ready') === 'true');
   expect(await draftKeys(page)).toEqual([]);
-  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`)).toHaveValue('');
+  await expect(page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`)).toHaveValue('');
 });
 
 test('UX-26: S-21 shows Drafts on this device: 1 and Delete removes it', async ({ page, baseURL }) => {
   test.skip(!S21_EXISTS, 'ACC-b S-21: app/(authenticated)/account/page.tsx does not exist yet (merges_after: ACC-b)');
   await openQuestion(page, 'assessor', Q, baseURL!);
-  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${FIELD_COPY.required}`).fill('kept');
+  await page.getByLabel(`${DECISION_FORM_COPY.fields.reason} ${REASON_OPTIONAL}`).fill('kept');
   await page.goto('/account');
   await expect(page.locator('#drafts-on-this-device').getByRole('status')).toHaveText(DRAFTS_COPY.list.count(1));
   await page.locator('#drafts-on-this-device').getByRole('button', { name: DRAFTS_COPY.list.deleteAll }).click();

@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
-import { actAsSeat, fillValid, fixtureOrgSlug, newProject, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, seatRequest, stagePath } from './helpers/session';
+import { actAsSeat, expectMovedOn, fillValid, fixtureOrgSlug, newProject, openQuestion, questionPath, saveViaApi, seatOf, seatRequest, stagePath } from './helpers/session';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { STAGE_LIST_COPY } from '../lib/question/list/copy';
 import { STATUS_MARK_COPY } from '../lib/ui/copy';
@@ -104,9 +104,11 @@ test('saving a decision in the form updates the open question\'s status in the c
   await expect(row(page, Q).locator('[data-mark-kind]')).toHaveAttribute('data-mark-kind', 'no_decision');
   await fillValid(page);
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(/^Saved at /);
+  await expectMovedOn(page, Q);
   await expect(row(page, Q).locator('[data-mark-kind]')).toHaveAttribute('data-mark-kind', 'done');
   await expect(row(page, Q).locator('.status-label')).toHaveText(/^Done/);
+  // The open question's own row names its version: the saved line's way back opens it (a client navigation, the column kept).
+  await page.locator('[data-saved-arrival]').getByRole('link', { name: 'Back to question 1' }).click();
   await expect(row(page, Q)).toContainText(STAGE_LIST_COPY.line.version(1));
 });
 
@@ -118,7 +120,7 @@ test('a question left unsaved is "not saved yet" in the column; once it is saved
   await expect(row(page, Q)).toContainText(/not saved yet \(kept in this browser until /);
   await fillValid(page);
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(/^Saved at /);
+  await expectMovedOn(page, Q);
   await expect(row(page, Q).locator('.status-label')).toHaveText(/^Done/);
   await expect(row(page, Q)).not.toContainText('not saved yet');
 });

@@ -17,7 +17,7 @@ import { idempotentWrite } from '@/lib/data/idempotency';
 import { isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { onShortfallSaved } from '@/lib/data/findings';
 import { loadContent } from '@/lib/content/loader';
-import { utcPlus14Date, validateDecisionFields } from '@/lib/decision/rules';
+import { storedReason, utcPlus14Date, validateDecisionFields } from '@/lib/decision/rules';
 import { M11, REQUEST_MESSAGES } from '@/lib/decision/copy';
 import { withdrawalFieldErrors } from '@/lib/decision/parse';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -265,7 +265,7 @@ const sameSet = (x: readonly string[], y: readonly string[]) => x.length === y.l
 async function repeats(tx: TenantTx, cur: VersionColumns, a: SaveDecisionRequest, contentVersionId: string): Promise<boolean> {
   const decider = a.decidedBy.kind === 'member' ? { user: a.decidedBy.userId, role: null } : { user: null, role: a.decidedBy.role };
   const othersRepeat = cur.status === a.status && cur.scopeAnswer === a.scopeAnswer && sameSet(cur.optionsInPlace, a.optionsInPlace)
-    && cur.reasonCode === a.reasonCode && cur.reason === a.reason
+    && cur.reasonCode === a.reasonCode && cur.reason === storedReason(a.reason)
     && cur.decidedByUserId === decider.user && cur.decidedByRole === decider.role
     && declaredDateOf(cur.declaredOn, cur.declaredPrecision) === a.declaredDate
     && cur.contentVersionId === contentVersionId;
@@ -308,7 +308,7 @@ export async function saveDecision(
           orgId: ctx.orgId, projectId: a.projectId, stage: a.stage, questionId: a.questionId,
           contentVersionId: content.contentVersionId, versionNumber: (current?.versionNumber ?? 0) + 1,
           baseVersionNumber: a.baseVersionNumber, status: a.status, scopeAnswer: a.scopeAnswer, optionsInPlace: a.optionsInPlace,
-          reasonCode: a.reasonCode, reason: a.reason,
+          reasonCode: a.reasonCode, reason: storedReason(a.reason),
           decidedByUserId: a.decidedBy.kind === 'member' ? a.decidedBy.userId : null,
           decidedByRole: a.decidedBy.kind === 'outside_role' ? a.decidedBy.role : null,
           ...declaredColumns(a.declaredDate),

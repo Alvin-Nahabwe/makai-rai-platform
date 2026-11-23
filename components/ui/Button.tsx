@@ -27,6 +27,8 @@ export type ButtonProps = {
   name?: string;
   value?: string;
   'aria-describedby'?: string;
+  /** For a button that opens or closes something in place: its state, so it is read as "collapsed" or "expanded". */
+  'aria-expanded'?: boolean;
   children: ReactNode;
   ref?: Ref<HTMLButtonElement>;
 };
@@ -61,13 +63,13 @@ function content(children: ReactNode, icon: IconName | undefined, iconPosition: 
  */
 export function Button({
   variant, type = 'button', busy = false, disabled = false, icon, iconPosition = 'start', size = 'default', onClick, form, name, value,
-  'aria-describedby': ariaDescribedBy, children, ref,
+  'aria-describedby': ariaDescribedBy, 'aria-expanded': ariaExpanded, children, ref,
 }: ButtonProps): ReactElement {
   const handleClick = busy ? (event: MouseEvent<HTMLButtonElement>) => event.preventDefault() : onClick;
   return (
     <button
       ref={ref} className={classesOf(variant, size)} type={type} disabled={disabled} onClick={handleClick} form={form} name={name}
-      value={value} aria-busy={busy ? true : undefined} aria-describedby={ariaDescribedBy}
+      value={value} aria-busy={busy ? true : undefined} aria-describedby={ariaDescribedBy} aria-expanded={ariaExpanded}
     >
       {busy ? <span className="ui-button__spinner" aria-hidden="true" /> : null}
       {content(children, icon, iconPosition)}

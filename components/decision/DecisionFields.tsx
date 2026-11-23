@@ -1,17 +1,18 @@
 'use client';
 
 import type { ReactElement } from 'react';
+import { Button } from '@/components/ui/Button';
 import { CheckboxGroup } from '@/components/ui/Checkbox';
 import { DateField } from '@/components/ui/DateField';
 import { RadioCards } from '@/components/ui/RadioCards';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
-import { OUTSIDE_ROLE_LABELS, SCOPE_OPTIONS, STATUS_OPTIONS, reasonCount } from '@/lib/decision/copy';
+import { OUTSIDE_ROLE_LABELS, REASON_OPTIONAL, SCOPE_OPTIONS, STATUS_OPTIONS, WHO_WHEN_COPY, deciderLabel, reasonCount, whoWhenSummary } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { textErasedLine } from '@/lib/documents/copy';
-import { REASON_MAX } from '@/lib/decision/rules';
+import { REASON_MAX, declaredDateFromParts } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
-import { dateParts, isDecision, type DecisionDraft } from '@/lib/question/draft';
+import { dateParts, isDecision, patchDraft, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
 import { OUTSIDE_ROLES, type DecisionStatus, type Decider, type FieldError } from '@/types/record';
@@ -29,7 +30,24 @@ const STATUS_TERMS: Readonly<Record<DecisionStatus, { id: string }>> = { done: T
 export interface DecisionFieldsProps {
   data: QuestionPanelData; value: DecisionDraft; errors: FieldError[]; disabled: boolean;
   onChange: (v: DecisionDraft) => void;
+  /**
+   * Whether "Decided by" and "Decided on" are open for editing. The form keeps it, so it stays open once opened; a field
+   * error on either opens them here too, so the M-11 summary's link has a control to reach.
+   */
+  whoWhenOpen: boolean;
+  /** The Change button's press. It opens the fields and moves focus into them; it edits nothing (the next edit to who or when does). */
+  onOpenWhoWhen: () => void;
 }
+
+/** The field errors that point into Decided by or Decided on: they need those fields on the page (M-11's links). */
+export const isWhoWhenError = (e: FieldError): boolean => e.field === 'decidedBy' || e.field === 'declaredDate';
+
+/**
+ * Whether the draft's who or when is one the one-line summary cannot state truly: the person changed them (`whoWhenChanged`)
+ * and the decider is none or the date is not a date (empty, or half typed, as a restored draft can hold). The line says
+ * "today" only for a date that is still the default, so these open the fields instead.
+ */
+export const whoWhenUnreadable = (v: DecisionDraft): boolean => v.whoWhenChanged && (v.decidedBy === null || 'field' in declaredDateFromParts(v.date));
 
 /** The id of the control a field error points to, so the M-11 summary links to it (7.4.1 "Validation errors"). */
 export const FIELD_TARGET: Readonly<Record<string, string>> = Object.freeze({
@@ -47,18 +65,30 @@ function deciderFrom(v: string): Decider | null {
   return role === undefined ? null : { kind: 'outside_role', role };
 }
 
+/** How the summary line names the decider: "you" for the viewer, a member by name, an outside role by its label (M-03's words). */
+function deciderName(d: Decider | null, data: QuestionPanelData, extra: { userId: string; name: string } | null): string {
+  if (d === null) return WHO_WHEN_COPY.noDecider;
+  if (d.kind === 'outside_role') return deciderLabel({ kind: 'outside_role', role: d.role }, data.viewer.userId, 'confirmation');
+  const former = extra !== null && extra.userId === d.userId;
+  const known = d.userId === data.viewer.userId ? data.viewer : data.members.find((m) => m.userId === d.userId) ?? (former ? extra : null);
+  return known === null ? WHO_WHEN_COPY.formerMember : deciderLabel({ kind: 'member', user: { userId: known.userId, name: known.name, formerMember: former } }, data.viewer.userId, 'confirmation');
+}
+
 /**
  * The fields of S-12's "Record a decision" (W-3, SRS lines 1835-1942; UX-09 to UX-12; FR-DEC-01, FR-DEC-10), on the
  * kit's fields (plan 1A Task 17): RadioCards for the status and the personal data question's answer, CheckboxGroup for
  * a checklist, Select for the main reason and Decided by, TextArea for the reason and DateField for the date. Every
  * control keeps its id and name, and each error and help is linked by `aria-describedby`. A controlled component: every
- * change goes to `onChange` with the whole draft, and the parent keeps the draft. The date fields are never filled on
- * open; Today and the two "Same date as" shortcuts fill them only when pressed (FR-DEC-10, NFR-A11Y-04 SC 3.3.7).
+ * change goes to `onChange` with the whole draft, and the parent keeps the draft. Who and when open as one line, "Decided
+ * by you, 22 Nov 2026" with a Change button, and Change opens the two fields in place: the owner's rulings of 22 Nov 2026,
+ * "Default who and when", "Prefill today" and "Keep earlier decider" (design 2026-11-22 section 2 item 1; they replace
+ * FR-DEC-10's empty date and OQ1 (a)'s empty decider). Today and the two "Same date as" shortcuts still fill the boxes when pressed.
  */
-export function DecisionFields({ data, value, errors, disabled, onChange }: DecisionFieldsProps): ReactElement {
+export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
-  const set = (patch: Partial<DecisionDraft>) => onChange({ ...value, ...patch });
+  // A patch to who or when is recorded in the draft (lib/question/draft.ts `patchDraft`), so a restore keeps the person's own.
+  const set = (patch: Partial<DecisionDraft>) => onChange(patchDraft(value, patch));
   const current = isDecision(data.current) ? data.current : null;
 
   // R3 (owner, 15 Nov 2026): four short cards in two columns, each the radio, the mark and the word; each card's sentence
@@ -131,11 +161,17 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
   // A former member who decided the current version stays selectable, named as the record names them.
   const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);
   const extraMember = current?.decidedBy?.kind === 'member' && !listed.has(current.decidedBy.user.userId) ? current.decidedBy.user : null;
+  // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot state.
+  const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value);
   const lastOwn = data.lastOwnSaveDate;
   const shortcuts = [
     ...(lastOwn !== null ? [{ label: F.sameAsMyLast(formatDeclaredDate(lastOwn)), value: dateParts(lastOwn) }] : []),
     ...(current?.declaredDate ? [{ label: F.sameAsCurrent(formatDeclaredDate(current.declaredDate)), value: dateParts(current.declaredDate) }] : []),
   ];
+
+  // The one line: who and when as the form holds them ("you" for the viewer, as M-03 names them), and "today" while no date is set.
+  const parsedDate = declaredDateFromParts(value.date);
+  const summary = whoWhenSummary(deciderName(value.decidedBy, data, extraMember), 'date' in parsedDate ? formatDeclaredDate(parsedDate.date) : null);
 
   return (
     <div className="decision-fields">
@@ -146,7 +182,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
 
       <div className="decision-fields__reason">
         <TextArea
-          id="decision-reason" name="reason" label={F.fields.reason} required value={value.reason} disabled={disabled} rows={4}
+          id="decision-reason" name="reason" label={`${F.fields.reason} ${REASON_OPTIONAL}`} value={value.reason} disabled={disabled} rows={4}
           maxLength={REASON_MAX} count={(n) => reasonCount(n)} error={err('reason')}
           describedBy={erased === null ? ['decision-reason-help'] : ['decision-reason-help', 'decision-reason-erased']}
           onChange={(e) => set({ reason: e.target.value })}
@@ -157,11 +193,13 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
         {erased === null ? null : <p id="decision-reason-erased" className="decision-fields__help">{textErasedLine(erased)}</p>}
       </div>
 
+      {open ? (
+        <>
       {/* One row (the sketch's .row): Decided by beside Decided on; the date's shortcuts wrap under its boxes, and below 42rem
           of the fields the two stack (DecisionFields.css: the row wraps by its own width). */}
       <div className="decision-fields__row">
-      {/* Starts empty on a first decision (owner OQ1 (a)): the empty first option keeps the browser from showing the first
-          member as chosen while the answer holds no one. */}
+      {/* Opens as the viewer on a first answer and the earlier decider on a change (the owner's "Default who and when" and
+          "Keep earlier decider", 22 Nov 2026); the empty first option stays for a person who clears the choice. */}
       <Select
         id="decision-decided-by" name="decidedBy" label={F.fields.decidedBy} required value={deciderValue(value.decidedBy)}
         disabled={disabled} error={err('decidedBy')} placeholder={F.chooseOne}
@@ -174,8 +212,8 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
         onChange={(e) => set({ decidedBy: deciderFrom(e.target.value) })}
       />
 
-      {/* I5 (the owner, 15 Nov 2026 19:30): on a re-decision the boxes stay empty, so every version's date is entered on
-          purpose, and the group's hint names the current version's date at its precision (a withdrawal has none). */}
+      {/* The date opens at the device's today (the owner's "Prefill today", 22 Nov 2026, which replaces I5's empty boxes);
+          the group's hint still names the current version's date at its precision (a withdrawal has none). */}
       <DateField
         idPrefix="decision" legend={F.fields.declaredDate} required aria-describedby="decision-date-hint" value={value.date} disabled={disabled}
         hint={current?.declaredDate ? F.lastDecidedOn(formatDeclaredDate(current.declaredDate)) : undefined}
@@ -185,6 +223,16 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
       </div>
       {/* Lead's ruling D3: the date's hint under the row, one line of small type; every box names it. */}
       <p id="decision-date-hint" className="decision-fields__date-hint">{F.dateHelp}</p>
+        </>
+      ) : (
+        <p className="decision-fields__who-when">
+          <span id="decision-who-when-summary">{summary}</span>
+          <span aria-hidden="true"> · </span>
+          <Button variant="quiet" size="compact" disabled={disabled} aria-expanded={false} aria-describedby="decision-who-when-summary" onClick={onOpenWhoWhen}>
+            {WHO_WHEN_COPY.change}
+          </Button>
+        </p>
+      )}
     </div>
   );
 }

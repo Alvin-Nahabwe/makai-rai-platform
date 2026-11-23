@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { applyNetworkProfile, type NetworkProfile } from './helpers/network';
 import { failOnDialog } from './helpers/dialogs';
-import { fillValid, newProject, openQuestion, questionPath, saveStatus, seatOf } from './helpers/session';
+import { expectMovedOn, fillValid, newProject, openQuestion, questionPath, seatOf, waitForQuestionPage } from './helpers/session';
 import { closeOpenedContexts } from './helpers/contexts';
 
 // Every context a test opened is closed after it (helpers/contexts.ts says why).
@@ -19,19 +19,28 @@ test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
 const p95 = (xs: number[]): number => { const s = [...xs].sort((a, b) => a - b); return s[Math.ceil(0.95 * s.length) - 1]; };
 
-/** Saves `n` versions in a row through the form, each with a new reason; returns each click-to-"Saved as version" time. */
-async function timeSaves(page: Page, n: number): Promise<number[]> {
-  const times: number[] = [];
+/**
+ * Saves `n` versions in a row through the form, each with a new reason; returns each click-to-reply time (the save's own) and each
+ * click-to-saved-line time: the saved line on the page a clean Save moves to, with focus on it, which is what the person sees as "Saved"
+ * (answer cost). Both are held to the budget. After each save the question is opened again, so the next save starts from the new version.
+ */
+async function timeSaves(page: Page, projectId: string, n: number): Promise<{ saved: number[]; arrived: number[] }> {
+  const saved: number[] = [];
+  const arrived: number[] = [];
   for (let i = 0; i < n; i++) {
+    if (i > 0) { await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page); }
     await fillValid(page, { reason: `Save number ${i + 1} under a slow link` });
+    const reply = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decisions'), { timeout: 20_000 });
     const t = Date.now();
     await page.getByRole('button', { name: 'Save decision' }).click();
-    await expect(saveStatus(page)).toHaveText(new RegExp(`^Saved at .+ as version ${i + 1}\\.`), { timeout: 20_000 });
-    times.push(Date.now() - t);
-    // the page refreshes its data after a save; the next save starts from the new version
-    await expect(page.locator('[data-region="answer-form"] .decision-card__saved').getByText(new RegExp(`Saved as version ${i + 1}\\b`))).toBeVisible({ timeout: 20_000 });
+    expect((await reply).status()).toBe(201);
+    saved.push(Date.now() - t);
+    // What the person sees as "Saved" after a clean save: the saved line on the next page, with focus on it.
+    await expect(page.locator('[data-saved-arrival]')).toContainText(`is saved: decided by you, `, { timeout: 20_000 });
+    await expect(page.locator('[data-saved-arrival]')).toBeFocused({ timeout: 20_000 });
+    arrived.push(Date.now() - t);
   }
-  return times;
+  return { saved, arrived };
 }
 
 for (const [profile, readyMs, saveMs] of [['Constrained', 6_000, 2_000], ['Poor', 15_000, 4_000]] as Array<[NetworkProfile, number, number]>) {
@@ -46,10 +55,11 @@ for (const [profile, readyMs, saveMs] of [['Constrained', 6_000, 2_000], ['Poor'
     await expect(page.locator('[data-region="answer-form"] form[data-ready="true"]')).toBeVisible({ timeout: readyMs });
     await expect(page.getByRole('button', { name: 'Save decision' })).toBeEnabled({ timeout: readyMs });
     const ready = Date.now() - t0;
-    const saves = await timeSaves(page, 20);
-    console.log(`[NFR-PERF-03] ${profile}: ready ${ready} ms; saves p95 ${p95(saves)} ms; all ${saves.join(', ')}`);
+    const { saved, arrived } = await timeSaves(page, projectId, 20);
+    console.log(`[NFR-PERF-03] ${profile}: ready ${ready} ms; saves p95 ${p95(saved)} ms; all ${saved.join(', ')}; to the saved line p95 ${p95(arrived)} ms; all ${arrived.join(', ')}`);
     expect(ready).toBeLessThanOrEqual(readyMs);
-    expect(p95(saves)).toBeLessThanOrEqual(saveMs);
+    expect(p95(saved), 'click to the save reply').toBeLessThanOrEqual(saveMs);
+    expect(p95(arrived), 'click to the saved line, focused, on the next page').toBeLessThanOrEqual(saveMs);
   });
 }
 
@@ -59,7 +69,7 @@ test('NFR-PERF-05: a decision save body is at most 32 KB', async ({ page, baseUR
   await openQuestion(page, 'assessor', Q, baseURL!);
   await fillValid(page, { reason: '\u{1F600}'.repeat(4000) });
   await page.getByRole('button', { name: 'Save decision' }).click();
-  await expect(saveStatus(page)).toHaveText(/^Saved/);
+  await expectMovedOn(page, Q);
   expect(sizes).toHaveLength(1);
   expect(Math.max(...sizes)).toBeLessThanOrEqual(32 * 1024);
 });

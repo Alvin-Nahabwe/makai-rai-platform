@@ -49,6 +49,28 @@ export function reasonCount(n: number): string {
   return `${count(n)} / 4,000 characters`;
 }
 
+/**
+ * The answer form's one line for who and when (design 2026-11-22 section 2 item 1; the owner's "Default who and when",
+ * "Prefill today" and "Keep earlier decider" of 19 and 22 Nov 2026): "Decided by you, 22 Nov 2026", then the Change button.
+ * `decider` is how the line names the person ("you", a name, or an outside role's label, as M-03 names them); `dateText` is
+ * the date the form holds, written as the interface writes a declared date (`formatDeclaredDate`, by the caller), or null while
+ * the device's date is not yet known (the server render), which reads "today".
+ */
+export function whoWhenSummary(decider: string, dateText: string | null): string {
+  return `Decided by ${decider}, ${dateText === null ? 'today' : dateText}`;
+}
+
+/** The words around that line: the button that opens Decided by and Decided on, and the reason's label once it is optional. */
+export const WHO_WHEN_COPY = Object.freeze({
+  change: 'Change',
+  /** The line's name for a decider the form cannot name (none chosen, or a member no longer listed). */
+  noDecider: 'no one yet',
+  formerMember: 'a former member',
+});
+
+/** After the reason's label, as the kit writes "(required)": the typed reason is optional for every status (FR-DEC-01). */
+export const REASON_OPTIONAL = '(optional)';
+
 /** In the order of `OUTSIDE_ROLES` (types/record.ts), FR-DEC-01's fixed list. */
 export const OUTSIDE_ROLE_LABELS: Readonly<Record<OutsideRole, string>> = Object.freeze({
   principal_investigator: 'Principal investigator',
@@ -146,6 +168,20 @@ export function savedLine(timeText: string, versionNumber: number, decider: stri
 /** M-03 for a saved version, as the person who saved it reads it ("you" for themselves). */
 export function savedMessage(v: DecisionVersionView, timeText: string, viewerId: string): string {
   return savedLine(timeText, v.versionNumber, v.decidedBy === null ? null : deciderLabel(v.decidedBy, viewerId, 'confirmation'));
+}
+
+/**
+ * The line at the top of the question (or the stage's end screen) a clean Save moves the person to (answer cost, design 2 item 3):
+ * UX-11's save confirmation, naming who decided and when, as `savedMessage` does. `decider` is `deciderLabel(…, 'confirmation')`
+ * ("you" for the person's own answer); `declaredDateText` is the declared date as the interface writes it (`formatDeclaredDate`).
+ */
+export function savedArrivalLine(questionNumber: number, decider: string, declaredDateText: string): string {
+  return `Your answer to question ${questionNumber} is saved: decided by ${decider}, ${declaredDateText}.`;
+}
+
+/** The link in that line, back to the question just saved. */
+export function savedArrivalBack(questionNumber: number): string {
+  return `Back to question ${questionNumber}`;
 }
 
 /**

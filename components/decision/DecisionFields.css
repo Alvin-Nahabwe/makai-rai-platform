@@ -178,3 +178,16 @@
 .decision-fields__row > .ui-field {
   margin-block-end: var(--space-4);
 }
+
+/*
+ * Who and when as one line (answer cost 4; the owner's "Default who and when", 22 Nov 2026): "Decided by you, 22 Nov 2026 ·
+ * Change". The line and the kit's quiet Change button share a row and wrap under each other on a narrow screen; the
+ * fields' usual space follows. The button keeps the kit's own target size.
+ */
+.decision-fields__who-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+}
