@@ -3138,7 +3138,7 @@
   {
     "kind": "rule",
     "changed": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 and S-12 of a 28-question stage transfer at most 300 KB on first visit",
-    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 315 KB on first visit",
+    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 318 KB on first visit",
     "property": "S-11 (the stage page of the 28-question stage) transfers at most 300,000 B on first visit and S-12 (its question page) at most 315,000 B, each failing above its own limit; nothing was trimmed. The owner's ruling of 15 Nov 2026 20:50 EAT (box) set S-12's limit; S-11 keeps the SRS's 300 KB.",
     "proof": "The case measures both pages with the same measure() as before and asserts m.total <= its own limit per page ([s11, 300_000], [s12, 315_000]); S-12 measured 312,535 B at e422129c (lane 8 investigation on the remote runner, a temporary spec copying this file's measure()).",
     "task": "lane 8 (owner 20:50: S-12 first-visit limit 315,000 B)"
@@ -3534,5 +3534,13 @@
     "property": "The module's import line from helpers/session changes: expectMovedOn joins it and saveStatus leaves it, because the two cases that saved through the conflict view (Save mine, Edit mine first) now confirm by the saved line on the next question instead of the status line. Their other assertions are unchanged.",
     "proof": "Only the import list differs at module level. In the two conflict cases that save (Save mine, Edit mine first) the line that waited for the status line now calls expectMovedOn (the next question's address with ?saved=<this question>, and the saved line there); every heading, text and draft assertion is unchanged and none is removed.",
     "task": "answer-cost 7"
+  },
+  {
+    "kind": "rule",
+    "changed": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 315 KB on first visit",
+    "replacedBy": "e2e/first-visit-transfer.spec.ts::NFR-PERF-02: S-11 of a 28-question stage transfers at most 300 KB and S-12 at most 318 KB on first visit",
+    "property": "S-11 still transfers at most 300,000 B on first visit; S-12 (the question page of the 28-question stage) at most 318,000 B, failing above it. Nothing was trimmed. The owner's ruling of 23 Nov 2026 (box, \"Raise to 318,000 (Recommended)\") set the new limit.",
+    "proof": "Only S12_BUDGET changes (315_000 to 318_000); measure() and the per-page assertion m.total <= limit are unchanged. On GitHub's runner the answer-cost head 7d85aee2 measured 315,537, 316,326 and 314,780 B across three tries (CI 45093968130), flaky at 315,000.",
+    "task": "answer-cost S-12 (owner 23 Nov: S-12 first-visit limit 318,000 B)"
   }
 ]
