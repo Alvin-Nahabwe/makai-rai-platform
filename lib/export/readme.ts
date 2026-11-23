@@ -5,7 +5,8 @@
  * copy audit's (C 401, C 402, C 408; G-d3's title), each checked against what lib/data/export.ts writes:
  * finding events are only `reopened` or `withdrawn`, and document events only `withdrawn`, with a reason
  * (migration 20261030000300_v060_03_tenant); `evidence/` and `documents/` hold only files whose bytes are
- * still stored; erased values are null and each erasure has a row under `tombstones`. C 401's last
+ * still stored; erased values are null and each erasure has a row under `tombstones`; a decision's reason is also null when
+ * none was given (`storedReason`, lib/decision/rules.ts; reason optional since v0.10.0), and has no such row (I-2, D-425 row). C 401's last
  * sentence ("MAK-AI can send the format description on request") is left out: no code can show it true.
  */
 export const README_TEXT = `MAK-AI RAI Platform: downloaded records
@@ -26,4 +27,5 @@ Link evidence is listed in export.json with its address, but no file for it is i
 
 Erased items
 Where MAK-AI erased a file or text at your organisation's request, the item stays in export.json with the erased value empty. A separate entry records when and why it was erased.
+A decision's reason is also empty when none was given, because a reason is optional. Only an erased reason has that separate entry.
 `;

@@ -178,4 +178,7 @@ describe('B3 row A5: the README of downloaded records (C 401, C 402, C 408; G-d3
     expect(README_TEXT).not.toMatch(/operator|controller|tombstone|archive/i);
     expect(README_TEXT).toContain('no file for it is in the ZIP file');
   });
+  it('I-2 (v0.10.0 security review, D-425 row): an empty reason is explained as "none given" as well as erased, since a reason is optional', () => {
+    expect(README_TEXT).toContain("A decision's reason is also empty when none was given, because a reason is optional. Only an erased reason has that separate entry.");
+  });
 });
