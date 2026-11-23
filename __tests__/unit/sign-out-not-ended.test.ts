@@ -97,6 +97,10 @@ describe('L5-11: signOutClearingDrafts', () => {
     vi.useFakeTimers();
     vi.resetModules();
     vi.doMock('next-auth/react', () => ({ signOut }));
+    // Unmock first: vitest resolves consecutive queued mocks in parallel and the last to resolve wins, so without this
+    // the beforeEach's purging mock sometimes replaced this one (12 of 42 runs failed at vitest 4.1.12). An unmock between
+    // them splits the queue into groups that run in order.
+    vi.doUnmock('@/lib/client/drafts');
     vi.doMock('@/lib/client/drafts', () => new Promise(() => {}));
     signOut.mockResolvedValue({ url: 'https://rai.example/login' });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
