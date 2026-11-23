@@ -3122,7 +3122,7 @@
   {
     "kind": "rule",
     "changed": "__tests__/unit/measure-first-load.test.ts::owner ruling 15 Nov 2026 18:00: the question page alone is held to 192 KB; its neighbour with the same weight keeps 190",
-    "replacedBy": "__tests__/unit/measure-first-load.test.ts::owner ruling 15 Nov 2026 18:25: the question page alone is held to 195 KB; its neighbour with the same weight keeps 190",
+    "replacedBy": "__tests__/unit/measure-first-load.test.ts::owner rulings 15 Nov 2026 18:25 and 23 Nov 2026: the question page alone is held to 197 KB; its neighbour with the same weight keeps 190",
     "property": "The question page alone is held to its own signed-in budget; its neighbour route with the same weight keeps 190 KB and fails over it.",
     "proof": "The owner's ruling of 15 Nov 2026 18:25 (box \"195 KB, covering the last merges\") supersedes the 18:00 ruling's 192 KB. The case now expects budgetKB=195 for the question route and budgetKB=190 for its neighbour, the fixture stays over 190 and now under 195, and the neighbour still fails with the question route absent from stderr. It still fails when it should: with the ROUTE_BUDGET_KB entry set to 190 the case fails; restored to 195 it passes.",
     "task": "Route rebuild lane 2 task 8 (the 195 KB budget)"
@@ -3542,5 +3542,13 @@
     "property": "S-11 still transfers at most 300,000 B on first visit; S-12 (the question page of the 28-question stage) at most 318,000 B, failing above it. Nothing was trimmed. The owner's ruling of 23 Nov 2026 (box, \"Raise to 318,000 (Recommended)\") set the new limit.",
     "proof": "Only S12_BUDGET changes (315_000 to 318_000); measure() and the per-page assertion m.total <= limit are unchanged. On GitHub's runner the answer-cost head 7d85aee2 measured 315,537, 316,326 and 314,780 B across three tries (CI 45093968130), flaky at 315,000.",
     "task": "answer-cost S-12 (owner 23 Nov: S-12 first-visit limit 318,000 B)"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/measure-first-load.test.ts::owner ruling 15 Nov 2026 18:25: the question page alone is held to 195 KB; its neighbour with the same weight keeps 190",
+    "replacedBy": "__tests__/unit/measure-first-load.test.ts::owner rulings 15 Nov 2026 18:25 and 23 Nov 2026: the question page alone is held to 197 KB; its neighbour with the same weight keeps 190",
+    "property": "The question page (and its @project twin) is held to a first-load JavaScript budget of 197 KB, failing above it; every other signed-in route keeps 190 KB and public routes 160 KB. The owner's ruling of 23 Nov 2026 (box, \"Raise to 197 KB (Recommended)\") set the new figure.",
+    "proof": "Only QUESTION_PAGE_KB changes (195 to 197) in scripts/measure_first_load.mjs; the case's fixture (about 191 KB) still sits over 190 and under the budget, and it asserts budgetKB=197 for both question routes and budgetKB=190 for the stage route with the same weight, which still fails. The answer-cost branch measured 195.8 KB on GitHub's runner (CI 45116371708); v0.9.0 measured 194.8 KB.",
+    "task": "answer-cost first-load JS (owner 23 Nov: question page 197 KB)"
   }
 ]
