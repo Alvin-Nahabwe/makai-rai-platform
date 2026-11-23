@@ -80,6 +80,7 @@ const NOT_CRAWLED: Record<string, string> = {
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
   '/dev/ui-kit': 'development gallery',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/next': 'redirect-only (UX-44): renders no page of its own and no link points to it; a clean Save sends the person there and it lands on a question page or the stage\'s end screen, which the crawls read; csp.spec.ts visits it',
 };
 
 /**

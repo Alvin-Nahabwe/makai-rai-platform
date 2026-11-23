@@ -81,6 +81,7 @@ const CONTENT_NAMES: ReadonlySet<string> = new Set(CONTENT_ROOTS.flatMap((root) 
  */
 const NOT_CRAWLED: Record<string, string> = {
   '/acceptances': 'renders only for an account missing an acceptance, and every fixture seat holds all of them (FR-ACC-04); e2e/acceptances.spec.ts renders it',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/next': 'redirect-only (UX-44): renders no text of its own and no link points to it; it lands on a question page or the stage\'s end screen, which the crawl reads',
 };
 
 /** One violation, kept with the seat and page that showed it. */

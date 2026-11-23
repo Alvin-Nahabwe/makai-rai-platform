@@ -314,7 +314,11 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // `/` sends a signed-in user on to their organisation; everything else must stay put,
     // or it is the redirect page being tested rather than this one (the admin pages
     // redirect a non-admin to `/`).
-    if (landed !== route.path && REDIRECTS_TO[route.path] !== landed && !(route.path === '/' && landed.startsWith('/orgs/'))) {
+    // `/next` (UX-44) only redirects, within the same stage: to the next unanswered question or the end screen, or to the
+    // stage page when `after` is missing or unknown (lib/question/nextUnanswered.ts nextTarget), as in this sweep's visit.
+    const stage = route.path.replace(/\/next$/, '');
+    const nextLands = route.template.endsWith('/stages/[stage]/next') && (landed === stage || landed === `${stage}/end` || landed.startsWith(`${stage}/questions/`));
+    if (landed !== route.path && REDIRECTS_TO[route.path] !== landed && !nextLands && !(route.path === '/' && landed.startsWith('/orgs/'))) {
       problems.push(`${route.path}: landed on ${landed}`);
     }
 
@@ -429,6 +433,7 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]/export': project.id,   // S-20 for one project (EXP)
         '/orgs/[slug]/projects/[id]/stages/[stage]': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/end': project.id,   // G3, the stage's end screen
+        '/orgs/[slug]/projects/[id]/stages/[stage]/next': project.id,   // UX-44, redirect-only: lands on a question or the end screen
         '/orgs/[slug]/projects/[id]/report': project.id,   // the project's working report on screen
         '/orgs/[slug]/projects/[id]/edit': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
