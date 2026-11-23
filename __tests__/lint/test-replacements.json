@@ -3251,7 +3251,7 @@
     "task": "release 0.9.0",
     "kind": "wording",
     "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
-    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0, 0.9.0 and 0.10.0",
+    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0 and 0.9.0",
     "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.9.0 records a waiver (the owner deferred the screen-reader walk again on 22 November 2026: \"Defer again\"), so the list and the title gain 0.9.0.",
     "proof": "The same case with one more version in its toEqual list; a release outside the list still fails it. The 0.9.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.9.0 the committed file waives the screen-reader walk and nothing else."
   },
@@ -3554,7 +3554,7 @@
   {
     "task": "release 0.10.0",
     "kind": "wording",
-    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0 and 0.9.0",
+    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
     "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0, 0.9.0 and 0.10.0",
     "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.10.0 records a waiver (the owner deferred the screen-reader walk again on 23 November 2026: \"Defer again (Recommended)\"), so the list and the title gain 0.10.0.",
     "proof": "The same case with one more version in its toEqual list, placed first because the list is sorted as strings; a release outside the list still fails it. The 0.10.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.10.0 the committed file waives the screen-reader walk and nothing else."
