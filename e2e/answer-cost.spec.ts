@@ -5,6 +5,7 @@ import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { formatDeclaredDate } from '../lib/format/dates';
 import { STAGE_END_COPY } from '../lib/question/end/copy';
+import { M11 } from '../lib/decision/copy';
 
 /**
  * Answer cost (Phase 2 release 2, design 2026-11-22): the common answer is a pick and a Save. The form opens with "Decided by you,
@@ -178,6 +179,29 @@ test('browser check 1: Change opens Decided by and Decided on in place and focus
   // One way: the summary line and its button are gone.
   await expect(page.getByRole('button', { name: 'Change', exact: true })).toHaveCount(0);
   await expect(page.locator('#decision-who-when-summary')).toHaveCount(0);
+});
+
+test("D-425: a change of someone else's decision opens who and when, the date empty, so one Save cannot record them deciding today", async ({ page, baseURL }) => {
+  // Seeded by the assessor's API seat with "decided by" the Supervisor, an outside role, on 12 Oct 2026.
+  const projectId = await newProject(baseURL!);
+  await seedAnswers(baseURL!, projectId, ['Q-PP-01']);
+  await openQuestion(page, 'assessor', 'Q-PP-01', baseURL!, projectId);
+  // Open at once, no line: the earlier decider chosen, the three date boxes empty.
+  await expect(page.locator('#decision-who-when-summary')).toHaveCount(0);
+  await expect(page.locator('#decision-decided-by')).toHaveValue('role:supervisor');
+  for (const box of ['Day', 'Month', 'Year']) await expect(page.getByLabel(box, { exact: true })).toHaveValue('');
+  // A pick and one Save: refused on the date, nothing saved, still on the question.
+  await page.getByRole('radio', { name: 'Partly', exact: true }).check();
+  await save(page).click();
+  await expect(page.getByText(M11.yearMissing).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${questionPath(projectId, 'Q-PP-01')}$`));
+  expect((await current(page, projectId, 'Q-PP-01')).versionNumber).toBe(1);
+  // Today, then Save: saved as the Supervisor's, on the date the person gave.
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await save(page).click();
+  await expect(page).toHaveURL(withSaved(projectId, 'Q-PP-02', 'Q-PP-01'));
+  const saved = await current(page, projectId, 'Q-PP-01');
+  expect(saved).toMatchObject({ versionNumber: 2, status: 'partly', decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: today() });
 });
 
 test('browser check 2: after a clean Save, focus is on the saved line only, and stays there', async ({ page, baseURL }) => {

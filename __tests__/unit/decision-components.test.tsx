@@ -175,14 +175,24 @@ describe('S-12 decision fields', () => {
       expect(button).toContain('type="button"');
       expect(h).not.toContain('id="decision-decided-by"');
       expect(h).not.toContain('id="decision-day"');
-      // before the device's date is known the line says "today", and a change keeps the earlier decider
+      // before the device's date is known the line says "today"
       expect(renderToStaticMarkup(<DecisionFields {...fieldsFor()} />)).toContain('Decided by you, today');
-      const change = draftFromCurrent({ ...PANEL, current: V2 }, todayParts(new Date()));
-      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ data: { ...PANEL, current: V2 }, value: change })} />))
-        .toContain('Decided by Principal investigator, 22 Nov 2026');
+      // a change of the viewer's own decision keeps the line, with today
+      const mine = { ...V2, decidedBy: { kind: 'member' as const, user: { userId: PANEL.viewer.userId, name: PANEL.viewer.name, formerMember: false } } };
+      const changeMine = draftFromCurrent({ ...PANEL, current: mine }, todayParts(new Date()));
+      expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ data: { ...PANEL, current: mine }, value: changeMine })} />))
+        .toContain('Decided by you, 22 Nov 2026');
       // a restored draft's own who and when are what the line shows, not the defaults
       const own = { ...EMPTY, decidedBy: { kind: 'member' as const, userId: 'u-j' }, date: { day: '12', month: '10', year: '2026' }, whoWhenChanged: true };
       expect(renderToStaticMarkup(<DecisionFields {...fieldsFor({ value: own })} />)).toContain('Decided by Joseph K., 12 Oct 2026');
+    });
+
+    it('D-425: a change of someone else\'s decision opens Decided by (the earlier decider chosen) and Decided on (empty), with no line', () => {
+      const data = { ...PANEL, current: V2 };
+      const h = renderToStaticMarkup(<DecisionFields {...fieldsFor({ data, value: draftFromCurrent(data, { day: '22', month: '11', year: '2026' }) })} />);
+      expect(h).not.toContain('id="decision-who-when-summary"');
+      expect(h).toMatch(/<option value="role:principal_investigator" selected="">/);
+      for (const box of ['decision-day', 'decision-month', 'decision-year']) expect(h).toMatch(new RegExp(`<input[^>]*id="${box}"[^>]*value=""`));
     });
 
     it('the Change button is named with the line it changes, and Change alone does not edit the answer', () => {
@@ -511,13 +521,18 @@ describe('S-12 answer form before hydration', () => {
     const { consequenceOf, answerDiffers } = await import('@/components/decision/DecisionForm');
     const today = { day: '22', month: '11', year: '2026' };
     const C = DECISION_FORM_COPY.consequence;
+    // The viewer's own decision, so the date opens at today (D-425 leaves it empty on someone else's).
+    const mine = { ...V2, decidedBy: { kind: 'member' as const, user: { userId: PANEL.viewer.userId, name: PANEL.viewer.name, formerMember: false } } };
     // saved 12 Oct, today 22 Nov: Save sends 22 Nov, a version the server does not call unchanged, so the line says so
-    const other = { ...PANEL, current: V2 };
+    const other = { ...PANEL, current: mine };
     const openedOther = draftFromCurrent(other, today);
     expect(answerDiffers(openedOther, other)).toBe(true);
     expect(consequenceOf(openedOther, other, 2).text).toContain(C.version(3));
+    // D-425: on someone else's decision the date opens empty, which is not a different answer until a date is given
+    const theirs = { ...PANEL, current: V2 };
+    expect(answerDiffers(draftFromCurrent(theirs, today), theirs)).toBe(false);
     // saved on today's date with nothing else changed: the same answer, no version announced
-    const same = { ...PANEL, current: { ...V2, declaredDate: '2026-11-22' as const, declaredPrecision: 'day' as const } };
+    const same = { ...PANEL, current: { ...mine, declaredDate: '2026-11-22' as const, declaredPrecision: 'day' as const } };
     const openedSame = draftFromCurrent(same, today);
     expect(answerDiffers(openedSame, same)).toBe(false);
     expect(consequenceOf(openedSame, same, 2).text).not.toContain(C.version(3));

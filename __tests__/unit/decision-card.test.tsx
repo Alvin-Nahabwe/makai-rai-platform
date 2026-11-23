@@ -108,7 +108,8 @@ describe('the decision card (R2)', () => {
     };
     const order = [
       at('id="s12-answer-form"'), at('class="ui-saved'), at('Which of these are in place?'), at(/<legend[^>]*>Status<\/legend>/),
-      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-who-when-summary"'),
+      // V2 was decided by an outside role, so Decided by opens in the line's place (D-425)
+      at('id="decision-reason-code"'), at('id="decision-reason"'), at('id="decision-decided-by"'),
       at(/<legend>Evidence<\/legend>/), at('data-consequence'), at('>Save decision</button>'), at(`>${F.card.next(NEXT.text)}`),
       at(`<summary>More actions</summary>`),
     ];

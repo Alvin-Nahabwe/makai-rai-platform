@@ -12,7 +12,7 @@ import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX, declaredDateFromParts } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
-import { dateParts, isDecision, patchDraft, type DecisionDraft } from '@/lib/question/draft';
+import { dateParts, isDecision, keptDeciderIsOther, patchDraft, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY } from '@/lib/vocabulary/terms';
 import { OUTSIDE_ROLES, type DecisionStatus, type Decider, type FieldError } from '@/types/record';
@@ -161,8 +161,9 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   // A former member who decided the current version stays selectable, named as the record names them.
   const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);
   const extraMember = current?.decidedBy?.kind === 'member' && !listed.has(current.decidedBy.user.userId) ? current.decidedBy.user : null;
-  // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot state.
-  const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value);
+  // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot
+  // state, and a change of a decision someone else made, whose date opens empty (D-425; owner, 23 Nov 2026, "Open, date empty").
+  const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value) || keptDeciderIsOther(data);
   const lastOwn = data.lastOwnSaveDate;
   const shortcuts = [
     ...(lastOwn !== null ? [{ label: F.sameAsMyLast(formatDeclaredDate(lastOwn)), value: dateParts(lastOwn) }] : []),
