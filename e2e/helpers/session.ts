@@ -166,8 +166,9 @@ export async function openWhoWhen(page: Page): Promise<void> {
 /**
  * Fills the S-12 form with a valid answer: Done and a reason; `over` changes any part. Who and when need no filling: the form
  * opens as the signed-in person (or the earlier decider on a change) and the device's today (answer cost, design 2026-11-22
- * section 2 item 1). Passing `decidedBy` or a date part opens them with Change first. `reason: ''` leaves the optional reason
- * empty. The reason box is found by its exact name, "Reason (optional)".
+ * section 2 item 1). On a change of a decision someone else made, the fields open with the date empty (D-425), and a valid
+ * answer needs a date, so with no date part given it presses Today there. Passing `decidedBy` or a date part opens them with
+ * Change first. `reason: ''` leaves the optional reason empty. The reason box is found by its exact name, "Reason (optional)".
  */
 export async function fillValid(page: Page, over: { status?: string | null; reason?: string; decidedBy?: string; day?: string; month?: string; year?: string } = {}): Promise<void> {
   if (over.status !== null) await page.getByRole('radio', { name: over.status ?? 'Done', exact: true }).check();
@@ -179,6 +180,9 @@ export async function fillValid(page: Page, over: { status?: string | null; reas
     await page.getByLabel('Day', { exact: true }).fill(over.day ?? '');
     await page.getByLabel('Month', { exact: true }).fill(over.month ?? '');
     await page.getByLabel('Year', { exact: true }).fill(over.year ?? '');
+  } else {
+    const year = page.getByLabel('Year', { exact: true });
+    if (await year.count() > 0 && await year.inputValue() === '') await page.getByRole('button', { name: 'Today', exact: true }).click();
   }
 }
 

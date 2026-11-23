@@ -321,10 +321,12 @@ test('UX-10 FR-DEC-10: month and year only save with month precision; Same as ve
   await expectMovedOn(page, Q);
   expect((await saveViaApi(baseURL!, 'owner', projectId, Q, { baseVersionNumber: 1, reason: 'Version 2 by the owner' })).status).toBe(201);
   await backToQuestion(page, projectId, Q);
-  // Answer cost: a new version opens at today's date, shown as one line; Change opens the boxes, filled with today's date.
+  // D-425: version 2 names the Supervisor, not the assessor, so who and when open at once (no line, no Change) and the
+  // date boxes are empty; Today fills them with today's date.
   await expect(page.getByText(DECISION_FORM_COPY.startingNote)).toBeVisible();
-  await expect(page.getByLabel('Day', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Change', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Change', exact: true })).toHaveCount(0);
+  for (const box of ['Day', 'Month', 'Year']) await expect(page.getByLabel(box, { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   const now = new Date();
   await expect(page.getByLabel('Day', { exact: true })).toHaveValue(String(now.getDate()));
   await expect(page.getByLabel('Month', { exact: true })).toHaveValue(String(now.getMonth() + 1));
