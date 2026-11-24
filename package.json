@@ -1,6 +1,6 @@
 {
   "name": "toolkit-platform",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Multi-tenant Responsible AI platform: a team records its decisions, findings and mitigations for an AI system across three stages, attaches evidence, seals a stage review, and issues documents built from that record.",
   "license": "Apache-2.0",
   "repository": {
