@@ -605,6 +605,11 @@ describe('sign-off payload keys added by per-question wording (D2)', () => {
       const { reasonPrompt: _dropped, ...rest } = q;
       return { ...rest, answerLabels: labels, answerPrompts: prompts, practiceSameAs: ['5.0.0'] };
     });
+    // The fixture's non-gate questions carry the new keys (D8), so a question "without the keys" is made one here: Q-PP-02 in its 5.1.0 shape.
+    editQuestion(dir, 'Q-PP-02', (q) => {
+      const { answerLabels: _l, answerPrompts: _p, ...rest } = q;
+      return { ...rest, reasonPrompt: 'Say what was done and why.' };
+    });
     const c = loadDir(dir);
     const stage = signOffPayload(c, 'pre-processing');
     const set = signOffPayload(c, 'question-set:pre-processing');
@@ -616,7 +621,7 @@ describe('sign-off payload keys added by per-question wording (D2)', () => {
     expect('practiceSameAs' in sq).toBe(false);
     expect(set.questions.find((q) => q.id === 'Q-PP-01')).toEqual({ id: 'Q-PP-01', text: c.questions.get('Q-PP-01')!.text, practiceSameAs: ['5.0.0'] });
     // A question without the keys keeps the old shape exactly.
-    const other = stage.questions.find((q) => q.id !== 'Q-PP-01')!;
+    const other = stage.questions.find((q) => q.id === 'Q-PP-02')!;
     expect(Object.keys(other)).not.toContain('answerLabels');
     expect(Object.keys(other)).toContain('reasonPrompt');
     expect(() => signOffHash(stage)).not.toThrow();
