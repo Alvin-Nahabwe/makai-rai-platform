@@ -206,6 +206,6 @@ describe('content 5.1.0, the draft for the owner', () => {
   it('index.json runs 5.1.0 and still lists 5.0.0', () => {
     const index = JSON.parse(readFileSync('data/content/index.json', 'utf8')) as { running: string; versions: string[] };
     expect(index.running).toBe('5.1.0');
-    expect(index.versions).toEqual(['5.0.0', '5.1.0']);
+    expect(index.versions).toEqual(['5.0.0', '5.1.0', '5.2.0']);
   });
 });

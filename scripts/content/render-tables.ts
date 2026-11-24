@@ -22,8 +22,8 @@ import path from 'node:path';
 
 import { canonicalJson } from '@/lib/integrity/canonical.mjs';
 import { loadContent } from '@/lib/content/loader';
-import { signOffHash, signOffPayload, type SignOffPayload } from '@/lib/content/signoffs';
-import type { LoadedContent } from '@/types/content';
+import { signOffHash, signOffPayload, type QuestionSetBatch, type SignOffPayload } from '@/lib/content/signoffs';
+import type { AnswerKey, LoadedContent } from '@/types/content';
 import type { Stage } from '@/types/record';
 
 import {
@@ -72,6 +72,8 @@ export function questionSetPayload(bank: CoverageBank, proposal: QuestionSetProp
 export function questionSetBatchHash(bank: CoverageBank, proposal: QuestionSetProposal, stage: Stage): string {
   return createHash('sha256').update(canonicalJson(questionSetPayload(bank, proposal, stage)), 'utf8').digest('hex');
 }
+
+const ANSWER_KEYS: readonly AnswerKey[] = ['done', 'partly', 'not_yet', 'not_applicable'];
 
 const cell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim();
 
@@ -244,9 +246,18 @@ export function renderTextTables(c: LoadedContent, version: string): Record<Stag
   for (const stage of STAGES) {
     const p = signOffPayload(c, stage) as Extract<SignOffPayload, { batch: Stage }>;
     const lines = [`# The ${stage} texts of content ${version}`, '', `${p.questions.length} questions, in the order S-12 shows them.`, ''];
+    // practiceSameAs is signed in the stage's question-set batch, so it is read from there and shown beside the texts.
+    const qs = signOffPayload(c, `question-set:${stage}`) as Extract<SignOffPayload, { batch: QuestionSetBatch }>;
+    const sameAs = new Map(qs.questions.map((x) => [x.id, x.practiceSameAs]));
     for (const q of p.questions) {
       lines.push(`## ${q.id}`, '', `**Question:** ${q.text}`, '', '| Text | Wording |', '|---|---|');
-      lines.push(`| Expected practice | ${cell(q.expectedPractice)} |`, `| Why this is asked | ${cell(q.whyAsked)} |`, `| Reason prompt | ${cell(q.reasonPrompt ?? '')} |`);
+      lines.push(`| Expected practice | ${cell(q.expectedPractice)} |`, `| Why this is asked | ${cell(q.whyAsked)} |`);
+      // Only what the question has: a question with per-question wording has no reason prompt, the gate has no labels or prompts.
+      if (q.reasonPrompt !== undefined) lines.push(`| Reason prompt | ${cell(q.reasonPrompt)} |`);
+      if (q.answerLabels !== undefined) for (const k of ANSWER_KEYS) lines.push(`| Answer label, ${k} | ${cell(q.answerLabels[k])} |`);
+      if (q.answerPrompts !== undefined) for (const k of ANSWER_KEYS) lines.push(`| Answer prompt, ${k} | ${cell(q.answerPrompts[k])} |`);
+      const same = sameAs.get(q.id);
+      if (same !== undefined) lines.push(`| Practice same as | ${same.length === 0 ? 'none' : cell(same.join(', '))} |`);
       q.evidenceExamples.forEach((e, i) => lines.push(`| Evidence example ${i + 1} | ${cell(e)} |`));
       if (q.helpText !== null) lines.push(`| Help text | ${cell(q.helpText)} |`);
       if (q.example !== null) lines.push(`| Example | ${cell(q.example)} |`);

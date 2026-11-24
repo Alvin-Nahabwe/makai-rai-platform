@@ -38,6 +38,10 @@ describe('content bundle structure', () => {
       else expect(check(status === null ? null : proposal), ver).toEqual([]);
     }
   });
+  it('index.json lists the draft 5.2.0 beside the running 5.1.0, and 5.2.0 is not running', () => {
+    expect(idx.versions).toEqual(['5.0.0', '5.1.0', '5.2.0']);
+    expect(v).toBe('5.1.0');
+  });
   it('the running version has a committed proposal that says approved (a draft can be listed, never run)', () => {
     expect(proposalStatus(`docs/content/question-set-${v}/proposal.json`)).toBe('approved');
   });
