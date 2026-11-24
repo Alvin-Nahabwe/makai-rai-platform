@@ -11,6 +11,7 @@ import {
   type PendingLinkTarget,
 } from './helpers/pendingLinks';
 import { closeOpenedContexts } from './helpers/contexts';
+import { ownProject, seedCrawlProject } from './helpers/crawlProject';
 
 // Every context a test opened is closed after it (helpers/contexts.ts says why).
 test.afterEach(closeOpenedContexts);
@@ -99,13 +100,13 @@ async function gotoOk(page: Page, url: string, who: string, pending: readonly Pe
  * `pathname + search` of the page the browser ended on (after any redirect). A page that answers 400 or
  * more fails the crawl. A link is queued once per exact path; the route pattern is marked seen only for
  * the page the browser ended on, so a link that redirects to a page of a pattern already seen leaves its
- * own pattern open for the next link. If `max` patterns have been visited and a queued entry still has a
+ * own pattern open for the next link. A link whose pathname `follows` rejects is not queued. If `max` patterns have been visited and a queued entry still has a
  * pattern the crawl has not seen, the crawl fails and names the first such entries, so a cap can never hide pages.
  */
 async function sameOriginPages(
   page: Page,
   start: string,
-  { max, label, pending = PENDING_LINK_TARGETS }: { max: number; label: string; pending?: readonly PendingLinkTarget[] },
+  { max, label, pending = PENDING_LINK_TARGETS, follows = () => true }: { max: number; label: string; pending?: readonly PendingLinkTarget[]; follows?: (pathname: string) => boolean },
 ): Promise<string[]> {
   const visited: string[] = [];
   const seen = new Set<string>();
@@ -128,7 +129,7 @@ async function sameOriginPages(
     for (const href of hrefs) {
       const link = new URL(href);                    // an href that is not a URL throws: a broken link fails the crawl, it is not skipped
       const next = link.pathname + link.search;
-      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || queuedPaths.has(next)) continue;
+      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || !follows(link.pathname) || queuedPaths.has(next)) continue;
       queuedPaths.add(next);
       queue.push(next);
     }
@@ -250,6 +251,12 @@ test('FR-RM-01 (helper): the cap fails only for patterns the crawl has not seen'
     `${SELFTEST}/late/`, `${SELFTEST}/patterns/about`, `${SELFTEST}/patterns/q/1`]);
 });
 
+test('FR-RM-01 (helper): a link that `follows` rejects is not queued, and the others still are', async ({ page }) => {
+  await serveSelftestPages(page);
+  const pages = await sameOriginPages(page, `${SELFTEST}/cap/`, { max: 6, label: 'selftest', follows: (p) => !p.endsWith('/page-b') });
+  expect(pages).toEqual([`${SELFTEST}/cap/`, ...['a', 'c', 'd', 'e'].map((x) => `${SELFTEST}/cap/page-${x}`)]);
+});
+
 test('FR-RM-01 (helper): unreached names the must-reach entries no crawled page matches, for a seat with a membership and for one without', () => {
   const admin: Seat = { label: 'platform administrator', storageStatePath: '', mustReach: ['/admin/users'] };   // a seat with no organisation: its own list, not the dashboard's
   expect(unreached(admin, ['/', '/admin/users'])).toEqual([]);
@@ -275,19 +282,19 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
   const manifest = readManifest();
   const slug = manifest.orgs[0].slug;
 
-  // A project of the organisation, so that the dashboard, the projects list and a project page all have
-  // something to link to. The owner of the first organisation creates it over the app's own API.
+  // The crawl's OWN project (D-422 review I1), made over the app's own API before anything is crawled, with a decision, a
+  // finding and an opened and sealed stage review (e2e/helpers/crawlProject.ts), and the only project the crawl follows. Before
+  // the e2e suite was sharded the crawl followed whatever projects earlier spec files had left in the organisation, so which
+  // finding, review and seal pages it checked depended on the order the files ran in; in a shard it reached none of them.
   const owner = manifest.users.find((u) => u.orgSlug === slug && u.role === 'owner' && u.index === 0);
   if (!owner) throw new Error(`no-score-crawl: no owner seat for ${slug} in the fixture manifest`);
   // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
   // pooled socket has no idle timer: a GET sent just then, while the server is busy, is reset (read ECONNRESET).
   const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
-  const created = await api.post(`/api/v1/orgs/${slug}/projects`, {
-    headers: { origin: baseURL ?? '' },
-    data: { requestId: crypto.randomUUID(), name: `No-score crawl project ${Date.now()}`, aiSystemType: 'classification' },
-  });
-  expect(created.status(), 'creating the crawl project').toBe(201);
+  const crawlProject = await seedCrawlProject(api, baseURL, slug, `No-score crawl project ${Date.now()}`);
   await api.dispose();
+  const follows = (pathname: string) => ownProject(pathname, crawlProject);
+  const checked: string[] = [];
 
   // The five role seats, then the platform administrator (units/ORG.md Task 8b), who must reach S-23 and S-25.
   for (const seat of [...oneSeatPerRole(), adminSeat()]) {
@@ -297,7 +304,8 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
     // (Playwright's default navigation timeout is none). The links themselves are still followed and must answer exactly 404.
     await abortPendingBackgroundRequests(context);
     const page = await context.newPage();
-    const pages = await sameOriginPages(page, '/', { max: MAX_PAGES_PER_SEAT, label: seat.label });
+    const pages = await sameOriginPages(page, '/', { max: MAX_PAGES_PER_SEAT, label: seat.label, follows });
+    checked.push(...pages);
     console.log(`[no-score-crawl] ${seat.label}: ${pages.length} pages: ${pages.join(' ')}`);
 
     // A crawl that stopped at the landing page would pass for having found nothing.
@@ -310,5 +318,11 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
       await expectNoScoreShapes(page, `${seat.label} ${url}`);
     }
     await context.close();
+  }
+
+  // The seeded finding, stage review and seal pages are each checked by at least one seat: the pages most likely to show a figure.
+  const project = `/orgs/${slug}/projects/${crawlProject.id}`;
+  for (const must of [new RegExp(`^${project}/findings/[0-9a-f-]{36}$`), new RegExp(`^${project}/reviews/[0-9a-f-]{36}$`), new RegExp(`^${project}/reviews/[0-9a-f-]{36}/seal$`)]) {
+    expect(checked.some((p) => must.test(p)), `some seat checked a page matching ${must}`).toBe(true);
   }
 });

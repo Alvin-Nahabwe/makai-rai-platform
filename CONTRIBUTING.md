@@ -24,9 +24,10 @@ documented deployment cannot produce a working system (known issue; ask a mainta
 | `E2E_PORT=<port> npm run test:e2e` | `playwright test` | `npx playwright install`. Outside CI, `E2E_PORT` must be set to a free port; an unset value stops the run with a message. Playwright starts and owns the server (`playwright.config.ts`); do not start one yourself first |
 
 `npm run verify` runs `npm run lint && npm run test && npm run build` in one command — note what it
-leaves out: **it runs neither `typecheck` nor the e2e suite.** `.github/workflows/ci.yml` runs two
-jobs on every push and pull request, `lint, typecheck, test, build` and `e2e`, both against a real
-Postgres with migrations and role provisioning applied.
+leaves out: **it runs neither `typecheck` nor the e2e suite.** `.github/workflows/ci.yml` gives every push
+and pull request two checks that gate the result, `lint, typecheck, test, build` and `e2e`, both
+against a real Postgres with migrations and role provisioning applied. Each passes only when every
+shard of its tests (`unit (shard N/3)`, `e2e (shard N/5)`) passed.
 
 ## 3. Passing tests is not "done"
 
