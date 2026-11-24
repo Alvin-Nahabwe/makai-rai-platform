@@ -453,9 +453,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system affects no one; this prints in the model card.",
+    "to": "Say why no list of those affected applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why the system affects no one; this prints in the model card."
+    "final": "Say why no list of those affected applies to this project; this prints in the model card."
   },
   {
     "row": "Q-PP-03.practiceSameAs",
@@ -589,9 +589,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no group could be affected differently.",
+    "to": "Say why no group assessment applies to this project.",
     "decision": "pending",
-    "final": "Say why no group could be affected differently."
+    "final": "Say why no group assessment applies to this project."
   },
   {
     "row": "Q-PP-04.practiceSameAs",
@@ -2229,9 +2229,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no one could be missing from the data; this prints in the data card.",
+    "to": "Say why no selection-bias check applies to this project; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no one could be missing from the data; this prints in the data card."
+    "final": "Say why no selection-bias check applies to this project; this prints in the data card."
   },
   {
     "row": "Q-PP-18.practiceSameAs",
@@ -2733,9 +2733,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system will meet no rare cases; this prints in the data card and model card.",
+    "to": "Say why no rare-case check applies to this project; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Say why the system will meet no rare cases; this prints in the data card and model card."
+    "final": "Say why no rare-case check applies to this project; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-22.practiceSameAs",

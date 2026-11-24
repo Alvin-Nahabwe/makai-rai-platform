@@ -105,7 +105,7 @@
                 "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; this prints in the model card.",
                 "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; this prints in the model card.",
                 "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; this prints in the model card.",
-                "not_applicable": "Say why the system affects no one; this prints in the model card."
+                "not_applicable": "Say why no list of those affected applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -138,7 +138,7 @@
                 "done": "Name each group, its main effect, your response to the largest risk and where it is recorded. Describe groups, never individuals; upload no records about them.",
                 "partly": "Name the groups assessed and those still to assess. Describe groups, never individuals, and upload no records about them.",
                 "not_yet": "Say when you will assess this, or what is blocking it.",
-                "not_applicable": "Say why no group could be affected differently."
+                "not_applicable": "Say why no group assessment applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -692,7 +692,7 @@
                 "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; this prints in the data card.",
                 "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; this prints in the data card.",
                 "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; this prints in the data card.",
-                "not_applicable": "Say why no one could be missing from the data; this prints in the data card."
+                "not_applicable": "Say why no selection-bias check applies to this project; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -823,7 +823,7 @@
                 "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; this prints in the data card and model card.",
                 "partly": "Name the rare cases counted so far and those still to count; this prints in the data card and model card.",
                 "not_yet": "Name the rare cases you expect the system to meet and when you will count them; this prints in the data card and model card.",
-                "not_applicable": "Say why the system will meet no rare cases; this prints in the data card and model card."
+                "not_applicable": "Say why no rare-case check applies to this project; this prints in the data card and model card."
               },
               "practiceSameAs": [
                 "5.0.0",
