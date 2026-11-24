@@ -17,7 +17,8 @@ import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, STATUS_OPTIONS, problemSummary } from '@/lib/decision/copy';
+import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
+import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -102,7 +103,7 @@ export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: n
   if (data.question.type === 'gate') {
     return { text: join(d.scopeAnswer === null ? '' : C.scope[d.scopeAnswer]), finding: false, tips: [] };
   }
-  const label = STATUS_OPTIONS.find((o) => o.value === d.status)?.label;
+  const label = d.status === null ? undefined : answerLabel(data.runningQuestion, d.status);
   // Lane 6's first-use rule (T3c item 10b): with no status chosen no card's definition shows, so the line gives Partly, Not
   // yet and "version" each its (i); "finding" has its definition after the line. "accepted risk" in the owner's sentence too.
   if (d.status === null || label === undefined) {

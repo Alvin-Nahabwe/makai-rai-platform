@@ -34,6 +34,14 @@ export const STATUS_OPTIONS: ReadonlyArray<{ value: DecisionStatus; label: strin
   { value: 'not_applicable', label: 'Not applicable', help: TERM_NOT_APPLICABLE.definition },
 ]);
 
+/**
+ * The help line under an answer whose label is the question's own (content 5.2.0, D6): it says which of the four shared
+ * answers the label counts as, so the stored meaning stays visible beside the question's words.
+ */
+export function countsAs(word: string): string {
+  return `Counts as ${word}`;
+}
+
 export const FINDING_NOTE = 'If you choose Partly or Not yet, a finding is raised for this question (or stays open).';
 
 export const SCOPE_OPTIONS: ReadonlyArray<{ value: ScopeAnswer; label: string; help: string }> = Object.freeze([

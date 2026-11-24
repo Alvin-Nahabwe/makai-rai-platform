@@ -13,8 +13,11 @@ export type RadioCardsProps = {
   /**
    * `term` (lane 2 T3c item 10a, additive): the vocabulary id whose word the label is and whose definition the help is (spec 6
    * first use): the label's words carry `data-term` and the help sentence `data-definition`. Absent: markup unchanged.
+   * `helpWord` (per-question wording, content 5.2.0): the word inside `help` that is the term, for an option whose label is
+   * the question's own. With it the term mark moves from the label to that word, and `definition` (the vocabulary's own
+   * sentence) follows the help line as its own `data-definition` element. Absent: as above.
    */
-  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string; term?: string }>;
+  options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string; term?: string; helpWord?: string; definition?: string }>;
   /** Pass `value` (controlled, with `onChange`) or `defaultValue`, never both. */
   value?: string;
   defaultValue?: string;
@@ -54,6 +57,20 @@ export function RadioCards({
   'aria-describedby': callerDescribedBy, helpBelow = false,
 }: RadioCardsProps): ReactElement {
   const helpIdOf = (o: RadioCardsProps['options'][number]) => (o.help === undefined ? undefined : `${o.id ?? `${name}-${o.value}`}-help`);
+  // The help's words. With `helpWord` the term sits on that word and its definition follows; else the sentence is the definition.
+  const helpOf = (o: RadioCardsProps['options'][number], id: string | undefined, key?: string): ReactElement | null => {
+    if (o.help === undefined) return null;
+    const at = o.term !== undefined && o.helpWord !== undefined ? o.help.indexOf(o.helpWord) : -1;
+    if (at === -1 || o.helpWord === undefined || o.definition === undefined) {
+      return <p key={key} className="ui-radio-card__help" id={id} data-definition={o.term}>{o.help}</p>;
+    }
+    return (
+      <p key={key} className="ui-radio-card__help" id={id}>
+        {o.help.slice(0, at)}<span data-term={o.term}>{o.helpWord}</span>{o.help.slice(at + o.helpWord.length)}. <span data-definition={o.term}>{o.definition}</span>
+      </p>
+    );
+  };
+  const termOnLabel = (o: RadioCardsProps['options'][number]) => o.term !== undefined && o.helpWord === undefined;
   const hintId = given(legendHint) ? `${name}-hint` : undefined;
   const errorId = `${name}-error`;
   return (
@@ -79,16 +96,16 @@ export function RadioCards({
                   aria-describedby={helpId}
                 />
                 {o.mark === undefined ? null : <MarkShape kind={o.mark} size={20} />}
-                {o.term === undefined ? o.label : <span data-term={o.term}>{o.label}</span>}
+                {termOnLabel(o) ? <span data-term={o.term}>{o.label}</span> : o.label}
               </label>
-              {helpId === undefined || helpBelow ? null : <p className="ui-radio-card__help" id={helpId} data-definition={o.term}>{o.help}</p>}
+              {helpId === undefined || helpBelow ? null : helpOf(o, helpId)}
             </div>
           );
         })}
       </div>
       {helpBelow ? (
         <div className="ui-radio-cards__helps">
-          {options.map((o) => (o.help === undefined ? null : <p key={o.value} className="ui-radio-card__help" id={helpIdOf(o)} data-definition={o.term}>{o.help}</p>))}
+          {options.map((o) => helpOf(o, helpIdOf(o), o.value))}
         </div>
       ) : null}
     </fieldset>

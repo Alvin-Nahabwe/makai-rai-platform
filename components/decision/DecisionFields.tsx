@@ -7,7 +7,8 @@ import { DateField } from '@/components/ui/DateField';
 import { RadioCards } from '@/components/ui/RadioCards';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
-import { OUTSIDE_ROLE_LABELS, REASON_OPTIONAL, SCOPE_OPTIONS, STATUS_OPTIONS, WHO_WHEN_COPY, deciderLabel, reasonCount, whoWhenSummary } from '@/lib/decision/copy';
+import { OUTSIDE_ROLE_LABELS, REASON_OPTIONAL, SCOPE_OPTIONS, STATUS_OPTIONS, WHO_WHEN_COPY, countsAs, deciderLabel, reasonCount, whoWhenSummary } from '@/lib/decision/copy';
+import { answerLabel, answerPrompt } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX, declaredDateFromParts } from '@/lib/decision/rules';
@@ -96,11 +97,17 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   // R3 (owner, 15 Nov 2026): four short cards in two columns, each the radio, the mark and the word; each card's sentence
   // shows under the grid for the card that has focus, or else the chosen one (DecisionFields.css). What the status will do
   // is the consequence line before Save (R2), not a hint under the legend.
+  // D4: the labels and prompts are the running question's, also for an answer saved under an older version.
+  const labelled = data.runningQuestion.answerLabels !== undefined;
   const statusGroup = (
     <RadioCards
       name="status" legend={F.fields.status} disabled={disabled} error={err('status')} columns={2} helpBelow
       value={value.status ?? ''}
-      options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label, help: o.help, mark: o.value, id: `decision-status-${o.value}`, term: STATUS_TERMS[o.value].id }))}
+      options={STATUS_OPTIONS.map((o) => ({
+        value: o.value, label: answerLabel(data.runningQuestion, o.value), mark: o.value, id: `decision-status-${o.value}`, term: STATUS_TERMS[o.value].id,
+        // A question with its own labels names the shared answer each one counts as (D6); the term sits on that word.
+        ...(labelled ? { help: countsAs(o.label), helpWord: o.label, definition: o.help } : { help: o.help }),
+      }))}
       onChange={(next) => {
         const status = STATUS_OPTIONS.find((o) => o.value === next)?.value ?? null;
         // A reason code belongs to one status (OD-C2 (a)); it does not follow the person to another.
@@ -158,7 +165,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   ) : null;
   // Ruling (a), 15 Nov 2026: the reason's hint is the question's own signed-off prompt (content 5.1.0), not one line for all.
   const erased = current?.reasonErased?.erasedOn ?? null;
-  const reasonHelp = [data.runningQuestion.reasonPrompt, chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
+  const reasonHelp = [answerPrompt(data.runningQuestion, value.status), chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
 
   // A former member who decided the current version stays selectable, named as the record names them.
   const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DecisionVersionView } from '@/types/api';
 import {
   DECISION_COPY, deciderLabel, FINDING_NOTE, M11, OUTSIDE_ROLE_LABELS, problemSummary, REASON_HELP, reasonCount, REQUEST_MESSAGES, savedLine,
-  savedMessage, SCOPE_OPTIONS, STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES,
+  countsAs, savedMessage, SCOPE_OPTIONS, STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES,
 } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
@@ -34,6 +34,11 @@ describe('lib/decision/copy.ts', () => {
     // plan line 926: the help sentences are the vocabulary's own definitions, character for character
     expect(STATUS_OPTIONS.map((o) => o.help)).toEqual([TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE].map((t) => t.definition));
     expect(FINDING_NOTE).toBe('If you choose Partly or Not yet, a finding is raised for this question (or stays open).');
+  });
+
+  it('countsAs names the generic word an answer counts as', () => {
+    expect(countsAs('Done')).toBe('Counts as Done');
+    expect(countsAs('Not applicable')).toBe('Counts as Not applicable');
   });
 
   it('FR-DEC-02: the three scope answers in order with the 7.5.6 helper texts', () => {

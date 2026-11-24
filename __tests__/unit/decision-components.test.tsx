@@ -9,7 +9,7 @@ import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
-import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
+import { deciderLabel, FINDING_NOTE, STATUS_OPTIONS } from '@/lib/decision/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { STATUS_MARK_COPY } from '@/lib/ui/copy';
@@ -106,6 +106,71 @@ describe('S-12 decision fields', () => {
     expect(h).toContain('212 / 4,000 characters');
     expect(h).toMatch(/<textarea[^>]*aria-describedby="[^"]*reason-help[^"]*"/);
     expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
+  });
+
+  describe('per-question wording (content 5.2.0)', () => {
+    const LABELLED = {
+      ...QUESTION,
+      answerLabels: { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not yet compared', not_applicable: 'Does not apply' },
+      answerPrompts: { done: 'Say what you compared.', partly: 'Say what is still to compare.', not_yet: 'Say when you will compare.', not_applicable: 'Say why comparing does not apply.' },
+    } as LoadedQuestion;
+    const radioNames = (h: string) => [...h.matchAll(/<label class="ui-radio-card__label"[^>]*>([\s\S]*?)<\/label>/g)]
+      .map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<input[^>]*>/g, '').replace(/<[^>]+>/g, ''));
+    const withCodes = [{ code: 'ny_planned_later' as const, status: 'not_yet' as const, label: 'Planned for later', useWhen: '', reasonMustSay: 'Name the date.' }];
+
+    it('the status radios are named by the question\'s labels, each with "Counts as <word>" help carrying the term', () => {
+      const h = html({ runningQuestion: LABELLED });
+      expect(radioNames(h)).toEqual(['Yes, we compared', 'Partly compared', 'Not yet compared', 'Does not apply']);
+      for (const [v, word, term] of [['done', 'Done', 'done'], ['partly', 'Partly', 'partly'], ['not_yet', 'Not yet', 'not-yet'], ['not_applicable', 'Not applicable', 'not-applicable']]) {
+        const help = h.match(new RegExp(`<p[^>]*id="decision-status-${v}-help"[^>]*>[\\s\\S]*?</p>`))?.[0] ?? '';
+        expect(help.replace(/<[^>]+>/g, ''), v).toContain(`Counts as ${word}`);
+        expect(help, v).toContain(`<span data-term="${term}">${word}</span>`);
+      }
+      expect(h).not.toMatch(/<span data-term[^>]*>Yes, we compared/);
+    });
+
+    it('the text box prompt is the chosen answer\'s prompt and changes with the answer; the typed note is kept', () => {
+      const help = (h: string) => h.match(/<p id="decision-reason-help"[^>]*>([^<]*)<\/p>/)?.[1] ?? '';
+      const partly = html({ runningQuestion: LABELLED }, { status: 'partly', reason: 'abc' });
+      expect(help(partly)).toBe('Say what is still to compare.');
+      const notYet = html({ runningQuestion: LABELLED, reasonCodes: withCodes }, { status: 'not_yet', reason: 'abc', reasonCode: 'ny_planned_later' });
+      expect(help(notYet)).toBe('Say when you will compare. Name the date.');
+      expect(notYet).toMatch(/<textarea[^>]*>abc<\/textarea>/);
+      const none = html({ runningQuestion: LABELLED }, { status: null });
+      expect(help(none)).toBe(PANEL.runningQuestion.reasonPrompt);
+      // Switching the answer patches the status and the code only; the draft's reason is left as typed.
+      const seen: DecisionDraft[] = [];
+      const tree = DecisionFields({ data: { ...PANEL, runningQuestion: LABELLED }, value: { ...EMPTY, status: 'partly', reason: 'abc' }, errors: [], disabled: false, onChange: (v) => seen.push(v), whoWhenOpen: false, onOpenWhoWhen: () => {} });
+      const radios = findAll(tree, (e) => e.props.name === 'status' && typeof e.props.onChange === 'function')[0];
+      (radios.props.onChange as (v: string) => void)('not_yet');
+      expect(seen[0].status).toBe('not_yet');
+      expect(seen[0].reason).toBe('abc');
+    });
+
+    it('the consequence line quotes the label', async () => {
+      const { consequenceOf } = await import('@/components/decision/DecisionForm');
+      const data = { ...PANEL, runningQuestion: LABELLED };
+      expect(consequenceOf({ ...EMPTY, status: 'partly' }, data, null).text).toContain('Saving \u2018Partly compared\u2019');
+      expect(consequenceOf({ ...EMPTY, status: 'partly' }, PANEL, null).text).toContain('Saving \u2018Partly\u2019');
+    });
+
+    it('the gate under labelled content keeps Yes, No and Not sure, its reasonPrompt, and no "Counts as" line', () => {
+      const gate = { ...LABELLED, id: 'Q-PP-GATE-SENSITIVE', type: 'gate', reasonPrompt: 'Gate prompt.' } as LoadedQuestion;
+      delete (gate as { answerPrompts?: unknown }).answerPrompts;
+      const h = html({ question: gate, runningQuestion: gate }, { scopeAnswer: 'yes' });
+      expect(radioNames(h)).toEqual(['Yes', 'No', 'Not sure']);
+      expect(h).toContain('<p id="decision-reason-help" class="decision-fields__help">Gate prompt.</p>');
+      expect(h).not.toContain('Counts as');
+    });
+
+    it('a question with no labels renders exactly as before', () => {
+      const h = html({}, { status: 'partly' });
+      expect(radioNames(h)).toEqual(['Done', 'Partly', 'Not yet', 'Not applicable']);
+      for (const o of STATUS_OPTIONS) expect(h).toContain(`id="decision-status-${o.value}-help"`);
+      for (const o of STATUS_OPTIONS) expect(h).toContain(`data-definition="${o.value === 'not_yet' ? 'not-yet' : o.value === 'not_applicable' ? 'not-applicable' : o.value}">${o.help}</p>`);
+      expect(h).not.toContain('Counts as');
+      expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
+    });
   });
 
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
