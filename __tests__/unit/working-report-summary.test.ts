@@ -337,6 +337,15 @@ describe('per-question wording in the working report and the documents (D4)', ()
       return resolveFields(map, snap, {}).fields[0].text ?? '';
     };
     expect(dc07('cv1', own)).toContain('Status: Partly compared');
+    // A not applicable decision prints its own version's word too, with the code's label after it (I2).
+    const na = (content: typeof plain): string => {
+      const r = record({ 'pre-processing': { decisions: [decision('Q-PP-18', 'not_applicable')] } }, { contents: new Map([['cv1', content]]) });
+      const snap: DocumentSnapshot = { ...planSnap(r, 'pre-processing'), documentType: 'data_card' };
+      const map = { ...loadFieldMap('data_card'), fields: loadFieldMap('data_card').fields.filter((f) => f.fieldId === 'DC-07') };
+      return resolveFields(map, snap, {}).fields[0].text ?? '';
+    };
+    expect(na(own)).toContain(`Does not apply here (${NA_CODE.label}).`);
+    expect(na(plain)).toContain(`Not applicable (${NA_CODE.label}).`);
     expect(dc07('cv0', plain)).toContain('Status: Partly');
     expect(dc07('cv0', plain)).not.toContain('Partly compared');
   });

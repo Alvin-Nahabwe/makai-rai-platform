@@ -290,7 +290,8 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 export function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
-  const stem = `Not applicable (${code.label}).`;
+  // The question's own word for the answer, read from the decision's own content (D4); the shared word when it names none.
+  const stem = `${answerLabel(content.questions.get(d.row.questionId) ?? {}, 'not_applicable')} (${code.label}).`;
   if (d.reasonErased !== null) return `${stem} Reason: ${docTextErasedLine(d.reasonErased.erasedOn)}`;
   return d.row.reason === null ? stem : `${stem} Reason: '${d.row.reason}'`;
 }
