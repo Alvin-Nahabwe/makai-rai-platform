@@ -5948,9 +5948,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; it prints in the model card.",
+    "to": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; this prints in the model card.",
     "decision": "pending",
-    "final": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; it prints in the model card."
+    "final": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; this prints in the model card."
   },
   {
     "row": "Q-PO-01.answerPrompts.partly",
@@ -5958,9 +5958,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which checks, thresholds and roles are set so far and which are still open; it prints in the model card.",
+    "to": "Say which checks, thresholds and roles are set so far and which are still open; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which checks, thresholds and roles are set so far and which are still open; it prints in the model card."
+    "final": "Say which checks, thresholds and roles are set so far and which are still open; this prints in the model card."
   },
   {
     "row": "Q-PO-01.answerPrompts.not_yet",
@@ -5968,9 +5968,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "If the system is not in use yet, say so; say what you plan to check and when. It prints in the model card.",
+    "to": "If the system is not in use yet, say so, then what you plan to check and when; this prints in the model card.",
     "decision": "pending",
-    "final": "If the system is not in use yet, say so; say what you plan to check and when. It prints in the model card."
+    "final": "If the system is not in use yet, say so, then what you plan to check and when; this prints in the model card."
   },
   {
     "row": "Q-PO-01.answerPrompts.not_applicable",
@@ -5978,9 +5978,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system will never be used outside the study; it prints in the model card.",
+    "to": "Say why the system will never be used outside the study; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why the system will never be used outside the study; it prints in the model card."
+    "final": "Say why the system will never be used outside the study; this prints in the model card."
   },
   {
     "row": "Q-PO-01.practiceSameAs",
@@ -6044,9 +6044,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.done",
     "from": null,
-    "to": "Yes, we wrote them down",
+    "to": "Yes, we wrote it down",
     "decision": "pending",
-    "final": "Yes, we wrote them down"
+    "final": "Yes, we wrote it down"
   },
   {
     "row": "Q-PO-02.answerLabels.partly",
@@ -6074,9 +6074,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Retraining will never apply",
+    "to": "No retraining procedure ever applies",
     "decision": "pending",
-    "final": "Retraining will never apply"
+    "final": "No retraining procedure ever applies"
   },
   {
     "row": "Q-PO-02.answerPrompts.done",
@@ -6084,9 +6084,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; it prints in the model card.",
+    "to": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; it prints in the model card."
+    "final": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; this prints in the model card."
   },
   {
     "row": "Q-PO-02.answerPrompts.partly",
@@ -6094,9 +6094,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the triggers, steps and roles set so far and what is still open; it prints in the model card.",
+    "to": "Name the triggers, steps and roles set so far and what is still open; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the triggers, steps and roles set so far and what is still open; it prints in the model card."
+    "final": "Name the triggers, steps and roles set so far and what is still open; this prints in the model card."
   },
   {
     "row": "Q-PO-02.answerPrompts.not_yet",
@@ -6104,9 +6104,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say when you will set the triggers and steps, and whether the system is in use yet; it prints in the model card.",
+    "to": "Say when you will set the triggers and steps, and whether the system is in use yet; this prints in the model card.",
     "decision": "pending",
-    "final": "Say when you will set the triggers and steps, and whether the system is in use yet; it prints in the model card."
+    "final": "Say when you will set the triggers and steps, and whether the system is in use yet; this prints in the model card."
   },
   {
     "row": "Q-PO-02.answerPrompts.not_applicable",
@@ -6114,9 +6114,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why your model will never be retrained; it prints in the model card.",
+    "to": "Say why no retraining procedure will ever apply to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why your model will never be retrained; it prints in the model card."
+    "final": "Say why no retraining procedure will ever apply to this project; this prints in the model card."
   },
   {
     "row": "Q-PO-02.practiceSameAs",
@@ -6160,9 +6160,9 @@
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "A person who can check and override the system catches errors before they harm someone, but only if the way to override is clear and people use it.",
-    "to": "A person who can check and override the system catches errors before they cause harm, if overriding is clear and used.",
+    "to": "A person who can check and override the system catches errors before they cause harm, only if overriding is clear and used.",
     "decision": "pending",
-    "final": "A person who can check and override the system catches errors before they cause harm, if overriding is clear and used."
+    "final": "A person who can check and override the system catches errors before they cause harm, only if overriding is clear and used."
   },
   {
     "row": "Q-PO-03.reasonPrompt",
@@ -6210,9 +6210,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Review by a person does not apply",
+    "to": "No review by a person applies",
     "decision": "pending",
-    "final": "Review by a person does not apply"
+    "final": "No review by a person applies"
   },
   {
     "row": "Q-PO-03.answerPrompts.done",
@@ -6250,9 +6250,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no output needs review by a person before it is acted on.",
+    "to": "Say why no review by a person applies to this project.",
     "decision": "pending",
-    "final": "Say why no output needs review by a person before it is acted on."
+    "final": "Say why no review by a person applies to this project."
   },
   {
     "row": "Q-PO-03.practiceSameAs",
@@ -6346,9 +6346,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Assigning roles does not apply",
+    "to": "No accountability matrix applies",
     "decision": "pending",
-    "final": "Assigning roles does not apply"
+    "final": "No accountability matrix applies"
   },
   {
     "row": "Q-PO-04.answerPrompts.done",
@@ -6386,9 +6386,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no responsibility for outcomes needs assigning.",
+    "to": "Say why no accountability matrix applies to this project.",
     "decision": "pending",
-    "final": "Say why no responsibility for outcomes needs assigning."
+    "final": "Say why no accountability matrix applies to this project."
   },
   {
     "row": "Q-PO-04.practiceSameAs",
@@ -6412,9 +6412,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you created an incident response plan for when the AI system produces harmful outputs?",
-    "to": "Have you written an incident response plan for when your system causes harm?",
+    "to": "Have you written an incident response plan for when your system causes or may cause harm?",
     "decision": "pending",
-    "final": "Have you written an incident response plan for when your system causes harm?"
+    "final": "Have you written an incident response plan for when your system causes or may cause harm?"
   },
   {
     "row": "Q-PO-05.expectedPractice",
@@ -6482,9 +6482,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "An incident plan does not apply",
+    "to": "No incident plan applies",
     "decision": "pending",
-    "final": "An incident plan does not apply"
+    "final": "No incident plan applies"
   },
   {
     "row": "Q-PO-05.answerPrompts.done",
@@ -6522,9 +6522,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why your system could not cause harm that needs a response.",
+    "to": "Say why no incident plan applies to this project.",
     "decision": "pending",
-    "final": "Say why your system could not cause harm that needs a response."
+    "final": "Say why no incident plan applies to this project."
   },
   {
     "row": "Q-PO-05.practiceSameAs",
@@ -6618,9 +6618,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Training users does not apply",
+    "to": "No user training or guidance applies",
     "decision": "pending",
-    "final": "Training users does not apply"
+    "final": "No user training or guidance applies"
   },
   {
     "row": "Q-PO-06.answerPrompts.done",
@@ -6658,9 +6658,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no one who uses the system's outputs needs training.",
+    "to": "Say why no user training or guidance applies to this project.",
     "decision": "pending",
-    "final": "Say why no one who uses the system's outputs needs training."
+    "final": "Say why no user training or guidance applies to this project."
   },
   {
     "row": "Q-PO-06.practiceSameAs",
@@ -6754,9 +6754,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Showing outputs does not apply",
+    "to": "No display of outputs applies",
     "decision": "pending",
-    "final": "Showing outputs does not apply"
+    "final": "No display of outputs applies"
   },
   {
     "row": "Q-PO-07.answerPrompts.done",
@@ -6794,9 +6794,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no user sees the outputs.",
+    "to": "Say why no display of outputs applies to this project.",
     "decision": "pending",
-    "final": "Say why no user sees the outputs."
+    "final": "Say why no display of outputs applies to this project."
   },
   {
     "row": "Q-PO-07.practiceSameAs",
@@ -6888,9 +6888,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "A staged start does not apply",
+    "to": "No staged start applies",
     "decision": "pending",
-    "final": "A staged start does not apply"
+    "final": "No staged start applies"
   },
   {
     "row": "Q-PO-16.answerPrompts.done",
@@ -6928,9 +6928,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why a staged start does not apply to your system.",
+    "to": "Say why no staged start applies to this project.",
     "decision": "pending",
-    "final": "Say why a staged start does not apply to your system."
+    "final": "Say why no staged start applies to this project."
   },
   {
     "row": "Q-PO-16.practiceSameAs",
@@ -6954,9 +6954,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Once the system is in use, do you check results for each group as well as overall accuracy?",
-    "to": "Once in use, do you check results for each group, not only overall accuracy?",
+    "to": "Once your system is in use, do you check each group's results, not only overall accuracy?",
     "decision": "pending",
-    "final": "Once in use, do you check results for each group, not only overall accuracy?"
+    "final": "Once your system is in use, do you check each group's results, not only overall accuracy?"
   },
   {
     "row": "Q-PO-17.expectedPractice",
@@ -7024,9 +7024,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Results by group do not apply",
+    "to": "No monitoring by group ever applies",
     "decision": "pending",
-    "final": "Results by group do not apply"
+    "final": "No monitoring by group ever applies"
   },
   {
     "row": "Q-PO-17.answerPrompts.done",
@@ -7064,9 +7064,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why group results do not apply; for a system not yet in use, pick No, not yet.",
+    "to": "Say why no monitoring by group will ever apply to this project.",
     "decision": "pending",
-    "final": "Say why group results do not apply; for a system not yet in use, pick No, not yet."
+    "final": "Say why no monitoring by group will ever apply to this project."
   },
   {
     "row": "Q-PO-17.practiceSameAs",
@@ -7160,9 +7160,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Flag or stop thresholds do not apply",
+    "to": "No flag or stop threshold applies",
     "decision": "pending",
-    "final": "Flag or stop thresholds do not apply"
+    "final": "No flag or stop threshold applies"
   },
   {
     "row": "Q-PO-18.answerPrompts.done",
@@ -7200,9 +7200,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no threshold for flagging or stopping applies.",
+    "to": "Say why no flag or stop threshold applies to this project.",
     "decision": "pending",
-    "final": "Say why no threshold for flagging or stopping applies."
+    "final": "Say why no flag or stop threshold applies to this project."
   },
   {
     "row": "Q-PO-18.practiceSameAs",
@@ -7236,9 +7236,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "Users and the people affected have a way to report problems or concerns that suits them, such as a phone line, SMS or a community meeting. The reports reach a person in a set role, and the team records what it did about them.",
-    "to": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did.",
+    "to": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did about them.",
     "decision": "pending",
-    "final": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did."
+    "final": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did about them."
   },
   {
     "row": "Q-PO-08.whyAsked",
@@ -7246,9 +7246,9 @@
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "People affected by a system often see its problems first, and a channel they can use, with visible action on what they say, keeps the system honest.",
-    "to": "People affected often see problems first; a channel they can use, with visible action on what they say, keeps the system honest.",
+    "to": "People affected often see problems first; a channel they can use, with visible action on their reports, keeps the system honest.",
     "decision": "pending",
-    "final": "People affected often see problems first; a channel they can use, with visible action on what they say, keeps the system honest."
+    "final": "People affected often see problems first; a channel they can use, with visible action on their reports, keeps the system honest."
   },
   {
     "row": "Q-PO-08.reasonPrompt",
@@ -7296,9 +7296,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Feedback channels do not apply",
+    "to": "No feedback channel applies",
     "decision": "pending",
-    "final": "Feedback channels do not apply"
+    "final": "No feedback channel applies"
   },
   {
     "row": "Q-PO-08.answerPrompts.done",
@@ -7306,9 +7306,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Name the channels, the role receiving reports, how many came in and where actions are logged; upload nothing that identifies people.",
+    "to": "Name the channels, the role receiving reports, the number received and where actions are logged; upload nothing that identifies people.",
     "decision": "pending",
-    "final": "Name the channels, the role receiving reports, how many came in and where actions are logged; upload nothing that identifies people."
+    "final": "Name the channels, the role receiving reports, the number received and where actions are logged; upload nothing that identifies people."
   },
   {
     "row": "Q-PO-08.answerPrompts.partly",
@@ -7316,9 +7316,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the channels open so far, who receives reports, by role, and what is missing.",
+    "to": "Name the channels open so far, who receives reports, by role, and what is missing; upload nothing that identifies people.",
     "decision": "pending",
-    "final": "Name the channels open so far, who receives reports, by role, and what is missing."
+    "final": "Name the channels open so far, who receives reports, by role, and what is missing; upload nothing that identifies people."
   },
   {
     "row": "Q-PO-08.answerPrompts.not_yet",
@@ -7336,9 +7336,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no user or affected person needs a way to report problems.",
+    "to": "Say why no feedback channel applies to this project.",
     "decision": "pending",
-    "final": "Say why no user or affected person needs a way to report problems."
+    "final": "Say why no feedback channel applies to this project."
   },
   {
     "row": "Q-PO-08.practiceSameAs",
@@ -7362,9 +7362,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
-    "to": "Can people affected by a decision your system supports request a review?",
+    "to": "Can people affected by a decision your system supports ask for a review?",
     "decision": "pending",
-    "final": "Can people affected by a decision your system supports request a review?"
+    "final": "Can people affected by a decision your system supports ask for a review?"
   },
   {
     "row": "Q-PO-09.expectedPractice",
@@ -7382,9 +7382,9 @@
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "A person who cannot challenge a decision about them has no remedy for an error, and review by a person catches what the system got wrong.",
-    "to": "Someone unable to challenge a decision about them has no remedy for an error; a person's review catches the system's mistakes.",
+    "to": "Someone unable to challenge a decision about them has no remedy for errors; a person's review catches the system's mistakes.",
     "decision": "pending",
-    "final": "Someone unable to challenge a decision about them has no remedy for an error; a person's review catches the system's mistakes."
+    "final": "Someone unable to challenge a decision about them has no remedy for errors; a person's review catches the system's mistakes."
   },
   {
     "row": "Q-PO-09.reasonPrompt",
@@ -7432,9 +7432,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "It supports no decision about people",
+    "to": "No way to ask for a review applies",
     "decision": "pending",
-    "final": "It supports no decision about people"
+    "final": "No way to ask for a review applies"
   },
   {
     "row": "Q-PO-09.answerPrompts.done",
@@ -7452,9 +7452,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not.",
+    "to": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not; never personal details.",
     "decision": "pending",
-    "final": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not."
+    "final": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not; never personal details."
   },
   {
     "row": "Q-PO-09.answerPrompts.not_yet",
@@ -7472,9 +7472,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system supports no decision about a person.",
+    "to": "Say why no way to ask for a review applies to this project.",
     "decision": "pending",
-    "final": "Say why the system supports no decision about a person."
+    "final": "Say why no way to ask for a review applies to this project."
   },
   {
     "row": "Q-PO-09.practiceSameAs",
@@ -7568,9 +7568,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Documentation does not apply",
+    "to": "No system documentation applies",
     "decision": "pending",
-    "final": "Documentation does not apply"
+    "final": "No system documentation applies"
   },
   {
     "row": "Q-PO-10.answerPrompts.done",
@@ -7608,9 +7608,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system needs no documentation to run.",
+    "to": "Say why no system documentation applies to this project.",
     "decision": "pending",
-    "final": "Say why the system needs no documentation to run."
+    "final": "Say why no system documentation applies to this project."
   },
   {
     "row": "Q-PO-10.practiceSameAs",
@@ -7684,9 +7684,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.partly",
     "from": null,
-    "to": "Some of the measures it needs",
+    "to": "Some of the measures our setting needs",
     "decision": "pending",
-    "final": "Some of the measures it needs"
+    "final": "Some of the measures our setting needs"
   },
   {
     "row": "Q-PO-11.answerLabels.not_yet",
@@ -7744,9 +7744,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no governance measure applies to your system.",
+    "to": "Say why no governance measure applies to this project.",
     "decision": "pending",
-    "final": "Say why no governance measure applies to your system."
+    "final": "Say why no governance measure applies to this project."
   },
   {
     "row": "Q-PO-11.practiceSameAs",
@@ -7840,9 +7840,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking by setting does not apply",
+    "to": "No check by setting applies",
     "decision": "pending",
-    "final": "Checking by setting does not apply"
+    "final": "No check by setting applies"
   },
   {
     "row": "Q-PO-12.answerPrompts.done",
@@ -7880,9 +7880,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why comparing settings does not apply to your system.",
+    "to": "Say why no check by setting applies to this project.",
     "decision": "pending",
-    "final": "Say why comparing settings does not apply to your system."
+    "final": "Say why no check by setting applies to this project."
   },
   {
     "row": "Q-PO-12.practiceSameAs",
@@ -7976,9 +7976,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Planning the end does not apply",
+    "to": "No retirement plan applies",
     "decision": "pending",
-    "final": "Planning the end does not apply"
+    "final": "No retirement plan applies"
   },
   {
     "row": "Q-PO-13.answerPrompts.done",
@@ -8016,9 +8016,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why planning the end does not apply to your system.",
+    "to": "Say why no retirement plan applies to this project.",
     "decision": "pending",
-    "final": "Say why planning the end does not apply to your system."
+    "final": "Say why no retirement plan applies to this project."
   },
   {
     "row": "Q-PO-13.practiceSameAs",
@@ -8112,9 +8112,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Unusual inputs do not apply",
+    "to": "No unusual-input handling applies",
     "decision": "pending",
-    "final": "Unusual inputs do not apply"
+    "final": "No unusual-input handling applies"
   },
   {
     "row": "Q-PO-14.answerPrompts.done",
@@ -8152,9 +8152,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why your system cannot meet inputs unlike those it was built on.",
+    "to": "Say why no unusual-input handling applies to this project.",
     "decision": "pending",
-    "final": "Say why your system cannot meet inputs unlike those it was built on."
+    "final": "Say why no unusual-input handling applies to this project."
   },
   {
     "row": "Q-PO-14.practiceSameAs",
@@ -8248,9 +8248,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Telling stakeholders does not apply",
+    "to": "No briefing on use and limits applies",
     "decision": "pending",
-    "final": "Telling stakeholders does not apply"
+    "final": "No briefing on use and limits applies"
   },
   {
     "row": "Q-PO-15.answerPrompts.done",
@@ -8258,9 +8258,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; it prints in the model card.",
+    "to": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; it prints in the model card."
+    "final": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; this prints in the model card."
   },
   {
     "row": "Q-PO-15.answerPrompts.partly",
@@ -8268,9 +8268,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Give the intended use and main limits first, then who has been told so far and who not; it prints in the model card.",
+    "to": "Give the intended use and main limits first, then who has been told so far and who not, by role or organisation; this prints in the model card.",
     "decision": "pending",
-    "final": "Give the intended use and main limits first, then who has been told so far and who not; it prints in the model card."
+    "final": "Give the intended use and main limits first, then who has been told so far and who not, by role or organisation; this prints in the model card."
   },
   {
     "row": "Q-PO-15.answerPrompts.not_yet",
@@ -8278,9 +8278,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Give the intended use and main limits first, then when and how you will tell people; it prints in the model card.",
+    "to": "Give the intended use and main limits first, then when and how you will tell people; this prints in the model card.",
     "decision": "pending",
-    "final": "Give the intended use and main limits first, then when and how you will tell people; it prints in the model card."
+    "final": "Give the intended use and main limits first, then when and how you will tell people; this prints in the model card."
   },
   {
     "row": "Q-PO-15.answerPrompts.not_applicable",
@@ -8288,9 +8288,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no one else needs to know the intended use and limits; it prints in the model card.",
+    "to": "Give the intended use and main limits first, then say why no briefing on use and limits applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why no one else needs to know the intended use and limits; it prints in the model card."
+    "final": "Give the intended use and main limits first, then say why no briefing on use and limits applies to this project; this prints in the model card."
   },
   {
     "row": "Q-PO-15.practiceSameAs",
@@ -8382,9 +8382,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Community input does not apply",
+    "to": "No community input applies",
     "decision": "pending",
-    "final": "Community input does not apply"
+    "final": "No community input applies"
   },
   {
     "row": "Q-PO-20.answerPrompts.done",
@@ -8402,9 +8402,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say who has taken part so far, by group or role, and in which parts of the work not yet.",
+    "to": "Say who has taken part so far, by group or role, and where not yet; upload no participant list.",
     "decision": "pending",
-    "final": "Say who has taken part so far, by group or role, and in which parts of the work not yet."
+    "final": "Say who has taken part so far, by group or role, and where not yet; upload no participant list."
   },
   {
     "row": "Q-PO-20.answerPrompts.not_yet",
@@ -8422,9 +8422,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why community input does not apply to your system.",
+    "to": "Say why no community input applies to this project.",
     "decision": "pending",
-    "final": "Say why community input does not apply to your system."
+    "final": "Say why no community input applies to this project."
   },
   {
     "row": "Q-PO-20.practiceSameAs",
@@ -8518,9 +8518,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Workflow changes do not apply",
+    "to": "No workflow check applies",
     "decision": "pending",
-    "final": "Workflow changes do not apply"
+    "final": "No workflow check applies"
   },
   {
     "row": "Q-PO-21.answerPrompts.done",
@@ -8558,9 +8558,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why workflow changes do not apply to your system.",
+    "to": "Say why no workflow check applies to this project.",
     "decision": "pending",
-    "final": "Say why workflow changes do not apply to your system."
+    "final": "Say why no workflow check applies to this project."
   },
   {
     "row": "Q-PO-21.practiceSameAs",
@@ -8584,9 +8584,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
-    "to": "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?",
+    "to": "Have you identified the data protection and ethics rules that apply and obtained the approvals and registrations they require?",
     "decision": "pending",
-    "final": "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?"
+    "final": "Have you identified the data protection and ethics rules that apply and obtained the approvals and registrations they require?"
   },
   {
     "row": "Q-PO-22.expectedPractice",
@@ -8594,9 +8594,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
-    "to": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each such country. You obtain the approvals and registrations they require and record each with its reference and date.",
+    "to": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each country concerned. You obtain the approvals and registrations they require and record each with its reference and date.",
     "decision": "pending",
-    "final": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each such country. You obtain the approvals and registrations they require and record each with its reference and date."
+    "final": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each country concerned. You obtain the approvals and registrations they require and record each with its reference and date."
   },
   {
     "row": "Q-PO-22.whyAsked",
@@ -8634,9 +8634,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.partly",
     "from": null,
-    "to": "Partly, some approvals held",
+    "to": "Partly, some of it in place",
     "decision": "pending",
-    "final": "Partly, some approvals held"
+    "final": "Partly, some of it in place"
   },
   {
     "row": "Q-PO-22.answerLabels.not_yet",
@@ -8684,9 +8684,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which rules you have identified so far and when you expect each approval.",
+    "to": "Say when you will identify the rules that apply, or what is blocking it.",
     "decision": "pending",
-    "final": "Say which rules you have identified so far and when you expect each approval."
+    "final": "Say when you will identify the rules that apply, or what is blocking it."
   },
   {
     "row": "Q-PO-22.answerPrompts.not_applicable",
@@ -8694,9 +8694,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data protection, research ethics or sector rule applies.",
+    "to": "Say why no data protection, research ethics or sector rule applies to this project; the platform makes no judgement of your statement.",
     "decision": "pending",
-    "final": "Say why no data protection, research ethics or sector rule applies."
+    "final": "Say why no data protection, research ethics or sector rule applies to this project; the platform makes no judgement of your statement."
   },
   {
     "row": "Q-PO-22.practiceSameAs",
@@ -8788,9 +8788,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Regular reviews do not apply",
+    "to": "No regular review applies",
     "decision": "pending",
-    "final": "Regular reviews do not apply"
+    "final": "No regular review applies"
   },
   {
     "row": "Q-PO-23.answerPrompts.done",
@@ -8828,9 +8828,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why regular reviews do not apply to your system.",
+    "to": "Say why no regular review applies to this project.",
     "decision": "pending",
-    "final": "Say why regular reviews do not apply to your system."
+    "final": "Say why no regular review applies to this project."
   },
   {
     "row": "Q-PO-23.practiceSameAs",
@@ -8854,9 +8854,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you considered the AI system's impact on equity of access to services?",
-    "to": "Have you checked whether your system leaves anyone without access to the service?",
+    "to": "Have you checked whether people with less access can reach and use your system?",
     "decision": "pending",
-    "final": "Have you checked whether your system leaves anyone without access to the service?"
+    "final": "Have you checked whether people with less access can reach and use your system?"
   },
   {
     "row": "Q-PO-24.expectedPractice",
@@ -8924,9 +8924,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking access does not apply",
+    "to": "No access check applies",
     "decision": "pending",
-    "final": "Checking access does not apply"
+    "final": "No access check applies"
   },
   {
     "row": "Q-PO-24.answerPrompts.done",
@@ -8964,9 +8964,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why checking access does not apply to your system.",
+    "to": "Say why no access check applies to this project.",
     "decision": "pending",
-    "final": "Say why checking access does not apply to your system."
+    "final": "Say why no access check applies to this project."
   },
   {
     "row": "Q-PO-24.practiceSameAs",

@@ -387,8 +387,8 @@
       "action": "reword",
       "id": "Q-PO-05",
       "originalText": "Have you created an incident response plan for when the AI system produces harmful outputs?",
-      "text": "Have you written an incident response plan for when your system causes harm?",
-      "reason": "A plan for responding when the system produces harmful outputs."
+      "text": "Have you written an incident response plan for when your system causes or may cause harm?",
+      "reason": "A plan for responding when the system causes or may cause harm."
     },
     {
       "action": "reword",
@@ -415,7 +415,7 @@
       "action": "reword",
       "id": "Q-PO-17",
       "originalText": "Have you established monitoring for fairness metrics in production, not just accuracy?",
-      "text": "Once in use, do you check results for each group, not only overall accuracy?",
+      "text": "Once your system is in use, do you check each group's results, not only overall accuracy?",
       "reason": "Survivor of Q-PO-EXTRA-01: monitoring fairness in production is per-group monitoring. Gains PO-06."
     },
     {
@@ -443,7 +443,7 @@
       "action": "reword",
       "id": "Q-PO-09",
       "originalText": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
-      "text": "Can people affected by a decision your system supports request a review?",
+      "text": "Can people affected by a decision your system supports ask for a review?",
       "reason": "Contesting or appealing a decision is a right distinct from giving feedback (Q-PO-08)."
     },
     {
@@ -506,8 +506,8 @@
       "action": "reword",
       "id": "Q-PO-22",
       "originalText": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
-      "text": "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?",
-      "reason": "Allow-listed by id (AL-7); stays the team's own statement (worked example 8)."
+      "text": "Have you identified the data protection and ethics rules that apply and obtained the approvals and registrations they require?",
+      "reason": "Reworded to the practice's acts (identify the rules, obtain the approvals and registrations); no claim word; the owner rules on SRS 10.1.6 (worked example 8)."
     },
     {
       "action": "reword",
@@ -520,7 +520,7 @@
       "action": "reword",
       "id": "Q-PO-24",
       "originalText": "Have you considered the AI system's impact on equity of access to services?",
-      "text": "Have you checked whether your system leaves anyone without access to the service?",
+      "text": "Have you checked whether people with less access can reach and use your system?",
       "reason": "Equity of access to the services the system supports."
     },
     {
