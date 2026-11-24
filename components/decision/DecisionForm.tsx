@@ -103,12 +103,12 @@ export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: n
   if (data.question.type === 'gate') {
     return { text: join(d.scopeAnswer === null ? '' : C.scope[d.scopeAnswer]), finding: false, tips: [] };
   }
-  const label = d.status === null ? undefined : answerLabel(data.runningQuestion, d.status);
   // Lane 6's first-use rule (T3c item 10b): with no status chosen no card's definition shows, so the line gives Partly, Not
   // yet and "version" each its (i); "finding" has its definition after the line. "accepted risk" in the owner's sentence too.
-  if (d.status === null || label === undefined) {
+  if (d.status === null) {
     return { text: join(FINDING_NOTE), finding: true, tips: version === '' ? [TERM_PARTLY, TERM_NOT_YET] : [TERM_PARTLY, TERM_NOT_YET, TERM_VERSION_OF_A_DECISION] };
   }
+  const label = answerLabel(data.runningQuestion, d.status);
   const open = data.openFinding !== null;
   if (d.status === 'partly' || d.status === 'not_yet') {
     return open ? { text: join(C.keepsOpen(label)), finding: true, tips: [] } : { text: join(C.raises(label)), finding: true, tips: [TERM_ACCEPTED_RISK] };

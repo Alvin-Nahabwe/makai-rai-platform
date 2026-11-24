@@ -106,7 +106,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
       options={STATUS_OPTIONS.map((o) => ({
         value: o.value, label: answerLabel(data.runningQuestion, o.value), mark: o.value, id: `decision-status-${o.value}`, term: STATUS_TERMS[o.value].id,
         // A question with its own labels names the shared answer each one counts as (D6); the term sits on that word.
-        ...(labelled ? { help: countsAs(o.label), helpWord: o.label, definition: o.help } : { help: o.help }),
+        ...(labelled ? { help: `${countsAs(o.label)}.`, helpWord: o.label, definition: o.help } : { help: o.help }),
       }))}
       onChange={(next) => {
         const status = STATUS_OPTIONS.find((o) => o.value === next)?.value ?? null;

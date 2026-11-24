@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { termPattern } from '@/lib/vocabulary/firstUse';
 import { MarkShape } from '@/components/ui/StatusMark';
 import { describedBy, FieldError, given } from '@/components/ui/TextInput';
 import type { StatusMarkKind } from '@/components/ui/types';
@@ -13,9 +14,10 @@ export type RadioCardsProps = {
   /**
    * `term` (lane 2 T3c item 10a, additive): the vocabulary id whose word the label is and whose definition the help is (spec 6
    * first use): the label's words carry `data-term` and the help sentence `data-definition`. Absent: markup unchanged.
-   * `helpWord` (per-question wording, content 5.2.0): the word inside `help` that is the term, for an option whose label is
-   * the question's own. With it the term mark moves from the label to that word, and `definition` (the vocabulary's own
-   * sentence) follows the help line as its own `data-definition` element. Absent: as above.
+   * `helpWord` and `definition` (per-question wording, content 5.2.0): for an option whose label is the question's own, the
+   * shared word inside `help` and the vocabulary's own sentence for it. The definition follows the help as its own
+   * `data-definition` element, named by the radio's `aria-describedby`; the term mark sits on the word where the label holds
+   * it as whole words, else on the word in `help`. Without them (or if `help` lacks the word): as above.
    */
   options: ReadonlyArray<{ value: string; label: string; help?: string; mark?: StatusMarkKind; id?: string; term?: string; helpWord?: string; definition?: string }>;
   /** Pass `value` (controlled, with `onChange`) or `defaultValue`, never both. */
@@ -57,20 +59,38 @@ export function RadioCards({
   'aria-describedby': callerDescribedBy, helpBelow = false,
 }: RadioCardsProps): ReactElement {
   const helpIdOf = (o: RadioCardsProps['options'][number]) => (o.help === undefined ? undefined : `${o.id ?? `${name}-${o.value}`}-help`);
-  // The help's words. With `helpWord` the term sits on that word and its definition follows; else the sentence is the definition.
-  const helpOf = (o: RadioCardsProps['options'][number], id: string | undefined, key?: string): ReactElement | null => {
+  type Option = RadioCardsProps['options'][number];
+  // An option whose label is the question's own and which names the shared word it counts as (`helpWord` in `help`, with the
+  // vocabulary's `definition`); one condition decides the label, the help and the description alike.
+  const countsAsOf = (o: Option): { word: string; definition: string; at: number } | null =>
+    o.term !== undefined && o.help !== undefined && o.helpWord !== undefined && o.definition !== undefined && o.help.includes(o.helpWord)
+      ? { word: o.helpWord, definition: o.definition, at: o.help.indexOf(o.helpWord) } : null;
+  const definitionIdOf = (o: Option) => `${helpIdOf(o)}-definition`;
+  const describedOf = (o: Option) => (countsAsOf(o) === null ? helpIdOf(o) : `${helpIdOf(o)} ${definitionIdOf(o)}`);
+  // The label's words. The term sits on the label (or, for a question's own label, on the shared word when the label holds it
+  // as whole words); a label without the word leaves the mark to the help line.
+  const labelOf = (o: Option): ReactNode => {
+    if (o.term === undefined) return o.label;
+    const c = countsAsOf(o);
+    if (c === null) return <span data-term={o.term}>{o.label}</span>;
+    const m = termPattern(c.word).exec(o.label);
+    if (m === null) return o.label;
+    return <>{o.label.slice(0, m.index)}<span data-term={o.term}>{m[0]}</span>{o.label.slice(m.index + m[0].length)}</>;
+  };
+  // The help's words. With a shared word the definition is its own element, named by the radio, so a use of the word in the
+  // label has its definition too; the term sits on the word here only when the label does not hold it.
+  const helpOf = (o: Option, id: string | undefined, key?: string): ReactElement | null => {
     if (o.help === undefined) return null;
-    const at = o.term !== undefined && o.helpWord !== undefined ? o.help.indexOf(o.helpWord) : -1;
-    if (at === -1 || o.helpWord === undefined || o.definition === undefined) {
-      return <p key={key} className="ui-radio-card__help" id={id} data-definition={o.term}>{o.help}</p>;
-    }
+    const c = countsAsOf(o);
+    if (c === null) return <p key={key} className="ui-radio-card__help" id={id} data-definition={o.term}>{o.help}</p>;
+    const inLabel = termPattern(c.word).test(o.label);
+    const word = inLabel ? c.word : <span data-term={o.term}>{c.word}</span>;
     return (
       <p key={key} className="ui-radio-card__help" id={id}>
-        {o.help.slice(0, at)}<span data-term={o.term}>{o.helpWord}</span>{o.help.slice(at + o.helpWord.length)}. <span data-definition={o.term}>{o.definition}</span>
+        {o.help.slice(0, c.at)}{word}{o.help.slice(c.at + c.word.length)} <span id={definitionIdOf(o)} data-definition={o.term}>{c.definition}</span>
       </p>
     );
   };
-  const termOnLabel = (o: RadioCardsProps['options'][number]) => o.term !== undefined && o.helpWord === undefined;
   const hintId = given(legendHint) ? `${name}-hint` : undefined;
   const errorId = `${name}-error`;
   return (
@@ -93,10 +113,10 @@ export function RadioCards({
                   checked={value === undefined ? undefined : value === o.value}
                   defaultChecked={value === undefined ? defaultValue === o.value : undefined}
                   onChange={onChange === undefined ? undefined : () => onChange(o.value)}
-                  aria-describedby={helpId}
+                  aria-describedby={describedOf(o)}
                 />
                 {o.mark === undefined ? null : <MarkShape kind={o.mark} size={20} />}
-                {termOnLabel(o) ? <span data-term={o.term}>{o.label}</span> : o.label}
+                {labelOf(o)}
               </label>
               {helpId === undefined || helpBelow ? null : helpOf(o, helpId)}
             </div>

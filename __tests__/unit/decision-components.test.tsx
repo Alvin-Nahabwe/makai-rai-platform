@@ -4,7 +4,7 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { DecisionDraft } from '@/lib/question/draft';
-import type { LoadedQuestion } from '@/types/content';
+import type { AnswerKey, LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
@@ -124,9 +124,38 @@ describe('S-12 decision fields', () => {
       for (const [v, word, term] of [['done', 'Done', 'done'], ['partly', 'Partly', 'partly'], ['not_yet', 'Not yet', 'not-yet'], ['not_applicable', 'Not applicable', 'not-applicable']]) {
         const help = h.match(new RegExp(`<p[^>]*id="decision-status-${v}-help"[^>]*>[\\s\\S]*?</p>`))?.[0] ?? '';
         expect(help.replace(/<[^>]+>/g, ''), v).toContain(`Counts as ${word}`);
-        expect(help, v).toContain(`<span data-term="${term}">${word}</span>`);
+        // R4: the term sits on the word in the label when the label holds it ("Partly compared"), else on the word in the help.
+        const inLabel = new RegExp(word, 'i').test(LABELLED.answerLabels![v as AnswerKey]);
+        expect(help.includes(`<span data-term="${term}">`), v).toBe(!inLabel);
+        expect(h.split(`<span data-term="${term}">${inLabel ? word.slice(0, 1) : word}`).length - 1, v).toBe(1);
       }
       expect(h).not.toMatch(/<span data-term[^>]*>Yes, we compared/);
+    });
+
+    it('the first-use rule holds for the four status terms under every kind of label', async () => {
+      const { firstUseProblems } = await import('../helpers/firstUseMarkup');
+      const ids = new Set(['done', 'partly', 'not-yet', 'not-applicable']);
+      const labelled = (answerLabels: Record<string, string>) => ({ ...LABELLED, answerLabels }) as LoadedQuestion;
+      const cases: Array<[string, Partial<QuestionPanelData>]> = [
+        ['labels containing the term', { runningQuestion: labelled({ done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not yet compared', not_applicable: 'Does not apply' }) }],
+        ['labels without the term', { runningQuestion: LABELLED }],
+        ['labels equal to the generic words', { runningQuestion: labelled({ done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' }) }],
+        ['an unlabelled question', {}],
+      ];
+      for (const [name, over] of cases) {
+        for (const status of [null, 'partly'] as const) {
+          const h = html(over, { status });
+          expect(firstUseProblems(h).filter((p) => ids.has(p.id)), `${name}, status ${String(status)}`).toEqual([]);
+        }
+      }
+    });
+
+    it('the definition is its own element, named by the radio, and the label keeps its words as the name', () => {
+      const h = html({ runningQuestion: LABELLED });
+      expect(h).toMatch(/<input[^>]*id="decision-status-partly"[^>]*aria-describedby="decision-status-partly-help decision-status-partly-help-definition"/);
+      expect(h).toContain('<span id="decision-status-partly-help-definition" data-definition="partly">Some of it is in place, but not all of it.</span>');
+      const named = html({ runningQuestion: { ...LABELLED, answerLabels: { ...LABELLED.answerLabels!, partly: 'Partly compared' } } as LoadedQuestion });
+      expect(named).toContain('<span data-term="partly">Partly</span> compared');
     });
 
     it('the text box prompt is the chosen answer\'s prompt and changes with the answer; the typed note is kept', () => {
