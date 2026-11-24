@@ -82,7 +82,7 @@
   },
   "Q-PP-04": {
     "text": "Have you assessed effects on protected or vulnerable groups?",
-    "expectedPractice": "You name who the system could harm or leave out in its setting, by gender, age, ethnicity, disability, income or local marginalisation, with each group's effect and planned checks or changes.",
+    "expectedPractice": "You name who could be harmed or left out where the system is used, including locally marginalised groups, with each group's effect and your planned checks or changes.",
     "whyAsked": "Harms fall most on disadvantaged groups least present in the data.",
     "evidenceExamples": [
       "the group effects section of the protocol or C-02 assessment",
@@ -126,7 +126,7 @@
       "done": "Name the rights assessed and what changed; for a short note, why the risk is low.",
       "partly": "Name the rights assessed so far and those left.",
       "not_yet": "Say when you will assess this, or what blocks it.",
-      "not_applicable": "Say why the system affects no one's rights."
+      "not_applicable": "Say why no rights assessment applies, not even a short note."
     },
     "practiceSameAs": [
       "5.0.0",
@@ -144,16 +144,16 @@
       "notes from a review by an outside adviser"
     ],
     "answerLabels": {
-      "done": "Yes, we filled the gaps",
+      "done": "Yes, we checked and filled any gaps",
       "partly": "Partly, some gaps filled",
       "not_yet": "No, not yet",
       "not_applicable": "Does not apply to this project"
     },
     "answerPrompts": {
-      "done": "Name the missing perspectives and who provides them, by role, without personal details.",
+      "done": "Name any missing perspectives and who provides them, by role, without personal details.",
       "partly": "Name the gaps filled, by role, and those still open.",
       "not_yet": "Name the perspectives you lack and how you will find them.",
-      "not_applicable": "Say why the problem needs no perspective beyond your team."
+      "not_applicable": "Say why checking for missing perspectives does not apply to this problem."
     },
     "practiceSameAs": [
       "5.0.0",
@@ -190,7 +190,7 @@
     "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-08": {
-    "text": "Have you recorded how and why your data was collected?",
+    "text": "Have you recorded your data's sources, how they were collected and why you chose them?",
     "expectedPractice": "For each source, you record who collected the data, how, when, where and why you chose it, and keep the record with the data so outsiders can judge its fit.",
     "whyAsked": "Without it, nobody can judge the fit or limits of the data, or repeat the work.",
     "evidenceExamples": [
@@ -207,7 +207,7 @@
     },
     "answerPrompts": {
       "done": "Say why the data was gathered, then sources, methods, period and setting; it prints in the data card.",
-      "partly": "Say why the data was gathered and what is recorded so far; it prints in the data card.",
+      "partly": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card.",
       "not_yet": "Say why the data is gathered and its sources so far; it prints in the data card.",
       "not_applicable": "Say why no data source needs a record; it prints in the data card."
     },
@@ -261,9 +261,9 @@
     },
     "answerPrompts": {
       "done": "Say if the model uses or predicts a sensitive attribute, then your choices; it prints in the model card.",
-      "partly": "Say if the model uses or predicts a sensitive attribute, then checks so far; it prints in the model card.",
+      "partly": "Say if the model uses or predicts a sensitive attribute, then the checks done and left; it prints in the model card.",
       "not_yet": "Say if the model uses or predicts a sensitive attribute; it prints in the model card.",
-      "not_applicable": "Say why the model cannot use or predict a sensitive attribute; it prints in the model card."
+      "not_applicable": "Say why no input can stand in for a sensitive attribute, so the model cannot use one; it prints in the model card."
     },
     "practiceSameAs": [
       "5.0.0",
@@ -327,7 +327,7 @@
       "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or who waived it; it prints in the data card.",
       "partly": "Say how consent was obtained and what it does not cover; it prints in the data card.",
       "not_yet": "Say how you plan to obtain consent; it prints in the data card.",
-      "not_applicable": "Say why the data needs no consent; it prints in the data card."
+      "not_applicable": "Say why the data needs neither consent nor a waiver; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
@@ -364,8 +364,8 @@
   },
   "Q-PP-16": {
     "text": "Which data quality checks have you run?",
-    "expectedPractice": "Before training, you run and record the quality checks your data needs: for most tabular data, all eight; for images, text or audio, the ones that fit, saying what you did instead.",
-    "whyAsked": "Quality problems are far harder to trace after training.",
+    "expectedPractice": "Before training, you run the quality checks your data needs and record what each found: for most tabular data, all eight; for images, text or audio, the ones that fit, saying what you did instead.",
+    "whyAsked": "Data problems are harder to trace after training.",
     "evidenceExamples": [
       "the summary file from the C-03 notebook",
       "a data-quality report"
@@ -377,7 +377,7 @@
       "not_applicable": "Does not apply to this project"
     },
     "answerPrompts": {
-      "done": "Say what the checks found and why any unticked one does not fit.",
+      "done": "Say what they found and why unticked ones do not fit.",
       "partly": "Say which needed checks remain and why others do not fit.",
       "not_yet": "Say when you will run them, or what blocks it.",
       "not_applicable": "Say why no quality check applies to your data."
@@ -390,7 +390,7 @@
   },
   "Q-PP-17": {
     "text": "Which bias types have you assessed your data for?",
-    "expectedPractice": "You assess each bias type that fits how your data was made and record what you found: usually historical, population, sampling, measurement and exclusion; labelling, survey and survivorship where they apply. You explain each unticked type as not relevant.",
+    "expectedPractice": "You assess each bias type that fits how your data was made and record what you found: usually historical, population, sampling, measurement and exclusion; labelling where people assigned labels; survey and survivorship where they apply. You explain each unticked type as not relevant.",
     "whyAsked": "Each bias type enters data its own way, so each needs its own check.",
     "evidenceExamples": [
       "the bias assessment notes",
