@@ -25,9 +25,9 @@ documented deployment cannot produce a working system (known issue; ask a mainta
 
 `npm run verify` runs `npm run lint && npm run test && npm run build` in one command — note what it
 leaves out: **it runs neither `typecheck` nor the e2e suite.** `.github/workflows/ci.yml` gives every push
-and pull request two checks, `lint, typecheck, test, build` and `e2e`, both against a real Postgres
-with migrations and role provisioning applied. Each is a summary job over shards (`unit (shard N/3)`
-and `e2e (shard N/5)`), and passes only when all its shards did.
+and pull request two checks that gate the result, `lint, typecheck, test, build` and `e2e`, both
+against a real Postgres with migrations and role provisioning applied. Each passes only when every
+shard of its tests (`unit (shard N/3)`, `e2e (shard N/5)`) passed.
 
 ## 3. Passing tests is not "done"
 
