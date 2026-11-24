@@ -1,8 +1,27 @@
 # Sitting: the in-processing questions of content 5.2.0 (per-question wording)
 
+## For your decision
+
+Taken from the stem differences and the drafter's notes. Each item has one answer, which settles the question's text row.
+
+**Stems whose scope or strength changed.**
+- Q-IP-20: "…the conditions under which it should not be used?" is now "…the conditions where it must not be used?". "Should" becomes "must", the practice's own word.
+- Q-IP-14: "Have you considered whether aggregating data across populations masks important subgroup differences?" is now "Have you checked whether pooling data across populations hides important differences between them?". "Considered" becomes "checked", which is what the practice asks.
+- Q-IP-06: "Which fairness metrics have you computed?" is now "Which fairness measures have you computed?", so one word covers one thing. The model card's field label still reads "Fairness metrics"; the field maps were not changed.
+- Q-IP-04: "calculated performance metrics separately for each relevant subgroup (e.g., by age, gender, ethnicity)" is now "measured performance separately for each relevant group, for example by age, gender or ethnicity".
+
+**Rewording forced by the claim lint.**
+- Q-IP-20: 5.1.0's stem says "failure modes"; the draft says "the ways it goes wrong" (the phrase 5.1.0's own evidence example uses), because the claim lint rejected "failure modes" in the new stem.
+
+**Other flags.**
+- The stage median is 93.5 against a limit of 94. Lengthening any of the 12 rows at 94 or below can cross it, so re-measure after the sitting.
+- Q-IP-04: the caution "Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13)" sits in the Partly and Not yet prompts, not in Done, which would pass 200 characters.
+- Q-IP-13: the Partly prompt carries the AUC-ROC line too (32 words, the longest prompt in the stage).
+- Q-IP-08 and Q-IP-14 use fact-shaped Not applicable labels ("Inputs in use will not differ", "Pooling does not apply to our data"), where the fact is the Not applicable case; every other Not applicable label reads "… does not apply".
+
 Drafted on 24 November 2026, for the owner's sitting. Content 5.1.0 stays the running version, and nothing in this pack has been signed.
 
-The draft is in `docs/content/question-set-5.2.0/drafts/in-processing.json`. A later step applies the three stages' drafts to `data/content/5.2.0/` at once, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`) and the `proposal.json` reword actions. Until then `changes.json` holds no in-processing row.
+The draft is in `docs/content/question-set-5.2.0/drafts/in-processing.json`. The three stages' drafts are applied to `data/content/5.2.0/`, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`; the row id is `<question>.<field>`, for example `Q-PP-01.text` or `Q-PP-01.answerLabels.done`) and the `proposal.json` actions updated to the new stems. Every row starts `pending`.
 
 ## Measured length
 

@@ -6,8 +6,9 @@ import { readFileSync } from 'node:fs';
 
 /**
  * Per-question wording, Global Constraints (Length): the median over the questions of words(text) + words(expectedPractice) +
- * words(whyAsked) + words(the longest answerPrompt, or reasonPrompt for the gate) is at most 61 for a version whose questions carry
- * answerPrompts. Words are split on single spaces, as in audit B section 8, whose figure for 5.1.0 is 121.
+ * words(whyAsked) + words(the longest answerPrompt, or reasonPrompt for the gate) is, for a version whose questions carry
+ * answerPrompts (owner ruling R19, 24 November 2026): at most 96 over the version, and for each stage at most 0.8 times that stage's
+ * 5.1.0 median. Words are split on single spaces, as in audit B section 8, whose figure for 5.1.0 is 121.
  */
 
 const CONTENT = join(process.cwd(), 'data', 'content');
@@ -34,11 +35,22 @@ describe('questionWords and medianQuestionWords', () => {
     expect(medianQuestionWords(load('5.1.0'))).toBe(121);
   });
 
-  it('a version whose questions carry answerPrompts measures at most 61', () => {
+  it("a version whose questions carry answerPrompts measures at most 96, and each stage at most 0.8 times that stage's 5.1.0 median", () => {
+    const median = (v: number[]): number => {
+      const s = [...v].sort((a, b) => a - b);
+      const m = s.length >> 1;
+      return s.length === 0 ? 0 : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+    const stageMedian = (c: ReturnType<typeof load>, stage: string): number =>
+      median([...c.questions.values()].filter((q) => q.stage === stage).map((q) => questionWords(q) as number));
+    const was = load('5.1.0');
     for (const v of index.versions) {
       const c = load(v);
       if (![...c.questions.values()].some((q) => q.answerPrompts !== undefined)) continue;
-      expect(medianQuestionWords(c), v).toBeLessThanOrEqual(61);
+      expect(medianQuestionWords(c), v).toBeLessThanOrEqual(96);
+      for (const stage of new Set([...c.questions.values()].map((q) => q.stage as string))) {
+        expect(stageMedian(c, stage), `${v} ${stage}`).toBeLessThanOrEqual(0.8 * stageMedian(was, stage));
+      }
     }
   });
 });

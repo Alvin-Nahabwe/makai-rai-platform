@@ -18,124 +18,229 @@
           "questions": [
             {
               "id": "Q-PP-01",
-              "text": "Have you checked whether AI is the best approach, compared with simpler options such as a statistical model, a set of rules or a manual process?",
+              "text": "Have you compared AI with simpler options such as a statistical model, rules or a manual process?",
               "type": "likert-5",
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
                 "PP-01"
               ],
-              "expectedPractice": "Before building, the team compared the AI approach with at least one simpler method and one non-computational option for the same problem. The comparison covers expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected. The team wrote down its choice and why.",
-              "whyAsked": "An AI model that a rule or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves.",
-              "reasonPrompt": "Name the alternatives you compared and what decided it. This text is not printed in any document; it is your record of the choice. Not applicable is unusual here; if you choose it, say why.",
+              "expectedPractice": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and and risks to the people affected, and record your choice and why.",
+              "whyAsked": "AI that rules or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves.",
               "evidenceExamples": [
                 "a C-01 alternatives analysis, filled in",
                 "the protocol section with the comparison",
-                "minutes of the meeting where the choice was made"
+                "minutes of the meeting where you made the choice"
+              ],
+              "answerLabels": {
+                "done": "Yes, we compared them",
+                "partly": "Partly, some options so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "No comparison applies here"
+              },
+              "answerPrompts": {
+                "done": "Name the options compared, what decided it and where the choice is recorded.",
+                "partly": "Name the options compared so far and those still to compare.",
+                "not_yet": "Say when you plan to compare, or what is blocking it.",
+                "not_applicable": "Say why no comparison applies; this is unusual here."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-02",
-              "text": "Have you clearly defined the problem your AI system aims to solve, including specific objectives and success criteria?",
+              "text": "Have you defined the problem, its objectives and its success criteria?",
               "type": "likert-5",
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
                 "PP-01"
               ],
-              "expectedPractice": "The team wrote a problem statement that names who has the problem, what decision or task the system will support, and what success looks like. Success is stated in terms the team can check later: the measure, the target the team set for itself, and what would count as not good enough.",
-              "whyAsked": "Without a written problem statement nobody can tell later whether the system helped, and the work drifts towards whatever the data happens to allow.",
-              "reasonPrompt": "State the problem, who it affects and the success measures you set, facts first. This text is printed in the data card under \"Intended uses\" and in the model card under \"Primary use case\". Then say where the full statement is kept.",
+              "expectedPractice": "Your problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
+              "whyAsked": "Without a written problem statement, nobody can later tell whether the system helped, and work drifts towards whatever the data allows.",
               "evidenceExamples": [
                 "the problem statement in the protocol or concept note",
                 "a one-page project brief with objectives and success measures",
-                "minutes of the meeting where the objectives were agreed"
+                "minutes of the meeting where you agreed the objectives"
+              ],
+              "answerLabels": {
+                "done": "Yes, it is written down",
+                "partly": "Partly, some of it is defined",
+                "not_yet": "No, not yet",
+                "not_applicable": "A problem statement does not apply"
+              },
+              "answerPrompts": {
+                "done": "State the problem, who it affects, your success measures and where the full statement is kept; it prints in the data card and model card.",
+                "partly": "State the problem and the measures defined so far, then what is still open; it prints in the data card and model card.",
+                "not_yet": "State the problem as you see it now and when you will define it; it prints in the data card and model card.",
+                "not_applicable": "Say why this system needs no problem statement; it prints in the data card and model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-03",
-              "text": "Have you identified all stakeholders who are directly or indirectly affected by the AI system?",
+              "text": "Have you identified everyone the system affects, directly or indirectly?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PP-04"
               ],
-              "expectedPractice": "The team listed the groups the system affects. These include the people who use its outputs, the people the outputs are about, the people whose data trains it, and others who carry its costs or benefits. For each group the list says how the system affects it.",
-              "whyAsked": "Groups left off the stakeholder list are the ones whose harms nobody plans for, and the later questions on groups, consent and consultation all build on it.",
-              "reasonPrompt": "Name the groups you identified, by role or category and never as individuals, and how each is affected. This text is printed in the model card under \"Primary intended users\", so start with who will use the outputs. Say where the full list is kept.",
+              "expectedPractice": "You list the groups the system affects and how: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
+              "whyAsked": "Nobody plans for harms to groups left off the list, and later questions on groups, consent and consultation build on it.",
               "evidenceExamples": [
                 "a stakeholder list or map in the protocol",
                 "a C-07 stakeholder impact map, filled in",
-                "notes from a meeting where the list was reviewed"
+                "notes from a meeting where you reviewed the list"
+              ],
+              "answerLabels": {
+                "done": "Yes, we listed them",
+                "partly": "Partly, some groups so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "No one is affected"
+              },
+              "answerPrompts": {
+                "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; it prints in the model card.",
+                "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; it prints in the model card.",
+                "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; it prints in the model card.",
+                "not_applicable": "Say why the system affects no one; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-04",
-              "text": "Have you assessed how the AI system might affect protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
+              "text": "Have you assessed effects on protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-03",
                 "PP-04"
               ],
-              "expectedPractice": "The team named the groups who could be harmed or left out where the system will be used, including groups marginalised locally. For each, it wrote down how the system could affect it and what the team will check or change because of it.",
-              "whyAsked": "Harms from AI systems fall most often on groups already disadvantaged and least present in the data, and which groups those are depends on the setting.",
-              "reasonPrompt": "Name the groups you considered and the main effect you found for each. Describe groups, never individuals, and do not upload records about them. Say what you decided to do about the largest risk.",
+              "expectedPractice": "You name who could be harmed or left out where the system is used, including locally marginalised groups, and record for each the likely effect and what you will check or change.",
+              "whyAsked": "AI harms fall most often on groups already disadvantaged and least present in the data, and which groups depends on the setting.",
               "evidenceExamples": [
                 "the group effects section of the protocol or C-02 assessment",
                 "notes from a consultation with group representatives",
                 "a written analysis of effects by group"
+              ],
+              "answerLabels": {
+                "done": "Yes, we assessed them",
+                "partly": "Partly, some groups so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "No group could be affected differently"
+              },
+              "answerPrompts": {
+                "done": "Name each group, its main effect, your response to the largest risk and where it is recorded. Describe groups, never individuals; upload no records about them.",
+                "partly": "Name the groups assessed and those still to assess. Describe groups, never individuals, and upload no records about them.",
+                "not_yet": "Say when you will assess this, or what is blocking it.",
+                "not_applicable": "Say why no group could be affected differently."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-05",
-              "text": "Have you conducted a human rights impact assessment for the AI system?",
+              "text": "Have you assessed the system's impact on human rights?",
               "type": "likert-5",
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
                 "PP-03",
                 "PP-04"
               ],
-              "expectedPractice": "In proportion to the risk, the team assessed how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision. For a low-stakes tool this can be a short written note; for a system that decides about people it is a fuller assessment.",
-              "whyAsked": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a withheld service; this question asks about those rights, and a separate question asks about particular groups.",
-              "reasonPrompt": "Say which rights you looked at, what you found and what you changed. If you judged a short note enough, say why the risk is low. Name any reviewer by role.",
+              "expectedPractice": "In proportion to the risk, you assess how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision: a short written note for a low-stakes tool, a fuller assessment for a system that decides about people.",
+              "whyAsked": "Some harms, such as a lost chance to appeal or a withheld service, fall on everyone the system touches; this question asks about those rights, and a separate question asks about particular groups.",
               "evidenceExamples": [
                 "the rights assessment, or its section of the C-02 assessment",
                 "an ethics committee's comments on rights",
                 "the decision note on changes made"
+              ],
+              "answerLabels": {
+                "done": "Yes, as far as the risk needs",
+                "partly": "Partly, some rights so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "No rights assessment applies"
+              },
+              "answerPrompts": {
+                "done": "Name the rights you assessed, what you found and changed, any reviewer by role and where it is recorded; for a short note, say why the risk is low.",
+                "partly": "Name the rights assessed so far and those still to assess.",
+                "not_yet": "Say when you will assess this, or what is blocking it.",
+                "not_applicable": "Say why no rights assessment applies, not even a short note."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-24",
-              "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of the people affected) and brought in the ones your team lacks?",
+              "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of those affected) and brought in those your team lacks?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PP-03",
                 "PP-04"
               ],
-              "expectedPractice": "The team listed the perspectives the problem needs and compared them with the people it has. It filled the gaps it found, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
+              "expectedPractice": "You list the perspectives the problem needs, compare them with your team and fill the gaps, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
               "whyAsked": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through multi-stakeholder consultation.",
-              "reasonPrompt": "Name the perspectives you found missing and who now provides them, by role. Do not record anyone's gender, nationality or other personal details.",
               "evidenceExamples": [
                 "the perspectives list",
                 "terms of reference for an advisory group",
                 "notes from a review by an outside adviser"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked and filled any gaps",
+                "partly": "Partly, some gaps filled",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking perspectives does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name any missing perspectives, who now provides each by role, and where the list is kept. Record no one's gender, nationality or other personal details.",
+                "partly": "Name the gaps filled, by role, and those still open. Record no one's personal details.",
+                "not_yet": "Name the perspectives you lack and how you plan to bring them in.",
+                "not_applicable": "Say why checking for missing perspectives does not apply to this problem."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-07",
-              "text": "Have you estimated the energy use and carbon cost of the proposed AI system?",
+              "text": "Have you estimated the system's energy use and carbon cost?",
               "type": "likert-5",
               "principle": "Sustainability",
               "gaps": [
                 "PO-05"
               ],
-              "expectedPractice": "Before building, the team estimated the computing the work needs for training and for running the system, and the energy that uses, and weighed that cost against the expected benefit. An estimate can come from hardware hours times the device's power draw, or from a tool such as CodeCarbon. The team wrote down the estimate and its choice.",
-              "whyAsked": "Large models use energy and money that small projects and unreliable grids can ill afford, and an early estimate leaves time to choose a lighter method.",
-              "reasonPrompt": "Give your estimate of computing hours and energy, and how you made it. This text is printed in the model card under \"Environmental note: compute and energy\". Say what you chose because of it.",
+              "expectedPractice": "Before building, you estimate the computing and energy that training and running need, for example from hardware hours times power draw or with CodeCarbon, weigh them against the expected benefit, and record the estimate and your choice.",
+              "whyAsked": "Large models use energy and money that small projects and unreliable grids can ill afford; an early estimate leaves time to choose a lighter method.",
               "evidenceExamples": [
                 "the estimate in the protocol or C-02 assessment",
                 "a CodeCarbon summary file",
                 "a note comparing the energy use of two candidate methods"
+              ],
+              "answerLabels": {
+                "done": "Yes, we estimated it",
+                "partly": "Partly, for some of the work",
+                "not_yet": "No, not yet",
+                "not_applicable": "No estimate is needed"
+              },
+              "answerPrompts": {
+                "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; it prints in the model card.",
+                "partly": "Give what you have estimated so far and what is still missing; it prints in the model card.",
+                "not_yet": "Give the computing you expect and when you will estimate it; it prints in the model card.",
+                "not_applicable": "Say why the system needs no estimate of computing or energy; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]
@@ -155,25 +260,40 @@
           "questions": [
             {
               "id": "Q-PP-08",
-              "text": "Have you documented the data sources, collection methods, and rationale for data selection?",
+              "text": "Have you recorded your data's sources, how they were collected and why you chose them?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PO-07"
               ],
-              "expectedPractice": "The team wrote down, for each data source, where the data came from, who collected it, how and when, and why it was chosen for this problem. The record is kept with the data, for example as a datasheet, so that someone outside the team could judge whether the data fits the use.",
-              "whyAsked": "Without a record of how the data was gathered, nobody can judge whether it fits a use, repeat the work or see the limits of the data.",
-              "reasonPrompt": "Say why the data was gathered, then how: sources, methods, period and setting, facts first. This text is printed in the data card under \"Purpose\" and \"How was the data collected\". Attach or link the datasheet, which the model card reads for \"Dataset name\". Never upload the data itself.",
+              "expectedPractice": "For each source, you record where the data came from, who collected it, how and when, and why you chose it, and keep the record with the data, such as a datasheet, so an outsider could judge its fit for the use.",
+              "whyAsked": "Without a record of how the data was gathered, nobody can judge its fit, repeat the work or see its limits.",
               "evidenceExamples": [
                 "a datasheet for the dataset (C-19)",
                 "an issued data card from this platform",
                 "the data collection section of the protocol",
                 "a link to the data-access agreement"
+              ],
+              "answerLabels": {
+                "done": "Yes, for every source",
+                "partly": "Partly, for some sources",
+                "not_yet": "No, not yet",
+                "not_applicable": "No data source is used"
+              },
+              "answerPrompts": {
+                "done": "Say why the data was gathered, then its sources, methods, period and setting; it prints in the data card. Link the datasheet, never the data itself.",
+                "partly": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card. Never upload the data itself.",
+                "not_yet": "Say why the data is being gathered and what you know of its sources; it prints in the data card.",
+                "not_applicable": "Say why no data source needs a record; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-09",
-              "text": "Have you assessed whether your training data is representative of the target population?",
+              "text": "Have you checked your data represents the population the system will serve?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
@@ -181,47 +301,92 @@
                 "PP-04",
                 "PP-05"
               ],
-              "expectedPractice": "The team compared the make-up of its data with the population it will serve, group by group, for example by sex, age group, district, language, or rural and urban. It used a source such as census or clinic figures, and wrote down which groups are under-represented and what it did about them.",
-              "whyAsked": "A model learns the population in its data, not the one it will serve, so thin groups get worse results that nobody notices unless someone compares.",
-              "reasonPrompt": "First give the make-up of the data by group and place, then the groups it under-represents and what you did. The model card prints this under \"Geographic scope and demographic composition\" and \"Known limitations and under-represented populations\". The data card prints it in its field on composition and bias checks. Give counts, never records about people.",
+              "expectedPractice": "You compare your data's make-up with the population it will serve, group by group (such as sex, age, district, language, rural or urban), using a source such as census or clinic figures, and record under-represented groups and what you did.",
+              "whyAsked": "A model learns the population in its data, not the one it serves, so thin groups get worse results nobody notices without a comparison.",
               "evidenceExamples": [
                 "the summary file from the C-05 notebook",
                 "a table comparing the data and the population by group",
                 "the representativeness section of the protocol"
+              ],
+              "answerLabels": {
+                "done": "Yes, group by group",
+                "partly": "Partly, for some groups",
+                "not_yet": "No, not yet",
+                "not_applicable": "No population to compare with"
+              },
+              "answerPrompts": {
+                "done": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; it prints in the data card and model card.",
+                "partly": "Give the make-up checked so far and the groups still to check, in counts; it prints in the data card and model card.",
+                "not_yet": "Give what you know of the make-up so far, in counts, and your plan; it prints in the data card and model card.",
+                "not_applicable": "Say why no population comparison applies; it prints in the data card and model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-11",
-              "text": "Have you checked whether any input could stand in for a sensitive attribute (for example, village standing in for ethnicity), and decided what to do about it?",
+              "text": "Have you checked whether any input could stand in for a sensitive attribute (for example, village for ethnicity), and decided what to do?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-03"
               ],
-              "expectedPractice": "The team checked which input variables could stand in for a sensitive attribute in its setting, such as village for ethnicity or phone type for income. Where it had the data, it tested how strongly they are linked. It wrote down what it decided for each: keep, remove or monitor.",
-              "whyAsked": "Removing a sensitive attribute does not stop a model using it when another variable, such as place, language or name, carries the same information.",
-              "reasonPrompt": "Say first whether the model uses or predicts any sensitive attribute, then name the variables you checked, how you tested them and what you decided. This text is printed in the model card's field on sensitive attributes. Do not record anyone's attributes.",
+              "expectedPractice": "You check which inputs could stand in for a sensitive attribute in your setting, such as village for ethnicity or phone type for income, test how strongly they are linked where you have the data, and record for each whether you keep, remove or monitor it.",
+              "whyAsked": "Removing a sensitive attribute does not stop a model using it when another input, such as place, language or name, carries the same information.",
               "evidenceExamples": [
                 "the output of a check on links between variables",
                 "a decision note listing possible stand-in variables and choices",
                 "the feature list with notes"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked and decided",
+                "partly": "Partly, some inputs so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Does not apply to this project"
+              },
+              "answerPrompts": {
+                "done": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; it prints in the model card.",
+                "partly": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; it prints in the model card. Record no one's attributes.",
+                "not_yet": "Say whether the model uses or predicts a sensitive attribute, and your plan; it prints in the model card. Record no one's attributes.",
+                "not_applicable": "Say why no input can stand in for a sensitive attribute; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-12",
-              "text": "Have you checked that the data labels are correct and consistent?",
+              "text": "Have you checked that labels are correct and consistent?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-07"
               ],
-              "expectedPractice": "The team wrote labelling guidelines, had a share of items labelled twice, measured how often the labellers agreed, and resolved or recorded the disagreements. Where labels come from routine records, it checked a sample against the source. The team set and wrote down the share and the agreement it accepts.",
-              "whyAsked": "A model is no better than its labels, and when one site or language is labelled differently, the errors fall on the people from it.",
-              "reasonPrompt": "Say how labels were assigned and by whom, by role, facts first. This text is printed in the data card's field on how labels were assigned. Attach the agreement results, which the data card prints in its field on label quality checks.",
+              "expectedPractice": "You write labelling guidelines, have a share of items labelled twice, measure how often labellers agree, and resolve or record disagreements; for labels from routine records, you check a sample against the source. You set and record the share and the agreement you accept.",
+              "whyAsked": "A model is no better than its labels, and when one site or language is labelled differently, its people bear the errors.",
               "evidenceExamples": [
                 "the labelling guidelines",
                 "the agreement summary from the C-04 notebook",
                 "a note on how disagreements were resolved"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked them",
+                "partly": "Partly, some checks done",
+                "not_yet": "No, not yet",
+                "not_applicable": "Our data has no labels"
+              },
+              "answerPrompts": {
+                "done": "Say how labels were assigned and by whom, by role; it prints in the data card. Attach the agreement results.",
+                "partly": "Say how labels were assigned and by whom, by role, and which checks remain; it prints in the data card.",
+                "not_yet": "Say how labels are assigned and by whom, by role, and when you will check them; it prints in the data card.",
+                "not_applicable": "Say why the data has no labels to check; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -230,17 +395,21 @@
               "type": "gate",
               "principle": "Transparency & Explainability",
               "gaps": [],
-              "expectedPractice": "The team checked every field and file it will hold, including free text, images and audio, for anything that could identify a person directly or in combination with other data, and recorded the answer.",
+              "expectedPractice": "You check every field and file you will hold, including free text, images and audio, for anything that could identify a person directly or in combination with other data, and record the answer.",
               "whyAsked": "Personal data brings duties of consent and protection, and data can identify a person through a combination, such as a village, an age and a rare condition.",
-              "reasonPrompt": "Say which data you checked, field by field or file by file, and what you found. Describe the kinds of data; never copy personal data here. Your answer is printed in the data card's fields on consent and on personal data, and in the model card's field on sensitive attributes. If you answer not sure, say what you still need to check.",
+              "reasonPrompt": "Say which data you checked, field by field or file by file, and what you found, describing kinds of data and never copying personal data. Your answer prints in the data card and model card; if you answer not sure, say what you still need to check.",
               "evidenceExamples": [
                 "a data inventory saying for each field whether it can identify a person",
                 "the data protection section of the protocol"
+              ],
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-13",
-              "text": "Have you obtained proper informed consent for data collection and use?",
+              "text": "Have you obtained proper informed consent to collect and use the data?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
@@ -250,13 +419,28 @@
                 "questionId": "Q-PP-GATE-SENSITIVE",
                 "value": "yes"
               },
-              "expectedPractice": "People whose data the team uses were told, in a language and form they understand, what it is for and that it may be used to build an AI system. They were also told who will use it, how long it is kept and how to withdraw, and they agreed to the uses now planned. Where others collected the data, or an ethics committee waived consent, the team holds the record of that.",
+              "expectedPractice": "You tell the people whose data you use, in a language and form they understand, what it is for, that it may be used to build an AI system, who will use it, how long it is kept and how to withdraw, and they agree to the uses now planned. Where others collected the data or an ethics committee waived consent, you hold the record of that.",
               "whyAsked": "Consent for one purpose does not automatically cover training a model, and uses beyond it can stop the work and lose the trust of those who shared the data.",
-              "reasonPrompt": "Say how consent was obtained (written, oral with a witness, community and individual), in which languages, and whether it covers AI use and sharing. If a committee waived consent, name the committee and the reference. This text is printed in the data card under \"Informed consent\". Attach the blank form, never signed forms.",
               "evidenceExamples": [
-                "blank consent form and information sheet",
+                "a blank consent form and information sheet",
                 "the ethics approval letter, or the waiver, or its reference",
                 "the consent clause of a data-access agreement"
+              ],
+              "answerLabels": {
+                "done": "Yes, consent or a waiver covers it",
+                "partly": "Partly, not for every use or person",
+                "not_yet": "No, not yet",
+                "not_applicable": "No consent or waiver is needed"
+              },
+              "answerPrompts": {
+                "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; it prints in the data card. Attach the blank form, never signed ones.",
+                "partly": "Say how consent was obtained and which uses or people it does not yet cover; it prints in the data card. Attach the blank form, never signed ones.",
+                "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; it prints in the data card.",
+                "not_applicable": "Say why the data needs neither consent nor a waiver; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -271,18 +455,33 @@
                 "questionId": "Q-PP-GATE-SENSITIVE",
                 "value": "yes"
               },
-              "expectedPractice": "Before analysis, the team removed or replaced direct identifiers and coarsened details that could identify a person in combination, such as exact dates, small villages or rare conditions. It checked the result for people who could still be singled out. Any key that links codes to people is kept apart from the data, open only to set roles.",
-              "whyAsked": "Removing names is not enough when a few details together point to one person, and if de-identified data leaks or is shared, the people in it should not be recognisable.",
-              "reasonPrompt": "Say which identifiers you removed or replaced, what you coarsened and how you checked the result, facts first. This text is printed in the data card under \"Personal or sensitive data, and de-identification\" and in its field on preprocessing. Say where any linking key is kept, by role, never the key itself.",
+              "expectedPractice": "Before analysis, you remove or replace direct identifiers and coarsen details that could identify a person in combination, such as exact dates, small villages or rare conditions, then check for anyone who could still be singled out. You keep any key linking codes to people apart from the data, open only to set roles.",
+              "whyAsked": "Removing names is not enough when a few details together point to one person, and if the data leaks or is shared, no one in it should be recognisable.",
               "evidenceExamples": [
                 "the de-identification steps in the data management plan",
                 "the summary file from the C-10 notebook",
                 "a report of a check for people who could be singled out"
+              ],
+              "answerLabels": {
+                "done": "Yes, we de-identified it",
+                "partly": "Partly, some details remain",
+                "not_yet": "No, not yet",
+                "not_applicable": "Does not apply to this project"
+              },
+              "answerPrompts": {
+                "done": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; it prints in the data card. Say who holds any linking key, by role, never the key itself.",
+                "partly": "Say what you have removed, replaced or coarsened so far and what remains; it prints in the data card.",
+                "not_yet": "Say how and when you plan to de-identify the data; it prints in the data card.",
+                "not_applicable": "Say why the data needs no de-identification; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-16",
-              "text": "Which of the following data quality assessments have you performed?",
+              "text": "Which listed data quality checks have you run?",
               "type": "checklist",
               "options": [
                 "Missing data analysis",
@@ -354,17 +553,32 @@
               },
               "principle": "Proportionality & Do Not Harm",
               "gaps": [],
-              "expectedPractice": "Before training a model, the team ran the quality checks its data needs and wrote down what each found. For most tabular data that means all eight checks listed. For images, text or audio, the reason says which checks do not fit and what was done instead.",
+              "expectedPractice": "Before training, you run the checks your data needs and record what each found: all eight for most tabular data; for images, text or audio, which do not fit and what you did instead.",
               "whyAsked": "Quality problems found after training are far harder to trace; most common are records missing for some places or periods.",
-              "reasonPrompt": "Tick the checks you ran. For each check you did not run, say whether it is not relevant to your data or still to do. Your ticks and reason are printed in the data card under \"Missing data: extent and patterns\", \"What preprocessing or cleaning was applied\" and \"Retention policy and versioning\".",
               "evidenceExamples": [
                 "the summary file from the C-03 notebook",
                 "a data-quality report"
+              ],
+              "answerLabels": {
+                "done": "Every check our data needs",
+                "partly": "Some of the checks our data needs",
+                "not_yet": "None yet",
+                "not_applicable": "No quality check applies"
+              },
+              "answerPrompts": {
+                "done": "Say what the checks found, where it is recorded and why any unticked check does not fit.",
+                "partly": "Say which needed checks are still to do, and why any others do not fit your data.",
+                "not_yet": "Say when you will run the checks, or what is blocking them.",
+                "not_applicable": "Say why no data quality check applies to your data."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-17",
-              "text": "Which of the following bias types have you assessed for in your data?",
+              "text": "Which listed bias types have you assessed your data for?",
               "type": "checklist",
               "options": [
                 "Historical bias",
@@ -428,84 +642,159 @@
               },
               "principle": "Fairness & Non-discrimination",
               "gaps": [],
-              "expectedPractice": "The team assessed its data for each bias type that fits how the data was made, and wrote down what it found. Most projects need checks for historical, population, sampling, measurement and exclusion bias, for labelling bias where people assigned labels, and for survey and survivorship bias where those apply. Unticked types are explained as not relevant.",
+              "expectedPractice": "You assess your data for each bias type that fits how it was made and record what you found: for most projects historical, population, sampling, measurement and exclusion; labelling where people assigned labels; survey and survivorship where they apply. You explain each unticked type as not relevant.",
               "whyAsked": "Each bias type enters data in its own way, so each needs its own check.",
-              "reasonPrompt": "Tick the types you assessed. For each type you did not, say whether it does not fit your data or is still to do. Your ticks are printed in the data card's field on bias checks, and labelling bias in its field on label quality checks.",
               "evidenceExamples": [
                 "the bias assessment notes",
                 "the summary file from the C-04 notebook",
                 "a data-quality report with a section on bias"
+              ],
+              "answerLabels": {
+                "done": "Every type that fits our data",
+                "partly": "Some of the types that fit",
+                "not_yet": "None yet",
+                "not_applicable": "No bias type applies"
+              },
+              "answerPrompts": {
+                "done": "Say what you found, where it is recorded and why any unticked type does not fit.",
+                "partly": "Say which fitting types are still to assess, and why any others do not fit.",
+                "not_yet": "Say when you will assess bias, or what is blocking it.",
+                "not_applicable": "Say why no bias type applies to your data."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-18",
-              "text": "Have you assessed whether your data collection methods could introduce selection bias?",
+              "text": "Have you assessed whether your data collection could introduce selection bias?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-02",
                 "PP-05"
               ],
-              "expectedPractice": "The team described how people or records came into the data. It noted who could be missing, such as people without phones, those who do not attend clinics, or areas without coverage. It wrote down how it measured or corrected for that.",
-              "whyAsked": "Data gathered only from people who are easy to reach leaves out the rest, so the model works least well for those already hardest to serve.",
-              "reasonPrompt": "Say whether the data is a sample or a full collection, how it was gathered and who could be missed, facts first. This text is printed in the data card's field on sampling. Then say what you did about the gap.",
+              "expectedPractice": "You describe how people or records came into the data and who could be missing, such as people without phones, those who do not attend clinics or areas without coverage, and record how you measured or corrected for it.",
+              "whyAsked": "Data gathered only from people easy to reach leaves out the rest, so the model works least well for those hardest to serve.",
               "evidenceExamples": [
                 "the sampling section of the protocol",
                 "a comparison of who is in the data with who was eligible",
                 "a note on corrections made"
+              ],
+              "answerLabels": {
+                "done": "Yes, we assessed it",
+                "partly": "Partly, for some sources",
+                "not_yet": "No, not yet",
+                "not_applicable": "Selection bias cannot arise here"
+              },
+              "answerPrompts": {
+                "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; it prints in the data card.",
+                "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; it prints in the data card.",
+                "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; it prints in the data card.",
+                "not_applicable": "Say why no one could be missing from the data; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-19",
-              "text": "Have you evaluated whether historical patterns in the data reflect past discrimination or systemic inequities?",
+              "text": "Have you checked whether past patterns in your data reflect discrimination or systemic inequity?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PP-03"
               ],
-              "expectedPractice": "The team looked at whether past decisions recorded in the data, such as who was referred, treated or given credit, reflect unfair treatment of some groups. It wrote down what it found and whether it changed the labels, the features or the use of the model because of it.",
-              "whyAsked": "A model trained on past decisions learns to repeat them, including unfair ones, and records of who received a service often show access, not need.",
-              "reasonPrompt": "Say which past patterns you examined and what you found, facts first. This text is printed in the data card's field on dataset composition and bias checks. Then say what you changed.",
+              "expectedPractice": "You check whether past decisions in the data, such as who was referred, treated or given credit, were unfair to some groups, and record what you found and any change to the labels, features or use of the model.",
+              "whyAsked": "A model trained on past decisions repeats them, unfair ones included, and records of who received a service often show access, not need.",
               "evidenceExamples": [
                 "a written analysis of past patterns by group",
                 "notes from a review with domain experts",
                 "the decision note on changes made"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some patterns so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "The data holds no past decisions"
+              },
+              "answerPrompts": {
+                "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; it prints in the data card.",
+                "partly": "Say which past patterns you have examined and which remain; it prints in the data card.",
+                "not_yet": "Say which past patterns you plan to examine, and when; it prints in the data card.",
+                "not_applicable": "Say why the data holds no past decisions about people; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-20",
-              "text": "Have you checked whether your training data is recent enough for the time the system will be used?",
+              "text": "Have you checked your data is recent enough for when the system will be used?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "PP-02",
                 "PO-01"
               ],
-              "expectedPractice": "The team recorded the period the data covers and checked whether conditions have changed since, for example new policies, seasons, outbreaks, prices or devices. It wrote down whether the data still fits the period the system will be used in.",
+              "expectedPractice": "You record the period your data covers, check what has changed since, such as policies, seasons, outbreaks, prices or devices, and record whether the data still fits the period of use.",
               "whyAsked": "Data describes the time it was collected, so a model built on old data may serve a situation that no longer exists.",
-              "reasonPrompt": "Give the period the data covers, then the changes since that matter. This text is printed in the data card under \"Time period\". Say what you did about any change.",
               "evidenceExamples": [
                 "the data description with dates",
                 "a note on changes since collection",
                 "a comparison of older and recent data"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some changes checked",
+                "not_yet": "No, not yet",
+                "not_applicable": "The data's age does not matter"
+              },
+              "answerPrompts": {
+                "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; it prints in the data card.",
+                "partly": "Give the period the data covers, the changes checked and those still to check; it prints in the data card.",
+                "not_yet": "Give the period the data covers and when you will check for changes; it prints in the data card.",
+                "not_applicable": "Say why the period of the data does not matter for this use; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-21",
-              "text": "Have you established data governance policies covering access, sharing, and retention?",
+              "text": "Have you set data governance rules covering access, sharing and retention?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PP-06",
                 "PO-03"
               ],
-              "expectedPractice": "The team wrote down who may use the data and how, the conditions for sharing it with partners, and where it is stored. It also set how long the data is kept, how it is deleted and who decides, by role. In proportion to the risk, this can be a section of the data management plan.",
+              "expectedPractice": "You write down who may use the data and how, the conditions for sharing it with partners, where it is stored, how long it is kept, how it is deleted and who decides, by role. In proportion to the risk, this can be a section of the data management plan.",
               "whyAsked": "Data that nobody governs drifts into copies on laptops and shared drives, outside the protections the people in it were promised and the project's agreements.",
-              "reasonPrompt": "Say who can use the data, where it is stored and the sharing conditions, facts first. This text is printed in the data card under \"Access controls and geographic restrictions\" and \"Retention policy and versioning\". Name people by role, never by name.",
               "evidenceExamples": [
                 "the data management plan",
                 "a data-sharing or data-access agreement",
                 "the storage and access settings, described or linked"
+              ],
+              "answerLabels": {
+                "done": "Yes, they are written down",
+                "partly": "Partly, some rules are set",
+                "not_yet": "No, not yet",
+                "not_applicable": "We hold no data to govern"
+              },
+              "answerPrompts": {
+                "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; it prints in the data card. Name people by role, never by name.",
+                "partly": "Say which rules are set and which are still open; it prints in the data card. Name people by role, never by name.",
+                "not_yet": "Say where the data is stored now, who can use it and your plan; it prints in the data card. Name people by role, never by name.",
+                "not_applicable": "Say why the project holds no data to govern; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -517,31 +806,61 @@
                 "PP-02",
                 "PP-04"
               ],
-              "expectedPractice": "The team listed the rare cases and conditions the system will meet in use and checked how many of each are in the data. It wrote down which are too few to learn from and how it handled them, for example by collecting more, grouping them or stating them as a limit.",
+              "expectedPractice": "You list the rare cases and conditions the system will meet in use, count each in the data, and record which are too few to learn from and how you handled them, such as collecting more, grouping them or stating them as a limit.",
               "whyAsked": "Rare cases, such as a severe illness or an unusual pest, often have the most at stake, and a model that has seen too few of them handles them badly.",
-              "reasonPrompt": "Name the rare cases you checked and how many of each the data holds. This text is printed in the data card's field on dataset composition and in the model card under \"Known limitations and under-represented populations\". Say what you did about those too few to learn from.",
               "evidenceExamples": [
                 "a count of rare cases in the data",
                 "the summary file from a data profiling notebook",
                 "a note on the cases stated as limits"
+              ],
+              "answerLabels": {
+                "done": "Yes, we counted them",
+                "partly": "Partly, some rare cases",
+                "not_yet": "No, not yet",
+                "not_applicable": "No rare cases apply"
+              },
+              "answerPrompts": {
+                "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; it prints in the data card and model card.",
+                "partly": "Name the rare cases counted so far and those still to count; it prints in the data card and model card.",
+                "not_yet": "Name the rare cases you expect the system to meet and when you will count them; it prints in the data card and model card.",
+                "not_applicable": "Say why the system will meet no rare cases; it prints in the data card and model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PP-23",
-              "text": "Have you engaged domain experts in reviewing data quality and relevance?",
+              "text": "Have domain experts reviewed your data's quality and relevance?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PP-07",
                 "IP-02"
               ],
-              "expectedPractice": "People who know the field the data comes from, such as clinicians, agronomists or teachers, reviewed a sample of the data and its labels. They looked for errors and for meaning lost in recording, and the team wrote down what they found and what it changed.",
-              "whyAsked": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic, and their review is often the cheapest way to find them.",
-              "reasonPrompt": "Say who reviewed the data, by role, what they looked at and what they found. This text is printed in the data card's field on how labels were assigned and by whom. Then say what you changed.",
+              "expectedPractice": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and changed.",
+              "whyAsked": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, often most cheaply.",
               "evidenceExamples": [
                 "notes from the expert review",
                 "a list of corrections made after the review",
                 "terms of reference for the reviewers"
+              ],
+              "answerLabels": {
+                "done": "Yes, experts reviewed it",
+                "partly": "Partly, some of the data",
+                "not_yet": "No, not yet",
+                "not_applicable": "No domain expertise applies"
+              },
+              "answerPrompts": {
+                "done": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; it prints in the data card.",
+                "partly": "Say who reviewed which part, by role, and what is still to review; it prints in the data card.",
+                "not_yet": "Say which experts you plan to involve, by role, and when; it prints in the data card.",
+                "not_applicable": "Say why no domain expertise applies to this data; it prints in the data card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]
@@ -562,60 +881,105 @@
           "questions": [
             {
               "id": "Q-IP-01",
-              "text": "Have you written down why you chose this type of model for your problem and your data?",
+              "text": "Have you recorded why this type of model suits your problem and data?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "IP-03",
                 "IP-04"
               ],
-              "expectedPractice": "The team wrote down the model types it considered and why the chosen one fits the problem, the data, and the people who must understand or maintain it. It also noted what it gave up by choosing it.",
-              "whyAsked": "A model chosen by habit may be harder to explain and keep running than the problem needs, and a written choice shows later users what it was built to do.",
-              "reasonPrompt": "Name the model type and the alternatives you considered, then why you chose it. This text is printed in the model card under \"Architecture\". Keep it short and factual.",
+              "expectedPractice": "You record the model types you considered, why the chosen one fits the problem, the data and the people who must understand or maintain it, and what you gave up by choosing it.",
+              "whyAsked": "A model chosen by habit can be harder to explain and maintain than the problem needs; a written choice tells later users what it is for.",
               "evidenceExamples": [
                 "the model choice note",
                 "the methods section of the protocol",
                 "a comparison table of candidate models"
+              ],
+              "answerLabels": {
+                "done": "Yes, we recorded why",
+                "partly": "Partly, some of it is recorded",
+                "not_yet": "No, not yet",
+                "not_applicable": "A choice of model does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the model type, the alternatives, why you chose it and where this is recorded; it prints in the model card.",
+                "partly": "Name the model type and the alternatives weighed so far, then what is still open; it prints in the model card.",
+                "not_yet": "Name the model type you expect and when you will record the choice; it prints in the model card.",
+                "not_applicable": "Say why no choice of model type applies; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-02",
-              "text": "Have you ensured that training, validation, and test datasets are representative of the same underlying population?",
+              "text": "Have you checked that your training, validation and test sets come from the same population?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "IP-01",
                 "IP-02"
               ],
-              "expectedPractice": "The team split its data into training, validation and test sets so that no person, household or site appears in more than one where that would leak information. It checked that the sets come from the same population, and wrote down how the test set differs from the setting of use.",
-              "whyAsked": "When test data overlaps with training data, or comes from a different population, the reported performance is wrong in ways nobody sees until the system is used.",
-              "reasonPrompt": "Say how you split the data and how you checked the splits, facts first. This text is printed in the model card under \"Evaluation data and how it differs from training data\". Say how the test data differs from where the model will be used.",
+              "expectedPractice": "You split the data into training, validation and test sets so no person, household or site is in more than one where that would leak information, check they come from the same population, and record how the test set differs from the setting of use.",
+              "whyAsked": "Test data that overlaps the training data, or comes from another population, makes reported performance wrong in ways nobody sees until the system is in use.",
               "evidenceExamples": [
                 "the data split code or its description",
                 "a table comparing the sets by group and source",
                 "the evaluation section of the protocol"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some checks done",
+                "not_yet": "No, not yet",
+                "not_applicable": "Splitting the data does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; it prints in the model card.",
+                "partly": "Say how you split the data, which checks are done and which are not; it prints in the model card.",
+                "not_yet": "Say how and when you plan to split and check the data; it prints in the model card.",
+                "not_applicable": "Say why splitting the data does not apply; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-03",
-              "text": "Have you measured the different kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
+              "text": "Have you measured the kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "IP-04"
               ],
-              "expectedPractice": "On held-out test data, the team reported the confusion matrix and the measures that matter for its use, such as precision, recall, specificity and F1. It wrote down which kind of error costs the people affected more, and so which measure it watches most.",
-              "whyAsked": "Accuracy alone can hide a model that misses most of the cases that matter, and which error is worse, a missed case or a false alarm, depends on the use.",
-              "reasonPrompt": "Name the measures you report and why those, then the error that costs most. Attach the results file: the model card lists it under \"Overall metrics\", and you type the numbers there when you generate the card. Report the numbers, not judgements of them.",
+              "expectedPractice": "On held-out test data, you report the confusion matrix and the measures that matter for your use, such as precision, recall, specificity and F1, and record which error costs the people affected more, and so which measure you watch most.",
+              "whyAsked": "Accuracy alone can hide a model that misses most cases that matter, and whether a missed case or a false alarm is worse depends on the use.",
               "evidenceExamples": [
                 "the evaluation report with the confusion matrix",
                 "the summary file from the evaluation notebook",
                 "a link to the metrics in the repository"
+              ],
+              "answerLabels": {
+                "done": "Yes, we measured them",
+                "partly": "Partly, some measures so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Measuring errors does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the measures, why those, and the costliest error; give numbers, not judgements. Attach the results file: the model card lists it, and you type the numbers in when you generate it.",
+                "partly": "Name the measures reported so far and those still to do; give numbers, not judgements.",
+                "not_yet": "Say when you will measure the errors on held-out data, or what is blocking it.",
+                "not_applicable": "Say why measuring kinds of error does not apply to your model."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-04",
-              "text": "Have you calculated performance metrics separately for each relevant subgroup (e.g., by age, gender, ethnicity)?",
+              "text": "Have you measured performance separately for each relevant group, for example by age, gender or ethnicity?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
@@ -623,17 +987,32 @@
                 "IP-02",
                 "IP-04"
               ],
-              "expectedPractice": "The team reported the model's main performance measures separately for each group that matters where it will be used, such as sex, age group, district, language, or rural and urban. The groups include any the data shows to be under-represented, and each result gives the number of cases. Groups too small for a reliable estimate are named as such, not left out.",
-              "whyAsked": "A model can look good on average and still work badly for one group, and the people in that group carry the cost of its errors.",
-              "reasonPrompt": "Name the groups you used, why those groups, and the size of the smallest. When you generate the model card, type the numbers into \"Disaggregated performance\"; the platform does not compute them. Do not collect a new sensitive attribute, such as ethnicity, just for this check without consent (see Q-PP-13).",
+              "expectedPractice": "You report the model's main measures separately for each group that matters where it is used, such as sex, age group, district, language, or rural and urban, including groups the data under-represents. Each result gives its number of cases, and you name groups too small for a reliable estimate rather than leave them out.",
+              "whyAsked": "A model can look good on average and still work badly for one group, whose people carry the cost of its errors.",
               "evidenceExamples": [
                 "the summary file from the C-14 notebook",
                 "a per-group metrics table with group sizes"
+              ],
+              "answerLabels": {
+                "done": "Yes, for each group",
+                "partly": "Partly, some groups so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Measuring by group does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
+                "partly": "Name the groups measured so far and those still to do. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+                "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+                "not_applicable": "Say why measuring by group does not apply to your model."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-06",
-              "text": "Which fairness metrics have you computed?",
+              "text": "Which fairness measures have you computed?",
               "type": "checklist",
               "options": [
                 "Statistical Parity",
@@ -714,35 +1093,65 @@
               "gaps": [
                 "IP-01"
               ],
-              "expectedPractice": "The team chose the fairness measures that fit how the system's errors affect people, computed them for the groups it compares, and wrote down why those measures. Most systems that predict something about people need an error-rate measure and a calibration or precision measure. Unticked measures are explained as not fitting; a fitting measure not listed is named in the reason.",
-              "whyAsked": "Fairness measures answer different questions and cannot all be met at once, so a result means something only if the measures fit the use and the team says why.",
-              "reasonPrompt": "Tick the measures you computed and say why they fit your use. Give the threshold you set for each and the groups compared. This text and your ticks are printed in the model card under \"Fairness metrics with the team's own threshold\". Explain each unticked measure.",
+              "expectedPractice": "You choose the fairness measures that fit how your system's errors affect people, compute them for the groups you compare and record why those. Most systems that predict something about people need an error-rate measure and a calibration or precision measure. You explain each unticked measure as not fitting and name any fitting measure not listed.",
+              "whyAsked": "Fairness measures answer different questions and cannot all hold at once, so a result means something only if the measures fit the use and you say why.",
               "evidenceExamples": [
                 "the summary file from the C-13 notebook",
                 "a fairness report with the measures by group",
                 "the decision note on which measures fit"
+              ],
+              "answerLabels": {
+                "done": "Every measure that fits our use",
+                "partly": "Some of the measures that fit",
+                "not_yet": "None yet",
+                "not_applicable": "No fairness measure applies"
+              },
+              "answerPrompts": {
+                "done": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; it prints in the model card.",
+                "partly": "Say which fitting measures you computed, with thresholds and groups, and which are still to compute; it prints in the model card.",
+                "not_yet": "Write that no fairness measure is computed yet, which you plan and when; it prints in the model card.",
+                "not_applicable": "Write why no fairness measure applies to this system; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-07",
-              "text": "Have you applied explainability methods (e.g., SHAP, LIME, feature importance) to understand model decisions?",
+              "text": "Have you used explanation methods, such as SHAP, LIME or feature importance, to understand your model?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "IP-03"
               ],
-              "expectedPractice": "The team used at least one explanation method that fits its model, such as feature importance, SHAP or LIME. It checked with people who know the field whether the main drivers of predictions make sense, and wrote down what it found, including any driver that should not matter.",
-              "whyAsked": "Explanations show whether a model relies on what it should, and a driver that makes no sense to a domain expert is often the first sign of a data problem.",
-              "reasonPrompt": "Name the method you used and the main drivers it showed. Say whether a domain expert, by role, looked at them and what they concluded.",
+              "expectedPractice": "You apply at least one explanation method that fits your model (feature importance, SHAP or LIME), ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
+              "whyAsked": "Explanations show whether a model relies on what it should; a driver that makes no sense to a domain expert often first signals a data problem.",
               "evidenceExamples": [
                 "the summary file from the C-18 notebook",
                 "an explanation report with its plots",
                 "notes from the expert review of the drivers"
+              ],
+              "answerLabels": {
+                "done": "Yes, we used them",
+                "partly": "Partly, some of it so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Explanation methods do not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the method, the main drivers, the domain expert who reviewed them, by role, their conclusion and where it is recorded.",
+                "partly": "Name the method used and the drivers found so far, and what is still to do, such as the expert review.",
+                "not_yet": "Say when you will apply an explanation method, or what is blocking it.",
+                "not_applicable": "Say why no explanation method fits your model."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-08",
-              "text": "Have you tested the model on data that differs from its training data, such as noisy, incomplete or unusual inputs?",
+              "text": "Have you tested the model on data unlike its training data, such as noisy, incomplete or unusual inputs?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
@@ -750,47 +1159,92 @@
                 "IP-03",
                 "IP-06"
               ],
-              "expectedPractice": "The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites. It used methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox, and wrote down how much performance changed and what it did.",
-              "whyAsked": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning.",
-              "reasonPrompt": "Say what changes to the inputs you tested and how much performance moved, facts first. This text is printed in the model card's field on known limitations. Then say what you changed, or stated as a limit.",
+              "expectedPractice": "You test the model on inputs that differ from its training data in the ways expected in use, such as added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites, with methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox. You record how much performance changed and what you did.",
+              "whyAsked": "Field data is noisier than training data, so a model never tested on worse inputs can lose much of its accuracy in use without warning.",
               "evidenceExamples": [
                 "the summary file from the perturbation part of the C-18 notebook",
                 "a robustness test report",
                 "results on a held-out site or device"
+              ],
+              "answerLabels": {
+                "done": "Yes, we tested it",
+                "partly": "Partly, some inputs so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Inputs in use will not differ"
+              },
+              "answerPrompts": {
+                "done": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; it prints in the model card.",
+                "partly": "Say which input changes you tested, how performance moved and what is still to test; it prints in the model card.",
+                "not_yet": "Say which input changes you expect in use and when you will test them; it prints in the model card.",
+                "not_applicable": "Say why inputs in use will not differ from the training data; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-16",
-              "text": "Have you compared your model's performance against a simple baseline (e.g., majority class, logistic regression)?",
+              "text": "Have you compared your model with a simple baseline such as majority class or logistic regression?",
               "type": "likert-5",
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
                 "IP-04"
               ],
-              "expectedPractice": "The team compared its model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression. It used the same test data, and wrote down whether the gain justifies the extra complexity.",
-              "whyAsked": "A complex model that barely beats a simple rule costs more to run and explain for little benefit, and the baseline shows whether the reported numbers mean anything.",
-              "reasonPrompt": "Name the baseline and give both results. Say what you decided because of the comparison.",
+              "expectedPractice": "On the same test data, you compare your model with at least one simple baseline (always predicting the most common class, the current rule or a logistic regression) and record whether the gain justifies the complexity.",
+              "whyAsked": "A complex model barely beating a simple rule costs more to run and explain for little gain; a baseline shows if its numbers mean anything.",
               "evidenceExamples": [
                 "the evaluation report with the baseline results",
                 "the summary file from the evaluation notebook"
+              ],
+              "answerLabels": {
+                "done": "Yes, we compared it",
+                "partly": "Partly, some comparison so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "No simple baseline applies"
+              },
+              "answerPrompts": {
+                "done": "Name the baseline, both results, what you decided from them and where it is recorded.",
+                "partly": "Name the baselines compared so far and those still to compare.",
+                "not_yet": "Say when you will compare, or what is blocking it.",
+                "not_applicable": "Say why no simple baseline applies to your problem."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-17",
-              "text": "Have you checked whether the model relies on shortcuts in the data that will not hold in real use?",
+              "text": "Have you checked whether the model relies on shortcuts in the data that will not hold in use?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "IP-03",
                 "IP-05"
               ],
-              "expectedPractice": "The team looked for features that only happen to go with the outcome in its data, such as the source site, a watermark or the time of recording. It checked whether the model relies on them, using explanations, tests on data from other sources or removing the suspect feature, and wrote down what it found.",
-              "whyAsked": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it.",
-              "reasonPrompt": "Name the suspect features you checked, how, and what you found. Say what you changed.",
+              "expectedPractice": "You look for features that only happen to go with the outcome in your data, such as source site, a watermark or recording time, check whether the model relies on them through explanations, tests on data from other sources or removing the suspect feature, and record what you found.",
+              "whyAsked": "A shortcut in the data can make a model look good in testing but not in use, and it stays invisible until someone looks for it.",
               "evidenceExamples": [
                 "an explanation report showing the main drivers",
                 "results on data from another site",
                 "a note on the features removed and why"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some features so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking for shortcuts does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the suspect features you checked, how, what you found and changed, and where it is recorded.",
+                "partly": "Name the features checked so far and those still to check.",
+                "not_yet": "Say when you will check, or what is blocking it.",
+                "not_applicable": "Say why checking for shortcuts does not apply to your data."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -801,13 +1255,28 @@
               "gaps": [
                 "IP-05"
               ],
-              "expectedPractice": "The team checked whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, and corrected it if needed. It wrote down how users should treat outputs with low confidence.",
-              "whyAsked": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure.",
-              "reasonPrompt": "Say how you checked calibration and what you found. Say how outputs with low confidence are handled.",
+              "expectedPractice": "You check whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, correct it if needed, and record how users should treat low-confidence outputs.",
+              "whyAsked": "Users act on stated confidence, so a model that is confidently wrong is more dangerous than one that says it is unsure.",
               "evidenceExamples": [
                 "a calibration plot or table",
                 "the summary file from the evaluation notebook",
                 "the rule for handling outputs with low confidence"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some of it so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking confidence does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say how you checked calibration, what you found, how low-confidence outputs are handled and where this is recorded.",
+                "partly": "Say what you have checked so far and what is still to do, such as handling low-confidence outputs.",
+                "not_yet": "Say when you will check calibration, or what is blocking it.",
+                "not_applicable": "Say why checking the model's confidence does not apply."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]
@@ -830,46 +1299,91 @@
               "gaps": [
                 "IP-03"
               ],
-              "expectedPractice": "The team set what acceptable performance means for this use, then chose the simplest model that reaches it. It weighed how far the people affected, and those who act on the outputs, need to follow each decision, and wrote down the choice and what was traded.",
-              "whyAsked": "Simpler models are easier to explain, check and keep running, which matters most where people must understand decisions about them, so a small accuracy gain may not be worth it.",
-              "reasonPrompt": "Say what performance you set as acceptable and which simpler models you tried. Say why you chose the one you did.",
+              "expectedPractice": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs must follow each decision, and record the choice and trade-offs.",
+              "whyAsked": "Simpler models are easier to explain, check and maintain, which matters most where people must understand decisions about them; small accuracy gains may not be worth it.",
               "evidenceExamples": [
                 "the model choice note, stating the acceptable performance",
                 "a comparison table of simpler and more complex models"
+              ],
+              "answerLabels": {
+                "done": "Yes, we chose the simplest",
+                "partly": "Partly, some of it is decided",
+                "not_yet": "No, not yet",
+                "not_applicable": "Choosing a model does not apply"
+              },
+              "answerPrompts": {
+                "done": "Give your acceptable performance, the simpler models tried, why you chose this one and where it is recorded.",
+                "partly": "Say what is decided, such as acceptable performance, and what is still open.",
+                "not_yet": "Say when you will set acceptable performance and compare models.",
+                "not_applicable": "Say why choosing a model does not apply."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-10",
-              "text": "Have you recorded everything needed to train the same model again: settings (hyperparameters), random seeds, code and software versions?",
+              "text": "Have you recorded what you need to retrain the same model: settings, random seeds, code and software versions?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "IP-06"
               ],
-              "expectedPractice": "The team recorded what is needed to re-run training and get the same model, and keeps it with the model. That means the code and data versions, the preprocessing steps, the settings including hyperparameters and random seeds, and the software versions.",
-              "whyAsked": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result.",
-              "reasonPrompt": "Say where the training records are kept and what they include. Say whether someone has re-run training from them.",
+              "expectedPractice": "You keep with the model what is needed to re-run training and get the same model: code and data versions, preprocessing steps, settings including hyperparameters and random seeds, and software versions.",
+              "whyAsked": "Small setting or software changes can alter a model's behaviour; without these records nobody, even your team a year later, can repeat or check a result.",
               "evidenceExamples": [
                 "a link to the configuration files in the repository",
                 "an experiment-tracking record, for example from MLflow",
                 "the environment file listing package versions"
+              ],
+              "answerLabels": {
+                "done": "Yes, all of it is recorded",
+                "partly": "Partly, some of it is recorded",
+                "not_yet": "No, not yet",
+                "not_applicable": "Training records do not apply"
+              },
+              "answerPrompts": {
+                "done": "Say where the training records are kept, what they include and whether someone has re-run training from them.",
+                "partly": "Say which records are kept so far and which are missing.",
+                "not_yet": "Say when you will record them, or what is blocking it.",
+                "not_applicable": "Say why keeping training records does not apply."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-11",
-              "text": "Have you checked that records are not lost or changed as your data is moved and processed?",
+              "text": "Have you checked that your data pipeline does not lose or change records?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
                 "IP-07"
               ],
-              "expectedPractice": "The team added checks at each step of its data pipeline that catch lost, duplicated or changed records. Examples are row counts, value ranges, units, date formats and the character encoding of local languages. It wrote down what the checks found.",
-              "whyAsked": "Errors made while data is moved and transformed are silent and can bias a model, and checks at each step catch them where they are cheap to fix.",
-              "reasonPrompt": "Name the checks you run and at which steps. Say what they found and how you fixed it.",
+              "expectedPractice": "You add checks, such as row counts, value ranges, units, date formats and the character encoding of local languages, at each step of your data pipeline to catch lost, duplicated or changed records, and record what they find.",
+              "whyAsked": "Errors made moving and transforming data are silent and can bias a model; checks at each step catch them while cheap to fix.",
               "evidenceExamples": [
                 "the validation rules or test code",
                 "a pipeline log showing the checks",
                 "a note on the errors found and fixed"
+              ],
+              "answerLabels": {
+                "done": "Yes, we check each step",
+                "partly": "Partly, some steps so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Pipeline checks do not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the checks, the steps they run at, what they found and fixed, and where this is recorded.",
+                "partly": "Name the steps checked so far and those still to check.",
+                "not_yet": "Say when you will add checks, or what is blocking it.",
+                "not_applicable": "Say why your data needs no pipeline checks."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -881,18 +1395,33 @@
                 "IP-06",
                 "PO-07"
               ],
-              "expectedPractice": "The team wrote a model card for the current version of the model and updates it when the model changes. It covers the intended use, the data, performance overall and by group, the limits and the conditions for use. A model card issued by this platform counts.",
-              "whyAsked": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on.",
-              "reasonPrompt": "Say which version of the model the card describes and where it is kept. Attach or link it: the model card prints it under \"Model card held by the team\".",
+              "expectedPractice": "You keep a model card for the current model version, updated when the model changes, covering intended use, data, performance overall and by group, limits and conditions for use. One issued by this platform counts.",
+              "whyAsked": "A model card tells those who deploy or rely on the model what it can and cannot do; without one, its limits leave with your team.",
               "evidenceExamples": [
                 "the model card (C-17)",
                 "an issued model card from this platform",
                 "a link to the model card in the repository"
+              ],
+              "answerLabels": {
+                "done": "Yes, it is up to date",
+                "partly": "Partly, some of it is written",
+                "not_yet": "No, not yet",
+                "not_applicable": "A model card does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say which model version the card describes and where it is kept. Attach or link it; the model card lists it.",
+                "partly": "Say which model version the card describes, which parts are written and which are not.",
+                "not_yet": "Say when you will write the card; one issued by this platform counts.",
+                "not_applicable": "Say why this model needs no model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-13",
-              "text": "Which additional evaluation methods have you applied?",
+              "text": "Which other evaluation methods have you used?",
               "type": "checklist",
               "options": [
                 "Cross-validation (k-fold)",
@@ -960,81 +1489,156 @@
               },
               "principle": "Reproducibility & Accountability",
               "gaps": [],
-              "expectedPractice": "The team used the evaluation methods its model and data need to give stable and honest estimates, and wrote down what each showed. Most projects need cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. Unticked methods are explained as not relevant.",
-              "whyAsked": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak.",
-              "reasonPrompt": "Tick the methods you used and give the main result of each. For each unticked method, say whether it does not fit or is still to do. A tick on AUC-ROC is printed in the model card under \"Overall metrics\".",
+              "expectedPractice": "You use the evaluation methods your model and data need for stable, honest estimates and record what each showed: for most projects cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. You explain unticked methods as not relevant.",
+              "whyAsked": "One test split gives one estimate, which may be lucky; several methods together show how stable the results are and where the model is weak.",
               "evidenceExamples": [
                 "the evaluation report",
                 "the summary file from the evaluation notebook"
+              ],
+              "answerLabels": {
+                "done": "Every method our model needs",
+                "partly": "Some of the methods it needs",
+                "not_yet": "None yet",
+                "not_applicable": "No evaluation method applies"
+              },
+              "answerPrompts": {
+                "done": "Give each ticked method's main result, where the report is and why any unticked one does not fit. A tick on AUC-ROC prints in the model card.",
+                "partly": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. A tick on AUC-ROC prints in the model card.",
+                "not_yet": "Say which methods you plan and when, or what is blocking them.",
+                "not_applicable": "Say why no further evaluation method applies."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-14",
-              "text": "Have you considered whether aggregating data across populations masks important subgroup differences?",
+              "text": "Have you checked whether pooling data across populations hides important differences between them?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "IP-02"
               ],
-              "expectedPractice": "The team compared results for the main subpopulations it pooled, such as regions, languages or types of facility, and checked whether pooled results hide opposite trends within them. It wrote down whether one model serves all or separate handling is needed.",
-              "whyAsked": "Pooling data can hide a group for which the model works badly, or even reverse a trend, and knowing this decides whether one model can serve everyone.",
-              "reasonPrompt": "Name the subpopulations you compared and what you found. Say what you decided.",
+              "expectedPractice": "You compare results for the main subpopulations you pooled, such as regions, languages or types of facility, check whether pooled results hide opposite trends within them, and record whether one model serves all or separate handling is needed.",
+              "whyAsked": "Pooling can hide a group the model serves badly, or even reverse a trend, and this decides whether one model can serve everyone.",
               "evidenceExamples": [
                 "a table of results by subpopulation",
                 "a note on the decision to pool or to separate"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some subpopulations so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Pooling does not apply to our data"
+              },
+              "answerPrompts": {
+                "done": "Name the subpopulations compared, what you found, what you decided and where it is recorded.",
+                "partly": "Name the subpopulations compared so far and those still to compare.",
+                "not_yet": "Say when you will compare them, or what is blocking it.",
+                "not_applicable": "Say why your data pools no populations."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-15",
-              "text": "When you tuned the model's settings (for example the decision threshold), did you check that results did not get worse for some groups?",
+              "text": "When you tuned the model's settings, such as the decision threshold, did you check that results did not get worse for some groups?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "IP-01",
                 "IP-04"
               ],
-              "expectedPractice": "The team checked whether its tuning choices, such as the decision threshold, class weights and the measure it optimised, made results worse for some groups. It compared results by group before and after tuning, and wrote down the changes it made.",
-              "whyAsked": "Tuning for the best overall result often favours the largest group, and a threshold chosen on the whole population can leave a smaller group with far more missed cases.",
-              "reasonPrompt": "Say which tuning choices you checked and what changed by group, facts first. This text is printed in the model card under \"Bias mitigations applied\". Say what you changed.",
+              "expectedPractice": "You check whether your tuning choices, such as the decision threshold, class weights and the measure you optimised, made results worse for some groups, by comparing results by group before and after tuning, and record the changes you made.",
+              "whyAsked": "Tuning for the best overall result often favours the largest group, and a threshold set on the whole population can leave a smaller group with far more missed cases.",
               "evidenceExamples": [
                 "results by group before and after tuning",
                 "the summary file from the C-15 notebook",
                 "the tuning configuration with notes"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, some choices so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Tuning does not apply to this model"
+              },
+              "answerPrompts": {
+                "done": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; it prints in the model card.",
+                "partly": "Say which tuning choices you checked so far, what changed by group and what is still to check; it prints in the model card.",
+                "not_yet": "Say which tuning choices you will check by group, and when; it prints in the model card.",
+                "not_applicable": "Say why tuning does not apply to this model; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-19",
-              "text": "Have you assessed whether the model's errors have differential impact across demographic groups?",
+              "text": "Have you assessed whether the model's errors harm some groups more than others?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "IP-01",
                 "IP-02"
               ],
-              "expectedPractice": "The team described what each kind of error means for the people affected, such as a missed diagnosis or a service wrongly refused. It compared error rates across groups, and wrote down which groups bear more of the harm and what it will do about it.",
-              "whyAsked": "The same error rate can mean very different harm for different groups, and knowing who bears the errors shows where safeguards are needed.",
-              "reasonPrompt": "Describe the consequences of each kind of error, then the groups that bear more of them. This text is printed in the model card under \"Potential consequences of model errors\". Give rates, never records about people.",
+              "expectedPractice": "You describe what each kind of error means for those affected, such as a missed diagnosis or a service wrongly refused, compare error rates across groups, and record which groups bear more harm and your response.",
+              "whyAsked": "The same error rate can mean very different harm across groups; knowing who bears errors shows where safeguards are needed.",
               "evidenceExamples": [
                 "a table of error rates by group",
                 "a written note on the consequences of each kind of error",
                 "the summary file from the C-14 notebook"
+              ],
+              "answerLabels": {
+                "done": "Yes, we assessed it",
+                "partly": "Partly, some of it so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Assessing harm by group does not apply"
+              },
+              "answerPrompts": {
+                "done": "Describe each error's consequences, the groups bearing more and where this is recorded; it prints in the model card. Give rates, never records about people.",
+                "partly": "Describe the consequences assessed so far and what is still open; it prints in the model card. Give rates, never records about people.",
+                "not_yet": "Describe the errors you expect, their consequences and when you will compare groups; it prints in the model card.",
+                "not_applicable": "Say why assessing harm by group does not apply; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-20",
-              "text": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
+              "text": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "IP-03",
                 "PO-07"
               ],
-              "expectedPractice": "The team wrote down where the model is known to perform poorly or was not tested: populations, places, devices, languages and time periods. It also wrote down the kinds of errors it makes and the situations where it must not be used. The text is written for the people who will deploy or rely on the model and is kept with the model.",
+              "expectedPractice": "You record where the model is known to perform poorly or was not tested, by population, place, device, language and time period, the kinds of errors it makes and the situations where it must not be used. You write it for those who will deploy or rely on the model and keep it with the model.",
               "whyAsked": "People who deploy a model later often use it outside its setting, and written limits stop a model built in one district or language being used untested in another.",
-              "reasonPrompt": "Write the limits here in two or three sentences, facts first. They are printed in the model card under \"Out-of-scope uses\" and in its field on known limitations. Then say where the full text is kept.",
               "evidenceExamples": [
                 "the model card or its limitations section",
                 "a test report showing the cases where the model goes wrong"
+              ],
+              "answerLabels": {
+                "done": "Yes, they are written down",
+                "partly": "Partly, some limits so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Recording limits does not apply"
+              },
+              "answerPrompts": {
+                "done": "State the limits in two or three sentences, then where the full text is kept; they print in the model card.",
+                "partly": "State the limits known so far in two or three sentences and what is still to test; they print in the model card.",
+                "not_yet": "Write that the limits are not yet recorded, any you already know and when you will record them; this prints in the model card.",
+                "not_applicable": "Write why no limits apply to this model; this prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -1045,13 +1649,28 @@
               "gaps": [
                 "IP-06"
               ],
-              "expectedPractice": "The team keeps its code, data processing and trained models under version control, for example Git for code and DVC or MLflow for data and models. Each model in use can then be traced to the code and data that made it.",
-              "whyAsked": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause.",
-              "reasonPrompt": "Say what is under version control and with which tools. Give the version of the current model.",
+              "expectedPractice": "You keep code, data processing and trained models under version control (for example Git for code, DVC or MLflow for data and models), so each model in use traces to the code and data that made it.",
+              "whyAsked": "Without versions, nobody can trace the model in use to its code and data, which is how you find the cause when something goes wrong.",
               "evidenceExamples": [
                 "a link to the repository",
                 "the model registry entry",
                 "the data version record"
+              ],
+              "answerLabels": {
+                "done": "Yes, all of it",
+                "partly": "Partly, some of it",
+                "not_yet": "No, not yet",
+                "not_applicable": "Version control does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say what is under version control, with which tools, where it is kept and the current model's version.",
+                "partly": "Say what is under version control so far and what is not.",
+                "not_yet": "Say when you will set up version control, or what is blocking it.",
+                "not_applicable": "Say why version control does not apply."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
@@ -1063,30 +1682,60 @@
                 "IP-05",
                 "IP-07"
               ],
-              "expectedPractice": "In proportion to the risk of misuse, the team considered how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs. It tested the most likely ways, for example with the Adversarial Robustness Toolbox or by hand, and wrote down the results and the safeguards it chose.",
-              "whyAsked": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction.",
-              "reasonPrompt": "Name the kinds of manipulation you considered and how you tested them. Say what you found and which safeguards you chose.",
+              "expectedPractice": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model (altered images, reworded text, fake inputs), test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
+              "whyAsked": "Outputs that bring a benefit or a penalty invite gaming, and small input changes can flip a prediction.",
               "evidenceExamples": [
                 "an adversarial test report",
                 "the summary file from the C-18 notebook",
                 "a note on the safeguards chosen"
+              ],
+              "answerLabels": {
+                "done": "Yes, as far as the risk needs",
+                "partly": "Partly, some ways so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking for manipulation does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the manipulations considered, how you tested them, what you found, the safeguards chosen and where it is recorded.",
+                "partly": "Name the kinds of manipulation tested so far and those still to test.",
+                "not_yet": "Say when you will check, or what is blocking it.",
+                "not_applicable": "Say why checking for manipulation does not apply."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-IP-24",
-              "text": "Have you tested the model on data from a later time than its training data?",
+              "text": "Have you tested the model on data from after its training period?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "IP-05",
                 "PO-01"
               ],
-              "expectedPractice": "The team tested the model on data from a later period than its training data, or kept the most recent data aside for testing. It wrote down how performance changed over time and what that means for how long the model can be used.",
-              "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast.",
-              "reasonPrompt": "Give the periods you trained and tested on and how the results changed. Say what you concluded about retraining.",
+              "expectedPractice": "You test the model on data from after its training period, or hold the most recent data back for testing, and record how performance changed over time and so how long the model can be used.",
+              "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip with them; a test on later data shows how fast.",
               "evidenceExamples": [
                 "results by time period",
                 "the evaluation report with a split by time"
+              ],
+              "answerLabels": {
+                "done": "Yes, we tested it",
+                "partly": "Partly, some periods so far",
+                "not_yet": "No, not yet",
+                "not_applicable": "Change over time does not apply"
+              },
+              "answerPrompts": {
+                "done": "Give the training and test periods, how results changed, your conclusion on retraining and where it is recorded.",
+                "partly": "Give the periods tested so far and what is still to test.",
+                "not_yet": "Say when you will test on later data, or what is blocking it.",
+                "not_applicable": "Say why change over time does not apply to your model."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]
@@ -1107,176 +1756,325 @@
           "questions": [
             {
               "id": "Q-PO-01",
-              "text": "Do you regularly check, once the system is in use, whether its performance or its input data have changed?",
+              "text": "Once your system is in use, do you regularly check whether its inputs or its performance have changed?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "PO-01"
               ],
-              "expectedPractice": "Once the system is in use, a named person checks on a set schedule whether its inputs and its performance have moved away from what it was tested on. The checks, their thresholds and who acts when a threshold is crossed are written down.",
-              "whyAsked": "Data changes with seasons, new clinics, new phones and new policies, and a model nobody watches gets worse unnoticed, often until it harms the people it serves.",
-              "reasonPrompt": "Say what is checked, how often, the thresholds, and who acts, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\"; choose \"not applicable\" only if it will never be used outside the study.",
+              "expectedPractice": "Once the system is in use, a named person checks on a set schedule whether its inputs and its performance have moved away from what it was tested on. You record the checks, their thresholds and who acts when a threshold is crossed.",
+              "whyAsked": "Data changes with seasons, new clinics, new phones and new policies; a model nobody watches gets worse unnoticed, often until it harms the people it serves.",
               "evidenceExamples": [
                 "the monitoring plan",
                 "a link to the dashboard or check script",
                 "the C-21 notebook summary used to set thresholds"
+              ],
+              "answerLabels": {
+                "done": "Yes, on a set schedule",
+                "partly": "Partly, some checks in place",
+                "not_yet": "No, not yet",
+                "not_applicable": "It will never be used outside the study"
+              },
+              "answerPrompts": {
+                "done": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; it prints in the model card.",
+                "partly": "Say which checks, thresholds and roles are set so far and which are still open; it prints in the model card.",
+                "not_yet": "If the system is not in use yet, say so; say what you plan to check and when. It prints in the model card.",
+                "not_applicable": "Say why the system will never be used outside the study; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-02",
-              "text": "Have you defined triggers and procedures for model retraining?",
+              "text": "Have you written down when and how your model is retrained?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "PO-01"
               ],
-              "expectedPractice": "The team wrote down what triggers retraining, such as a monitored measure crossing a threshold the team set, a change in the population served or a set date. It also wrote down the steps to retrain and check the new model, and who decides, by role.",
-              "whyAsked": "Without agreed triggers and written steps, a model keeps running after it stops working well, or is retrained and put in use without checks.",
-              "reasonPrompt": "Name the triggers and the thresholds you set, then the steps and who decides, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\".",
+              "expectedPractice": "You record what triggers retraining, such as a monitored measure crossing your threshold, a change in the population served or a set date; the steps to retrain and check the new model; and who decides, by role.",
+              "whyAsked": "Without agreed triggers and written steps, a worsening model runs on, or is retrained and used unchecked.",
               "evidenceExamples": [
                 "the retraining procedure",
                 "the monitoring plan with its thresholds",
                 "the record of a past retraining"
+              ],
+              "answerLabels": {
+                "done": "Yes, we wrote them down",
+                "partly": "Partly, some of it is written",
+                "not_yet": "No, not yet",
+                "not_applicable": "Retraining will never apply"
+              },
+              "answerPrompts": {
+                "done": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; it prints in the model card.",
+                "partly": "Name the triggers, steps and roles set so far and what is still open; it prints in the model card.",
+                "not_yet": "Say when you will set the triggers and steps, and whether the system is in use yet; it prints in the model card.",
+                "not_applicable": "Say why your model will never be retrained; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-03",
-              "text": "Can a person review and overrule the system's outputs before they are acted on?",
+              "text": "Can a person review and override your system's outputs before they are acted on?",
               "type": "likert-5",
               "principle": "Awareness & Literacy",
               "gaps": [
                 "PO-02"
               ],
-              "expectedPractice": "People who use the system can review each output before it is acted on, or a sample of outputs in proportion to the risk, and can override it. How to override, who may do it, by role, and how overrides are recorded are written down and in use.",
-              "whyAsked": "A person who can check and override the system catches errors before they harm someone, but only if the way to override is clear and people use it.",
-              "reasonPrompt": "Describe who reviews outputs, by role, when, and how they override them. Say how overrides are recorded and how often they happen.",
+              "expectedPractice": "Users can review each output before it is acted on, or a sample in proportion to the risk, and override it. Your written rules on how to override, who may do it, by role, and how overrides are recorded are in use.",
+              "whyAsked": "A person who can check and override the system catches errors before they cause harm, if overriding is clear and used.",
               "evidenceExamples": [
                 "the workflow showing the review step",
                 "a log or summary of overrides",
                 "the user guide section on overriding"
+              ],
+              "answerLabels": {
+                "done": "Yes, a person can override",
+                "partly": "Partly, for some outputs",
+                "not_yet": "No, not yet",
+                "not_applicable": "Review by a person does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say who reviews outputs, by role, when, how they override, how often overrides happen and where they are recorded.",
+                "partly": "Say which outputs a person can review and override so far, and which not.",
+                "not_yet": "Say how and when you plan to add review by a person, or what is blocking it.",
+                "not_applicable": "Say why no output needs review by a person before it is acted on."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-04",
-              "text": "Have you defined clear roles and responsibilities for AI system outcomes (accountability matrix)?",
+              "text": "Have you agreed who is responsible for each part of your system's outcomes (accountability matrix)?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "PO-03"
               ],
-              "expectedPractice": "The team wrote down who is responsible, by role and organisation, for each part of the system's outcomes. The parts include deciding to deploy it, monitoring it, responding to harm, fixing errors and deciding to stop it. The people in those roles have agreed.",
-              "whyAsked": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible, and named roles make clear who acts.",
-              "reasonPrompt": "List the responsibilities and who holds each, by role and organisation, never by name. Say how the roles were agreed.",
+              "expectedPractice": "You record who is responsible, by role and organisation, for each part of the system's outcomes, including deciding to deploy it, monitoring, responding to harm, fixing errors and deciding to stop it, and each role holder agreed.",
+              "whyAsked": "If organisations sharing a system each think another is responsible, harms go unaddressed; named roles say who acts.",
               "evidenceExamples": [
                 "a governance and accountability matrix (C-26)",
                 "a memorandum of understanding naming the roles",
                 "minutes of the meeting where the roles were agreed"
+              ],
+              "answerLabels": {
+                "done": "Yes, roles are agreed",
+                "partly": "Partly, some roles agreed",
+                "not_yet": "No, not yet",
+                "not_applicable": "Assigning roles does not apply"
+              },
+              "answerPrompts": {
+                "done": "List each responsibility's holder, by role and organisation, never by name, and how they agreed; link the matrix.",
+                "partly": "List the responsibilities agreed so far, by role and organisation, never by name, and those still open.",
+                "not_yet": "Say when you will agree the roles, and with which organisations.",
+                "not_applicable": "Say why no responsibility for outcomes needs assigning."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-05",
-              "text": "Have you created an incident response plan for when the AI system produces harmful outputs?",
+              "text": "Have you written an incident response plan for when your system causes harm?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
                 "PO-02",
                 "PO-03"
               ],
-              "expectedPractice": "The team has a written plan for when the system causes or may cause harm. It says how a problem is reported, who is alerted, by role, and how the system is paused or limited. It also says how the people affected are told and helped, and how the cause is found and fixed.",
-              "whyAsked": "Harm from a system in use needs a fast response, which planning in the moment cannot give, and a written plan shows the people affected that problems are taken seriously.",
-              "reasonPrompt": "Describe how a harmful output is reported and what happens next, naming roles, not people. Say whether the plan has been tried in an exercise or used.",
+              "expectedPractice": "You have a written plan for when the system causes or may cause harm. It says how a problem is reported, who is alerted, by role, how the system is paused or limited, how the people affected are told and helped, and how the cause is found and fixed.",
+              "whyAsked": "Harm from a system in use needs a fast response that planning in the moment cannot give; a written plan shows the people affected that you take problems seriously.",
               "evidenceExamples": [
                 "the incident response plan",
                 "the record of an exercise or a real incident",
                 "the contact route shown to users"
+              ],
+              "answerLabels": {
+                "done": "Yes, we wrote one",
+                "partly": "Partly, some of the plan",
+                "not_yet": "No, not yet",
+                "not_applicable": "An incident plan does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say how harm is reported and what happens next, naming roles, not people, whether the plan was tried in an exercise or used, and where it is kept.",
+                "partly": "Say which parts of the plan exist, naming roles, not people, and which are missing.",
+                "not_yet": "Say when you will write the plan, or what is blocking it.",
+                "not_applicable": "Say why your system could not cause harm that needs a response."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-06",
-              "text": "Have you provided training or educational resources for end-users of the AI system?",
+              "text": "Have you given your system's users training or guidance?",
               "type": "likert-5",
               "principle": "Awareness & Literacy",
               "gaps": [
                 "PO-04"
               ],
-              "expectedPractice": "The people who use the system's outputs were given training or guidance, in a language and form that suits them. It covered what the outputs mean, how far to trust them, when not to rely on them and how to report a problem.",
-              "whyAsked": "Users who do not understand a system either trust it too much or ignore it, and short, practical training is often the cheapest safeguard.",
-              "reasonPrompt": "Say who was trained, by role, how, and in which languages. Say how you checked that the training worked.",
+              "expectedPractice": "You train or guide the people who use the system's outputs, in a language and form that suits them, on what outputs mean, how far to trust them, when not to rely on them and how to report a problem.",
+              "whyAsked": "Users who misunderstand a system trust it too much or ignore it; short, practical training is often the cheapest safeguard.",
               "evidenceExamples": [
                 "the training materials or user guide",
                 "a record of the training sessions, by role and number",
                 "feedback from trained users"
+              ],
+              "answerLabels": {
+                "done": "Yes, training or guidance given",
+                "partly": "Partly, for some users",
+                "not_yet": "No, not yet",
+                "not_applicable": "Training users does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name who was trained, by role, how, in which languages and how you checked it worked; link the materials.",
+                "partly": "Name who has been trained so far, by role, and who or what is still to cover.",
+                "not_yet": "Say who you plan to train, by role, how and when.",
+                "not_applicable": "Say why no one who uses the system's outputs needs training."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-07",
-              "text": "Can end-users understand the AI system's outputs, confidence levels, and limitations?",
+              "text": "Can your users understand each output, how confident it is and its limits?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PO-04",
                 "PO-02"
               ],
-              "expectedPractice": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is a separate question.",
-              "whyAsked": "An output that users misread is as harmful as a wrong one, and seeing the confidence and the reasons lets a user decide when to question the system.",
-              "reasonPrompt": "Describe what users see with each output, and how you checked that they read it correctly. Say whether outputs about a person show the main reasons for them.",
+              "expectedPractice": "Your system shows users each output with how confident it is and the main limits that apply, in words they understand, and you checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see its main reasons. Telling stakeholders the limits in general is a separate question.",
+              "whyAsked": "An output users misread is as harmful as a wrong one; seeing the confidence and the reasons lets a user decide when to question the system.",
               "evidenceExamples": [
                 "screenshots of the output screen",
                 "results of testing with users",
                 "the user guide section on reading outputs"
+              ],
+              "answerLabels": {
+                "done": "Yes, they can",
+                "partly": "Partly, for some outputs",
+                "not_yet": "No, not yet",
+                "not_applicable": "Showing outputs does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say what users see with each output, how you checked they read it correctly, whether outputs about a person show the main reasons, and where this is recorded.",
+                "partly": "Say what users see so far and what is missing: confidence, limits, main reasons or a check with users.",
+                "not_yet": "Say what you plan to show users and when you will check they read it correctly.",
+                "not_applicable": "Say why no user sees the outputs."
+              },
+              "practiceSameAs": [
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-16",
-              "text": "Have you introduced the system in stages, for example at one site first, before using it everywhere?",
+              "text": "Have you introduced your system in stages, such as one site first, before using it everywhere?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
                 "PO-01"
               ],
-              "expectedPractice": "The team introduced the system in stages, for example at one site or with one group first, and compared outcomes with the existing practice before expanding. It wrote down the measures and the result needed to go further.",
-              "whyAsked": "Problems that testing missed show up in real use, and starting small limits who is affected while they are found.",
-              "reasonPrompt": "Describe the stages, the sites by type and what you compared. Say what result you set for expanding and whether it was reached.",
+              "expectedPractice": "You introduce the system in stages, such as at one site or with one group first, compare outcomes with existing practice before expanding, and record the measures and the result needed to go further.",
+              "whyAsked": "Real use shows problems that testing missed; starting small limits who is affected while you find them.",
               "evidenceExamples": [
                 "the rollout plan",
                 "results from the first site",
                 "the decision note to expand or to stop"
+              ],
+              "answerLabels": {
+                "done": "Yes, in stages",
+                "partly": "Partly, some steps taken",
+                "not_yet": "No, not yet",
+                "not_applicable": "A staged start does not apply"
+              },
+              "answerPrompts": {
+                "done": "Give the stages, sites by type, comparison and result set for expanding, whether it was reached and where it is recorded.",
+                "partly": "Say which stages are done and what is compared so far, then what is still open.",
+                "not_yet": "Say how you plan to stage the start and when.",
+                "not_applicable": "Say why a staged start does not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-17",
-              "text": "Once the system is in use, do you check results for each group as well as overall accuracy?",
+              "text": "Once in use, do you check results for each group, not only overall accuracy?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PO-01",
                 "PO-06"
               ],
-              "expectedPractice": "Once the system is in use, a person in a set role checks on a schedule whether results for each group that matters stay within the team's thresholds. The groups, the measures, the checks and who acts when a threshold is crossed are written down.",
-              "whyAsked": "Fairness can get worse in use even when overall accuracy holds, because the people served change, and only results per group show it.",
-              "reasonPrompt": "Say which groups and measures are checked, how often, the thresholds and who acts, by role. If the system is not deployed yet, choose \"not yet\".",
+              "expectedPractice": "Once the system is in use, a person in a set role checks each relevant group's results on a schedule against your thresholds, and you record the groups, measures, checks and who acts when one is crossed.",
+              "whyAsked": "Fairness can worsen in use while overall accuracy holds, as the people served change; only per-group results show it.",
               "evidenceExamples": [
                 "the monitoring plan with its group measures",
                 "a link to the monitoring dashboard",
                 "a monitoring report by group"
+              ],
+              "answerLabels": {
+                "done": "Yes, for each group",
+                "partly": "Partly, for some groups",
+                "not_yet": "No, not yet",
+                "not_applicable": "Results by group do not apply"
+              },
+              "answerPrompts": {
+                "done": "Give the groups, measures, thresholds and schedule, who acts, by role, and where it is recorded.",
+                "partly": "Say which groups and measures are checked so far and which are still open.",
+                "not_yet": "Say which groups you plan to check and when.",
+                "not_applicable": "Say why group results do not apply; for a system not yet in use, pick No, not yet."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-18",
-              "text": "Have you defined performance thresholds below which the system should be automatically disabled or flagged?",
+              "text": "Have you set thresholds at which your system is flagged or stopped?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
                 "PO-01",
                 "PO-02"
               ],
-              "expectedPractice": "The team set its own thresholds at which the system is flagged for review or stopped. It wrote down how that happens, automatically or by a person in a set role, and how decisions are made while the system is stopped.",
-              "whyAsked": "A system that keeps running after it has degraded can harm many people before anyone acts, and a set threshold makes the decision quick and clear.",
-              "reasonPrompt": "Give the thresholds you set and what happens when each is crossed. Say how decisions are made while the system is stopped.",
+              "expectedPractice": "You set your own thresholds for flagging the system for review or stopping it, and record how that happens, automatically or by a person in a set role, and how decisions are made while it is stopped.",
+              "whyAsked": "A degraded system left running can harm many people before anyone acts; a set threshold makes the decision quick and clear.",
               "evidenceExamples": [
                 "the monitoring plan with the stop thresholds",
                 "the fallback procedure",
                 "the alert settings, described or linked"
+              ],
+              "answerLabels": {
+                "done": "Yes, thresholds are set",
+                "partly": "Partly, some thresholds set",
+                "not_yet": "No, not yet",
+                "not_applicable": "Flag or stop thresholds do not apply"
+              },
+              "answerPrompts": {
+                "done": "Give each threshold, what happens when crossed, how decisions are made while stopped, and where it is recorded.",
+                "partly": "Give the thresholds set so far and what is still open, such as decisions while stopped.",
+                "not_yet": "Say when you will set the thresholds, or what is blocking it.",
+                "not_applicable": "Say why no threshold for flagging or stopping applies."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]
@@ -1293,57 +2091,102 @@
           "questions": [
             {
               "id": "Q-PO-08",
-              "text": "Have you established feedback channels for affected communities and end-users?",
+              "text": "Can users and the people affected report problems or concerns to your team?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PO-06"
               ],
-              "expectedPractice": "Users and the people affected have a way to report problems or concerns that suits them, such as a phone line, SMS or a community meeting. The reports reach a person in a set role, and the team records what it did about them.",
-              "whyAsked": "People affected by a system often see its problems first, and a channel they can use, with visible action on what they say, keeps the system honest.",
-              "reasonPrompt": "Describe the channels, who receives reports, by role, and how many have come in. Do not upload reports that identify people.",
+              "expectedPractice": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did.",
+              "whyAsked": "People affected often see problems first; a channel they can use, with visible action on what they say, keeps the system honest.",
               "evidenceExamples": [
                 "a description of the feedback channels",
                 "a summary of the reports received and the actions taken",
                 "the notice telling people how to give feedback"
+              ],
+              "answerLabels": {
+                "done": "Yes, they can",
+                "partly": "Partly, some channels in place",
+                "not_yet": "No, not yet",
+                "not_applicable": "Feedback channels do not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the channels, the role receiving reports, how many came in and where actions are logged; upload nothing that identifies people.",
+                "partly": "Name the channels open so far, who receives reports, by role, and what is missing.",
+                "not_yet": "Say which channels you plan and when.",
+                "not_applicable": "Say why no user or affected person needs a way to report problems."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-09",
-              "text": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
+              "text": "Can people affected by a decision your system supports request a review?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PO-06"
               ],
-              "expectedPractice": "People affected by a decision the system supports are told they can ask for a review, and have a simple way to do so. A person in a set role reviews the case, and the team records the requests and their outcomes.",
-              "whyAsked": "A person who cannot challenge a decision about them has no remedy for an error, and review by a person catches what the system got wrong.",
-              "reasonPrompt": "Describe how people learn they can ask for a review, how they ask and who reviews, by role. Give the number of requests and outcomes, never personal details.",
+              "expectedPractice": "People affected by a decision the system supports are told they can ask for a review and have a simple way to ask; a person in a set role reviews the case, and you record requests and outcomes.",
+              "whyAsked": "Someone unable to challenge a decision about them has no remedy for an error; a person's review catches the system's mistakes.",
               "evidenceExamples": [
                 "the review procedure",
                 "the notice to the people affected",
                 "a summary of requests and outcomes"
+              ],
+              "answerLabels": {
+                "done": "Yes, they can",
+                "partly": "Partly, some of it in place",
+                "not_yet": "No, not yet",
+                "not_applicable": "It supports no decision about people"
+              },
+              "answerPrompts": {
+                "done": "Say how people learn of and make requests, who reviews, by role, and where requests are logged; give counts and outcomes, never personal details.",
+                "partly": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not.",
+                "not_yet": "Say how and when you plan to let people ask for a review.",
+                "not_applicable": "Say why the system supports no decision about a person."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-10",
-              "text": "Have you created complete documentation for the deployed system (codebook, deployment specs)?",
+              "text": "Have you fully documented your deployed system (codebook, deployment specs)?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PO-07"
               ],
-              "expectedPractice": "The team wrote documentation for the deployed system that someone else could run it from. It covers what the system does, its parts and data flows, and how to install and update it. It also names the infrastructure it needs, for example power, connectivity and devices, its other dependencies and its known limits.",
-              "whyAsked": "When the person who built a system leaves, the documentation keeps it running safely, and systems in low-resource settings often stop because a dependency was never written down.",
-              "reasonPrompt": "Say what the documentation covers and where it is kept. Say whether someone outside the build team has used it.",
+              "expectedPractice": "Your documentation, enough for someone else to run the system, covers what it does, its parts and data flows, how to install and update it, the infrastructure it needs, such as power, connectivity and devices, its other dependencies and known limits.",
+              "whyAsked": "Documentation keeps a system running safely after its builder leaves; in low-resource settings, an unwritten dependency often stops it.",
               "evidenceExamples": [
                 "the codebook and deployment document (C-28)",
                 "a link to the documentation in the repository"
+              ],
+              "answerLabels": {
+                "done": "Yes, fully documented",
+                "partly": "Partly, some of it documented",
+                "not_yet": "No, not yet",
+                "not_applicable": "Documentation does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say what it covers, where it is kept and whether anyone outside the build team has used it.",
+                "partly": "Say which parts are documented so far and which are missing.",
+                "not_yet": "Say when you will write the documentation, or what is blocking it.",
+                "not_applicable": "Say why the system needs no documentation to run."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-11",
-              "text": "Which of the following governance measures are in place?",
+              "text": "Which of these governance measures do you have in place?",
               "type": "checklist",
               "options": [
                 "Data governance committee",
@@ -1415,51 +2258,96 @@
               },
               "principle": "Reproducibility & Accountability",
               "gaps": [],
-              "expectedPractice": "The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
-              "whyAsked": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting.",
-              "reasonPrompt": "Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do.",
+              "expectedPractice": "You have the governance measures your setting needs, usually data governance, an ethics review process, logging, version control and access control, and record how each works. A tick on national data protection laws means you identified the law and hold what it requires. Outside reviews and a community board fit higher-risk systems.",
+              "whyAsked": "Governance measures keep a system's use responsible after the build team moves on; which ones fit depends on the risk and the setting.",
               "evidenceExamples": [
                 "the terms of reference of the governance or ethics body",
                 "the access control policy",
                 "approval letters or registrations, with their references"
+              ],
+              "answerLabels": {
+                "done": "Every measure our setting needs",
+                "partly": "Some of the measures it needs",
+                "not_yet": "None yet",
+                "not_applicable": "No governance measure applies"
+              },
+              "answerPrompts": {
+                "done": "Say how each ticked measure works, naming bodies and roles, not people, why each unticked one does not fit, and where it is recorded.",
+                "partly": "Say how each ticked measure works, naming bodies and roles, not people; for each unticked one, whether it does not fit or is still to do.",
+                "not_yet": "Say which measures you plan and when.",
+                "not_applicable": "Say why no governance measure applies to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-12",
-              "text": "Have you assessed the AI system's performance across the deployment context's diversity (geographic, linguistic, cultural)?",
+              "text": "Have you checked your system's results for each place, language, culture and kind of user?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PO-01"
               ],
-              "expectedPractice": "The team checked results separately for the places, languages and kinds of user where the system is used, for example districts, dialects, devices or literacy. It wrote down where the system works less well and what it did.",
-              "whyAsked": "A system tested in one place or language often works worse in another, and users there carry the cost unless someone checks.",
-              "reasonPrompt": "Name the settings you compared and what you found. Say what you changed, or stated as a limit.",
+              "expectedPractice": "You check results for each place, language and kind of user the system serves, such as districts, dialects, devices or literacy, and record where it works less well and what you did.",
+              "whyAsked": "A system tested in one place or language often works worse in another; users there carry the cost unless someone checks.",
               "evidenceExamples": [
                 "results by setting",
                 "notes from field testing at different sites",
                 "results of testing with users in each language"
+              ],
+              "answerLabels": {
+                "done": "Yes, for each setting",
+                "partly": "Partly, for some settings",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking by setting does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the settings compared, what you found, what you changed or stated as a limit, and where it is recorded.",
+                "partly": "Name the settings compared so far and what you found, then those still to compare.",
+                "not_yet": "Say which settings you plan to compare and when, or what is blocking it.",
+                "not_applicable": "Say why comparing settings does not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-13",
-              "text": "Have you planned when and how the AI system will be retired or replaced?",
+              "text": "Have you planned when and how your system will be retired or replaced?",
               "type": "likert-5",
               "principle": "Sustainability",
               "gaps": [
                 "PO-05"
               ],
-              "expectedPractice": "The team wrote down when the system should be retired or replaced, for example when the need ends, a better method exists or upkeep costs too much. It also wrote down how: who decides, how users and data are handled, and what replaces it. The plan counts the computing and energy the system uses while running, estimated from hardware hours and power draw.",
-              "whyAsked": "Systems left running after their purpose ends keep using money and power, and drift without oversight, so planning the end at the start means someone decides when to stop.",
-              "reasonPrompt": "Say what would trigger retirement and who decides, by role. Give your estimate of the computing and energy the system uses while running.",
+              "expectedPractice": "You record when the system should be retired or replaced, such as when the need ends, a better method exists or upkeep costs too much, and how: who decides, how users and data are handled, and what replaces it. The plan counts the computing and energy the system uses while running, estimated from hardware hours and power draw.",
+              "whyAsked": "Systems left running after their purpose ends keep using money and power and drift without oversight; planning the end at the start means someone decides when to stop.",
               "evidenceExamples": [
                 "the retirement section of the deployment plan",
                 "the running cost estimate, with energy"
+              ],
+              "answerLabels": {
+                "done": "Yes, we planned it",
+                "partly": "Partly, some of the plan",
+                "not_yet": "No, not yet",
+                "not_applicable": "Planning the end does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say what would trigger retirement, who decides, by role, your estimate of computing and energy while running, and where the plan is kept.",
+                "partly": "Say which parts of the plan exist, such as the triggers or the energy estimate, and which are missing.",
+                "not_yet": "Say when you will plan the end of the system, or what is blocking it.",
+                "not_applicable": "Say why planning the end does not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-14",
-              "text": "Does the system handle unusual inputs safely, for example by flagging them for a person instead of giving a confident answer?",
+              "text": "Does your system handle unusual inputs safely, such as by flagging them for a person rather than giving a confident answer?",
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
@@ -1467,120 +2355,223 @@
                 "PO-01",
                 "PO-03"
               ],
-              "expectedPractice": "The system detects inputs unlike those it was built on, for example by checking value ranges or the model's confidence. It then handles them safely: it flags them, asks a person to decide or falls back to the earlier practice. The team tested this and wrote down how it works.",
-              "whyAsked": "Every system meets inputs it was not built for, and a safe one flags them for a person to decide instead of giving a confident wrong answer.",
-              "reasonPrompt": "Describe how unusual inputs are detected and what the system does then. Say how you tested it.",
+              "expectedPractice": "Your system detects inputs unlike those it was built on, such as by checking value ranges or the model's confidence, and handles them safely: it flags them, asks a person to decide or falls back to the earlier practice. You tested this and record how it works.",
+              "whyAsked": "Every system meets inputs it was not built for; a safe one flags them for a person to decide instead of giving a confident wrong answer.",
               "evidenceExamples": [
                 "the design note on handling unusual inputs",
                 "test results with unusual inputs",
                 "the fallback procedure"
+              ],
+              "answerLabels": {
+                "done": "Yes, it does",
+                "partly": "Partly, for some inputs",
+                "not_yet": "No, not yet",
+                "not_applicable": "Unusual inputs do not apply"
+              },
+              "answerPrompts": {
+                "done": "Say how unusual inputs are detected, what the system then does, how you tested it and where this is recorded.",
+                "partly": "Say which unusual inputs are detected and handled so far, and which are not.",
+                "not_yet": "Say how and when you plan to detect and handle unusual inputs.",
+                "not_applicable": "Say why your system cannot meet inputs unlike those it was built on."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-15",
-              "text": "Have you communicated the AI system's limitations and intended use to all stakeholders?",
+              "text": "Have you told all stakeholders what your system is for and its limits?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PO-04",
                 "PO-07"
               ],
-              "expectedPractice": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is a separate question.",
-              "whyAsked": "Limits that only the build team knows protect nobody, so decision-makers and partners need them in writing before they rely on the system.",
-              "reasonPrompt": "Say who was told, by role or organisation, what and how. This text is printed in the model card under \"Deployment recommendations\", so state the intended use and the main limits first.",
+              "expectedPractice": "You tell the people who decide on, run or rely on the system, in writing and in their language, what it is for, where it may not be used and its main limits, and record who was told, by role. How each output is shown to users is a separate question.",
+              "whyAsked": "Limits that only the build team knows protect nobody; decision-makers and partners need them in writing before they rely on the system.",
               "evidenceExamples": [
                 "the briefing note to partners",
                 "the model card or its limitations section",
                 "minutes of the handover meeting"
+              ],
+              "answerLabels": {
+                "done": "Yes, we told them",
+                "partly": "Partly, some were told",
+                "not_yet": "No, not yet",
+                "not_applicable": "Telling stakeholders does not apply"
+              },
+              "answerPrompts": {
+                "done": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; it prints in the model card.",
+                "partly": "Give the intended use and main limits first, then who has been told so far and who not; it prints in the model card.",
+                "not_yet": "Give the intended use and main limits first, then when and how you will tell people; it prints in the model card.",
+                "not_applicable": "Say why no one else needs to know the intended use and limits; it prints in the model card."
+              },
+              "practiceSameAs": [
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-20",
-              "text": "Have you involved representatives of affected communities in the design and evaluation of the AI system?",
+              "text": "Have representatives of the affected communities helped design and evaluate your system?",
               "type": "likert-5",
               "principle": "Multi-stakeholder Collaboration",
               "gaps": [
                 "PO-06",
                 "PO-02"
               ],
-              "expectedPractice": "Representatives of the communities affected took part in designing and evaluating the system, for example through a community advisory group or review sessions. Their input was recorded, and the team wrote down what it changed because of it. Participants are described by role or group.",
-              "whyAsked": "Communities know what will work and what will harm them in ways a project team cannot, and their review is an outside check on the team's blind spots.",
-              "reasonPrompt": "Describe who took part, by group or role, how and when. Say what you changed because of their input. Do not upload lists of participants.",
+              "expectedPractice": "Representatives of the affected communities help design and evaluate the system, such as in a community advisory group or review sessions; you record their input, by role or group, and what it changed.",
+              "whyAsked": "Communities know what will help or harm them as a project team cannot; their review checks your blind spots from outside.",
               "evidenceExamples": [
                 "notes from community review sessions",
                 "the terms of reference of a community advisory group",
                 "a note of the changes made after their input"
+              ],
+              "answerLabels": {
+                "done": "Yes, they helped",
+                "partly": "Partly, in some of the work",
+                "not_yet": "No, not yet",
+                "not_applicable": "Community input does not apply"
+              },
+              "answerPrompts": {
+                "done": "Say who took part, by group or role, how and when, and what you changed; link the notes, never a participant list.",
+                "partly": "Say who has taken part so far, by group or role, and in which parts of the work not yet.",
+                "not_yet": "Say which communities you plan to involve, how and when.",
+                "not_applicable": "Say why community input does not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-21",
-              "text": "Have you assessed the AI system's impact on existing workflows and professional practices?",
+              "text": "Have you checked how your system changes existing workflows and professional practice?",
               "type": "likert-5",
               "principle": "Awareness & Literacy",
               "gaps": [
                 "PO-02",
                 "PO-04"
               ],
-              "expectedPractice": "The team looked at how the system changes the work of the people who use it, such as extra steps, time and responsibilities, and tried it in the real workflow. It wrote down the problems found and what it changed.",
-              "whyAsked": "A system that adds work or confusion gets used badly or not at all, and staff may start to rely on it in ways nobody planned.",
-              "reasonPrompt": "Describe the changes to the workflow you found and how you found them, naming staff by role. Say what you changed.",
+              "expectedPractice": "You look at how the system changes its users' work, such as extra steps, time and responsibilities, try it in the real workflow, and record the problems found and what you changed.",
+              "whyAsked": "A system that adds work or confusion is used badly or not at all, and staff may rely on it in unplanned ways.",
               "evidenceExamples": [
                 "notes from a trial in the workflow",
                 "feedback from users, by role",
                 "the updated workflow description"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked",
+                "partly": "Partly, for some of the work",
+                "not_yet": "No, not yet",
+                "not_applicable": "Workflow changes do not apply"
+              },
+              "answerPrompts": {
+                "done": "Say what workflow changes you found and how, naming staff by role, what you changed and where it is recorded.",
+                "partly": "Say which parts of the workflow you have looked at so far and what is still open.",
+                "not_yet": "Say when you will try the system in the real workflow, or what is blocking it.",
+                "not_applicable": "Say why workflow changes do not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-22",
-              "text": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
+              "text": "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
                 "PO-03"
               ],
-              "expectedPractice": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are the national data protection law and the national research ethics guidelines of each country where the system is built and used. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
-              "whyAsked": "Approvals are easy to lose track of when research moves into use, and a missing one can stop a deployment and expose the people whose data is used.",
-              "reasonPrompt": "List each rule you identified and the approval or registration you hold for it: body, reference and date. Say which you are still waiting for. The platform records your statement and makes no judgement of it.",
+              "expectedPractice": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each such country. You obtain the approvals and registrations they require and record each with its reference and date.",
+              "whyAsked": "Approvals are easy to lose track of when research moves into use; a missing one can stop a deployment and expose the people whose data is used.",
               "evidenceExamples": [
                 "approval letters",
                 "registration documents",
                 "a data protection impact assessment",
                 "a note from the institution's data protection officer"
+              ],
+              "answerLabels": {
+                "done": "Yes, identified and obtained",
+                "partly": "Partly, some approvals held",
+                "not_yet": "No, not yet",
+                "not_applicable": "No such rule applies"
+              },
+              "answerPrompts": {
+                "done": "List each rule and its approval or registration: body, reference and date; attach the letters. The platform records your statement and makes no judgement of it.",
+                "partly": "List each rule, the approvals held with body, reference and date, and those you still wait for. The platform makes no judgement of your statement.",
+                "not_yet": "Say which rules you have identified so far and when you expect each approval.",
+                "not_applicable": "Say why no data protection, research ethics or sector rule applies."
+              },
+              "practiceSameAs": [
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-23",
-              "text": "Have you established regular review cycles to reassess the AI system's appropriateness and performance?",
+              "text": "Do you regularly review your system's performance and whether it should still be used?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
                 "PO-01",
                 "PO-03"
               ],
-              "expectedPractice": "The team holds reviews on a set schedule, in proportion to the risk, that look at performance, results by group, user feedback and whether the system is still needed. The decisions are recorded and acted on.",
-              "whyAsked": "Monitoring watches the numbers, but only a review on a set date asks whether the system should still be used as it is.",
-              "reasonPrompt": "Say how often reviews are held, who takes part, by role, and the date of the last one. Say what it decided.",
+              "expectedPractice": "On a set schedule, in proportion to the risk, you review performance, results by group, user feedback and whether the system is still needed, and record and act on the decisions.",
+              "whyAsked": "Monitoring watches the numbers; only a review on a set date asks whether the system should still be used as it is.",
               "evidenceExamples": [
                 "the review schedule",
                 "minutes of the last review",
                 "the decision record of a review"
+              ],
+              "answerLabels": {
+                "done": "Yes, on a set schedule",
+                "partly": "Partly, some reviews held",
+                "not_yet": "No, not yet",
+                "not_applicable": "Regular reviews do not apply"
+              },
+              "answerPrompts": {
+                "done": "Give how often you review, who takes part, by role, and the last review's date and decision; link its minutes.",
+                "partly": "Say what your reviews cover so far, how often they happen, and what is missing.",
+                "not_yet": "Say when the first review will be and who will take part, by role.",
+                "not_applicable": "Say why regular reviews do not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             },
             {
               "id": "Q-PO-24",
-              "text": "Have you considered the AI system's impact on equity of access to services?",
+              "text": "Have you checked whether your system leaves anyone without access to the service?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
                 "PO-04"
               ],
-              "expectedPractice": "The team checked whether people with less access can reach and use the system, such as those with older phones, poor connectivity, low literacy or another language. It wrote down any gap in access and what it did about it.",
-              "whyAsked": "A service delivered through an AI system can leave out the people who most need it, and checking access shows who is left behind.",
-              "reasonPrompt": "Name the groups whose access you checked and what you found. Say what you changed.",
+              "expectedPractice": "You check whether people with less access, such as those with older phones, poor connectivity, low literacy or another language, can reach and use the system, and record any gap and your response.",
+              "whyAsked": "A service run through an AI system can leave out those who need it most; checking access shows who is left behind.",
               "evidenceExamples": [
                 "results of testing on basic phones or offline",
                 "notes from users with limited access",
                 "a note on the changes made"
+              ],
+              "answerLabels": {
+                "done": "Yes, we checked access",
+                "partly": "Partly, for some groups",
+                "not_yet": "No, not yet",
+                "not_applicable": "Checking access does not apply"
+              },
+              "answerPrompts": {
+                "done": "Name the groups checked, what you found and changed, and where it is recorded.",
+                "partly": "Name the groups checked so far, what you found, and those still to check.",
+                "not_yet": "Say which groups you plan to check and when, or what is blocking it.",
+                "not_applicable": "Say why checking access does not apply to your system."
+              },
+              "practiceSameAs": [
+                "5.0.0",
+                "5.1.0"
               ]
             }
           ]

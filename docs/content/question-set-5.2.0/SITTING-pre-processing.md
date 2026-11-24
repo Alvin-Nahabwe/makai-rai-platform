@@ -1,16 +1,39 @@
 # Sitting: the pre-processing questions of content 5.2.0 (per-question wording)
 
+## For your decision
+
+Taken from the stem differences and the drafter's notes. Each item has one answer, which settles the question's text row.
+
+**Stems whose scope or strength changed.** The practice text is kept; the stem now says what the practice asks, in fewer words. Say if a stem should keep its old strength.
+- Q-PP-01: "Have you checked whether AI is the best approach, compared with simpler options…" is now "Have you compared AI with simpler options…". The judgement "best approach" leaves the stem; the comparison and the recorded choice stay in the practice.
+- Q-PP-02: "Have you clearly defined the problem your AI system aims to solve, including specific objectives and success criteria?" is now "Have you defined the problem, its objectives and its success criteria?". "Clearly" and "specific" are gone.
+- Q-PP-03: "identified all stakeholders who are directly or indirectly affected" is now "identified everyone the system affects, directly or indirectly".
+- Q-PP-05: "Have you conducted a human rights impact assessment for the AI system?" is now "Have you assessed the system's impact on human rights?". The formal "impact assessment" goes, because the practice accepts a short note for a low-stakes tool.
+- Q-PP-09 and Q-PP-20: "your training data" is now "your data" (Q-PP-09: "checked your data represents the population the system will serve"; Q-PP-20: "checked your data is recent enough for when the system will be used").
+- Q-PP-13: "informed consent for data collection and use" is now "informed consent to collect and use the data".
+- Q-PP-21: "established data governance policies" is now "set data governance rules".
+- Q-PP-23: "Have you engaged domain experts in reviewing data quality and relevance?" is now "Have domain experts reviewed your data's quality and relevance?".
+
+**Claim lint.** No pre-processing stem or text needed rewording for the claim lint.
+
+**Other flags.**
+- Q-PP-01's good practice has a doubled word, "…each needs to keep running, and and risks to the people affected…". The draft was not edited; it needs a one-word fix.
+- Q-PP-11 and Q-PP-14 keep the label "Does not apply to this project" for Not applicable. A fact-shaped label on Q-PP-11 would also fit a team that only dropped the attribute; Q-PP-14 is shown only after the gate's Yes, so "no personal data" would contradict that answer.
+- Q-PP-13: the list of consent forms ("written, oral with a witness, community and individual") is now only in the Not yet prompt, because the Done prompt would pass 200 characters with it.
+- Q-PP-05 and Q-PP-24 keep your 5.1.0 edits to why asked, with the voice changed to the second person.
+- The gate carries `practiceSameAs` (`["5.0.0","5.1.0"]`) as a question like the others, by controller ruling R17/R18.
+
 Drafted on 24 November 2026, for the owner's sitting. Content 5.1.0 stays the running version, and nothing in this pack has been signed.
 
-The draft is in `docs/content/question-set-5.2.0/drafts/pre-processing.json`. A later step applies the three stages' drafts to `data/content/5.2.0/` at once, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`) and the `proposal.json` reword actions. Until then `changes.json` holds no pre-processing row.
+The draft is in `docs/content/question-set-5.2.0/drafts/pre-processing.json`. The three stages' drafts are applied to `data/content/5.2.0/`, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`; the row id is `<question>.<field>`, for example `Q-PP-01.text` or `Q-PP-01.answerLabels.done`) and the `proposal.json` actions updated to the new stems. Every row starts `pending`.
 
 ## Measured length
 
 Words per question screen, as the plan measures them: words of the question, the good practice text and "why this is asked", plus the longest answer prompt (the reason prompt for the gate), split on single spaces (`scripts/content/question-words.mjs`).
 
-- Stage median: **133 in 5.1.0, 101 in this draft**. Controller ruling R18 aims for 61 with a hard ceiling of 67, and no caution, condition, required element or meaning-bearing example may be dropped or generalised to meet it. **This draft keeps every element and is above the ceiling: the two rules cannot both hold for this stage, and that is for you to decide.**
+- Stage median: **133 in 5.1.0, 101 in this draft**. Owner ruling R19 sets the limit at 0.8 times the 5.1.0 median, **106.4**, reached by plainer phrasing only: no caution, condition, element of the practice or meaning-bearing example is dropped to meet it. This draft is within the limit.
 - Rows below: 22 questions (21 with answer labels and prompts, and the gate). Questions that need your decision before drafting (`needsOwner`): none.
-- Questions above 61 words: 22 of 22 (Q-PP-01 (95), Q-PP-02 (88), Q-PP-03 (91), Q-PP-04 (98), Q-PP-05 (118), Q-PP-24 (124), Q-PP-07 (94), Q-PP-08 (104), Q-PP-09 (107), Q-PP-11 (122), Q-PP-12 (97), Q-PP-GATE-SENSITIVE (122), Q-PP-13 (142), Q-PP-14 (134), Q-PP-16 (79), Q-PP-17 (88), Q-PP-18 (105), Q-PP-19 (98), Q-PP-20 (91), Q-PP-21 (123), Q-PP-22 (120), Q-PP-23 (90)).
+- Questions above the limit: 9 of 22 (Q-PP-05 (118), Q-PP-24 (124), Q-PP-09 (107), Q-PP-11 (122), Q-PP-GATE-SENSITIVE (122), Q-PP-13 (142), Q-PP-14 (134), Q-PP-21 (123), Q-PP-22 (120)). The limit applies to the median; these questions carry the most practice and keep all of it.
 
 ## Summary
 

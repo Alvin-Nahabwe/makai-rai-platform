@@ -32,7 +32,7 @@ const KEYS = ['done', 'partly', 'not_yet', 'not_applicable'] as const;
 const GATE = 'Q-PP-GATE-SENSITIVE';
 
 /** The stages whose 5.2.0 content is drafted. The stage dispatches add to it. */
-const DRAFTED_STAGES: readonly Stage[] = [];
+const DRAFTED_STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
 
 interface Change { row: string; id: string; file: FileName; field: string; from: unknown; to: unknown; decision: 'pending' | 'accept' | 'edit' | 'decline'; final: unknown }
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any -- walks arbitrary content JSON
@@ -162,15 +162,14 @@ describe('content 5.2.0, the draft for the owner', () => {
       }
     });
 
-    it('every non-gate question has practiceSameAs equal to ["5.0.0","5.1.0"] or ["5.1.0"] or [], and the gate has none', () => {
+    it('every question, the gate included, has practiceSameAs equal to ["5.0.0","5.1.0"] or ["5.1.0"] or []', () => {
       const older = new Map(questionsOf(read(OLDER, 'questionBank.json')).map((q) => [q.id, q]));
       const prev = new Map(questionsOf(read(OLD, 'questionBank.json')).map((q) => [q.id, q]));
-      for (const q of nonGate) {
+      for (const q of qs) {
         expect([['5.0.0', '5.1.0'], ['5.1.0'], []], q.id).toContainEqual(q.practiceSameAs);
         // 5.0.0 is listed only where 5.1.0's expectedPractice is 5.0.0's (the practice 5.1.0 itself did not change).
         if ((q.practiceSameAs as string[]).includes('5.0.0')) expect(prev.get(q.id)?.expectedPractice, `${q.id} 5.0.0`).toBe(older.get(q.id)?.expectedPractice);
       }
-      for (const q of qs.filter((x) => x.id === GATE)) expect(q.practiceSameAs, 'the gate has no practiceSameAs').toBeUndefined();
     });
 
     it("the stage's field-feeding questions' prompts each name the document they print in", () => {
@@ -182,18 +181,17 @@ describe('content 5.2.0, the draft for the owner', () => {
       }
     });
 
-    it('the median question words of the stage is at most 61', () => {
-      const c = loadContentFrom(NEW) as { questions: Map<string, Json> };
-      const words = [...c.questions.values()].filter((q) => q.stage === stage).map((q) => questionWords(q) as number);
-      expect(median(words)).toBeLessThanOrEqual(61);
+    it("the median question words of the stage is at most 0.8 times the stage's 5.1.0 median (owner ruling R19)", () => {
+      const of = (dir: string) => [...(loadContentFrom(dir) as { questions: Map<string, Json> }).questions.values()].filter((q) => q.stage === stage).map((q) => questionWords(q) as number);
+      expect(median(of(NEW))).toBeLessThanOrEqual(0.8 * median(of(OLD)));
     });
   });
 
   const all = STAGES.every((s) => DRAFTED_STAGES.includes(s));
-  it.runIf(all)('the 25 field-feeding questions are exactly the ones the field maps name, and the median question words of 5.2.0 is at most 61', () => {
+  it.runIf(all)('the 25 field-feeding questions are exactly the ones the field maps name, and the median question words of 5.2.0 is at most 96 (owner ruling R19)', () => {
     expect(fieldFeeding().size).toBe(25);
     const c = loadContentFrom(NEW) as { questions: Map<string, Json> };
-    expect(median([...c.questions.values()].map((q) => questionWords(q) as number))).toBeLessThanOrEqual(61);
+    expect(median([...c.questions.values()].map((q) => questionWords(q) as number))).toBeLessThanOrEqual(96);
   });
   it.runIf(all)('every non-gate question of 5.2.0 has answerLabels and answerPrompts', () => {
     const qs = questionsOf(read(NEW, 'questionBank.json'));

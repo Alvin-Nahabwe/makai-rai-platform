@@ -1,8 +1,30 @@
 # Sitting: the post-processing questions of content 5.2.0 (per-question wording)
 
+## For your decision
+
+Taken from the stem differences and the drafter's notes. Each item has one answer, which settles the question's text row.
+
+**Stems whose scope or strength changed.** The practice is unchanged; each stem now matches it.
+- Q-PO-18: "…performance thresholds below which the system should be automatically disabled or flagged?" is now "Have you set thresholds at which your system is flagged or stopped?". The practice allows "automatically or by a person in a set role"; 5.1.0's stem asked only for the automatic case.
+- Q-PO-24: "Have you considered the AI system's impact on equity of access to services?" is now "Have you checked whether your system leaves anyone without access to the service?". "Considered" becomes "checked", the practice's word.
+- Q-PO-09: "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?" is now "Can people affected by a decision your system supports request a review?".
+- Q-PO-08: "Have you established feedback channels for affected communities and end-users?" is now "Can users and the people affected report problems or concerns to your team?".
+- Q-PO-05: "…when the AI system produces harmful outputs?" is now "…when your system causes harm?", following the practice's "causes or may cause harm".
+- Q-PO-04: "Have you defined clear roles and responsibilities for AI system outcomes (accountability matrix)?" is now "Have you agreed who is responsible for each part of your system's outcomes (accountability matrix)?".
+- Q-PO-23: "Have you established regular review cycles to reassess the AI system's appropriateness and performance?" is now "Do you regularly review your system's performance and whether it should still be used?".
+- Q-PO-06: "…training or educational resources for end-users of the AI system?" is now "…given your system's users training or guidance?". Q-PO-03: "overrule" is now "override". Q-PO-15: "all stakeholders" is kept; the practice defines them as those who decide on, run or rely on the system.
+
+**Rewording forced by the claim lint.**
+- Q-PO-22: "Have you ensured compliance with applicable data protection regulations and ethical guidelines?" is now "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?". The claim lint allows the old wording because SRS 10.1.6 keeps that stem (`__tests__/lint/claim-allowlist.json`); the new stem has no claim word and names the practice's two acts. Say whether 10.1.6 pins the wording or only the team's-own-statement framing. Restoring the old stem takes Q-PO-22 from 122 to 117 words and moves neither median; once 5.2.0 is scanned, the allow-list entry may be reported as stale.
+
+**Other flags.**
+- Q-PO-17: the Not applicable prompt names another answer: "Say why group results do not apply; for a system not yet in use, pick No, not yet." You may prefer the condition in the label.
+- Q-PO-07, Q-PO-15 and Q-PO-22 propose `practiceSameAs` `["5.1.0"]`, not 5.0.0 too, because 5.1.0's practice text differs from 5.0.0's (an editorial change in each). Confirming 5.0.0 as well would stop those three showing "Good practice changed" on answers saved under 5.0.0.
+- The stage median is 88 against a limit of 89.6, and the version median 95 against 96. Re-measure after the sitting.
+
 Drafted on 24 November 2026, for the owner's sitting. Content 5.1.0 stays the running version, and nothing in this pack has been signed.
 
-The draft is in `docs/content/question-set-5.2.0/drafts/post-processing.json`. A later step applies the three stages' drafts to `data/content/5.2.0/` at once, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`) and the `proposal.json` reword actions. Until then `changes.json` holds no post-processing row.
+The draft is in `docs/content/question-set-5.2.0/drafts/post-processing.json`. The three stages' drafts are applied to `data/content/5.2.0/`, with one `changes.json` row per changed field in the 5.1.0 row format (`row`, `id`, `file`, `field`, `from`, `to`, `decision`, `final`; the row id is `<question>.<field>`, for example `Q-PP-01.text` or `Q-PP-01.answerLabels.done`) and the `proposal.json` actions updated to the new stems. Every row starts `pending`.
 
 ## Measured length
 
