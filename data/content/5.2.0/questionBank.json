@@ -41,7 +41,7 @@
                 "done": "Name the options compared, what decided it and where the choice is recorded.",
                 "partly": "Name the options compared so far and those still to compare.",
                 "not_yet": "Say when you plan to compare, or what is blocking it.",
-                "not_applicable": "Say why no comparison applies, which is unusual; it prints in the mitigation plan."
+                "not_applicable": "Say why no comparison applies, which is unusual; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -230,7 +230,7 @@
                 "done": "Yes, we estimated it",
                 "partly": "Partly, for some of the work",
                 "not_yet": "No, not yet",
-                "not_applicable": "No estimate is needed"
+                "not_applicable": "No energy estimate applies"
               },
               "answerPrompts": {
                 "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; this prints in the model card.",
@@ -278,7 +278,7 @@
                 "done": "Yes, for every source",
                 "partly": "Partly, for some sources",
                 "not_yet": "No, not yet",
-                "not_applicable": "No data source is used"
+                "not_applicable": "No source record applies"
               },
               "answerPrompts": {
                 "done": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself.",
@@ -376,7 +376,7 @@
                 "done": "Yes, we checked them",
                 "partly": "Partly, some checks done",
                 "not_yet": "No, not yet",
-                "not_applicable": "Our data has no labels"
+                "not_applicable": "No label check applies"
               },
               "answerPrompts": {
                 "done": "Say how labels were assigned and by whom, by role; this prints in the data card. Attach the agreement results.",
@@ -718,7 +718,7 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some patterns so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "The data holds no past decisions"
+                "not_applicable": "No past-decision check applies"
               },
               "answerPrompts": {
                 "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card.",
@@ -757,7 +757,7 @@
                 "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; this prints in the data card.",
                 "partly": "Give the period the data covers, the changes checked and those still to check; this prints in the data card.",
                 "not_yet": "Give the period the data covers and when you will check for changes; this prints in the data card.",
-                "not_applicable": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan."
+                "not_applicable": "Give the data's period and say why no recency check applies here; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -784,7 +784,7 @@
                 "done": "Yes, they are written down",
                 "partly": "Partly, some rules are set",
                 "not_yet": "No, not yet",
-                "not_applicable": "We hold no data to govern"
+                "not_applicable": "No data governance applies"
               },
               "answerPrompts": {
                 "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; this prints in the data card. Name people by role, never by name.",
@@ -1001,7 +1001,7 @@
               },
               "answerPrompts": {
                 "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
-                "partly": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+                "partly": "Name the groups measured so far and those still to do; the platform does not compute the results. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_applicable": "Say why no measurement by group applies to this project; this prints in the model card and mitigation plan."
               },
@@ -1309,13 +1309,13 @@
                 "done": "Yes, we chose the simplest",
                 "partly": "Partly, some of it is decided",
                 "not_yet": "No, not yet",
-                "not_applicable": "No simplest-model choice applies"
+                "not_applicable": "No choice of simplest model applies"
               },
               "answerPrompts": {
                 "done": "Give your acceptable performance, the simpler models tried, why you chose this one and where it is recorded.",
                 "partly": "Say what is decided, such as acceptable performance, and what is still open.",
                 "not_yet": "Say when you will set acceptable performance and compare models.",
-                "not_applicable": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan."
+                "not_applicable": "Say why no choice of simplest model applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1341,13 +1341,13 @@
                 "done": "Yes, all of it is recorded",
                 "partly": "Partly, some of it is recorded",
                 "not_yet": "No, not yet",
-                "not_applicable": "No training record applies"
+                "not_applicable": "No recording for retraining applies"
               },
               "answerPrompts": {
                 "done": "Say where the training records are kept, what they include and whether someone has re-run training from them.",
                 "partly": "Say which records are kept so far and which are missing.",
                 "not_yet": "Say when you will record them, or what is blocking it.",
-                "not_applicable": "Say why no training record applies to this project; this prints in the mitigation plan."
+                "not_applicable": "Say why no recording for retraining applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1596,13 +1596,13 @@
                 "done": "Yes, we assessed it",
                 "partly": "Partly, some of it so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "No harm-by-group assessment applies"
+                "not_applicable": "No assessment of harm by group applies"
               },
               "answerPrompts": {
                 "done": "Describe each error's consequences, the groups bearing more and where this is recorded; this prints in the model card. Give rates, never records about people.",
                 "partly": "Describe the consequences assessed so far and what is still open; this prints in the model card. Give rates, never records about people.",
                 "not_yet": "Describe the errors you expect, their consequences and when you will compare groups, with no records about people; this prints in the model card.",
-                "not_applicable": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan."
+                "not_applicable": "Say why no assessment of harm by group applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1628,13 +1628,13 @@
                 "done": "Yes, they are recorded",
                 "partly": "Partly, some limits so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "No record of limits applies"
+                "not_applicable": "No recording of limits applies"
               },
               "answerPrompts": {
                 "done": "State the limits, including where the model must not be used, in two or three sentences, then where the full text is kept; they print in the model card.",
                 "partly": "State the limits and conditions of use known so far in two or three sentences, and what is still to test; they print in the model card.",
                 "not_yet": "Write that the limits are not yet recorded, any you already know and when you will record them; this prints in the model card.",
-                "not_applicable": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan."
+                "not_applicable": "Say why no recording of limits applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2037,7 +2037,7 @@
                 "done": "Give the groups, measures, thresholds and schedule, who acts, by role, and where it is recorded.",
                 "partly": "Say which groups and measures are checked so far and which are still open.",
                 "not_yet": "Say which groups you plan to check and when.",
-                "not_applicable": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan."
+                "not_applicable": "Say why no monitoring by group will ever apply here; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2140,13 +2140,13 @@
                 "done": "Yes, they can",
                 "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
-                "not_applicable": "No way to ask for a review applies"
+                "not_applicable": "No review of decisions applies"
               },
               "answerPrompts": {
                 "done": "Say how people learn of and make requests, who reviews, by role, and where requests are logged; give counts and outcomes, never personal details.",
                 "partly": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not; never personal details.",
                 "not_yet": "Say how and when you plan to let people ask for a review.",
-                "not_applicable": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan."
+                "not_applicable": "Say why no review of decisions applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2405,7 +2405,7 @@
                 "done": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; this prints in the model card.",
                 "partly": "Give the intended use and main limits first, then who has been told so far and who not, by role or organisation; this prints in the model card.",
                 "not_yet": "Give the intended use and main limits first, then when and how you will tell people; this prints in the model card.",
-                "not_applicable": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan."
+                "not_applicable": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.1.0"
@@ -2503,7 +2503,7 @@
                 "done": "List each rule and its approval or registration: body, reference and date; attach the letters. The platform records your statement and makes no judgement of it.",
                 "partly": "List each rule, the approvals held with body, reference and date, and those you still wait for. The platform makes no judgement of your statement.",
                 "not_yet": "Say when you will identify the rules that apply, or what is blocking it.",
-                "not_applicable": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement."
+                "not_applicable": "Say why no data protection, research ethics or sector rule applies here; this prints in the mitigation plan. The platform makes no judgement of your statement."
               },
               "practiceSameAs": [
                 "5.1.0"
@@ -2567,7 +2567,7 @@
                 "done": "Name the groups checked, what you found and changed, and where it is recorded.",
                 "partly": "Name the groups checked so far, what you found, and those still to check.",
                 "not_yet": "Say which groups you plan to check and when, or what is blocking it.",
-                "not_applicable": "Say why no access check applies here; it prints in the mitigation plan."
+                "not_applicable": "Say why no access check applies here; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",

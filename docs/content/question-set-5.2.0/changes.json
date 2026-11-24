@@ -137,9 +137,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no comparison applies, which is unusual; it prints in the mitigation plan.",
+    "to": "Say why no comparison applies, which is unusual; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no comparison applies, which is unusual; it prints in the mitigation plan."
+    "final": "Say why no comparison applies, which is unusual; this prints in the mitigation plan."
   },
   {
     "row": "Q-PP-01.practiceSameAs",
@@ -947,9 +947,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No estimate is needed",
+    "to": "No energy estimate applies",
     "decision": "pending",
-    "final": "No estimate is needed"
+    "final": "No energy estimate applies"
   },
   {
     "row": "Q-PP-07.answerPrompts.done",
@@ -1083,9 +1083,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No data source is used",
+    "to": "No source record applies",
     "decision": "pending",
-    "final": "No data source is used"
+    "final": "No source record applies"
   },
   {
     "row": "Q-PP-08.answerPrompts.done",
@@ -1491,9 +1491,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Our data has no labels",
+    "to": "No label check applies",
     "decision": "pending",
-    "final": "Our data has no labels"
+    "final": "No label check applies"
   },
   {
     "row": "Q-PP-12.answerPrompts.done",
@@ -2325,9 +2325,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "The data holds no past decisions",
+    "to": "No past-decision check applies",
     "decision": "pending",
-    "final": "The data holds no past decisions"
+    "final": "No past-decision check applies"
   },
   {
     "row": "Q-PP-19.answerPrompts.done",
@@ -2491,9 +2491,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan.",
+    "to": "Give the data's period and say why no recency check applies here; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan."
+    "final": "Give the data's period and say why no recency check applies here; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-20.practiceSameAs",
@@ -2577,9 +2577,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "We hold no data to govern",
+    "to": "No data governance applies",
     "decision": "pending",
-    "final": "We hold no data to govern"
+    "final": "No data governance applies"
   },
   {
     "row": "Q-PP-21.answerPrompts.done",
@@ -3434,9 +3434,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+    "to": "Name the groups measured so far and those still to do; the platform does not compute the results. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
     "decision": "pending",
-    "final": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13)."
+    "final": "Name the groups measured so far and those still to do; the platform does not compute the results. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13)."
   },
   {
     "row": "Q-IP-04.answerPrompts.not_yet",
@@ -4346,9 +4346,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No simplest-model choice applies",
+    "to": "No choice of simplest model applies",
     "decision": "pending",
-    "final": "No simplest-model choice applies"
+    "final": "No choice of simplest model applies"
   },
   {
     "row": "Q-IP-09.answerPrompts.done",
@@ -4386,9 +4386,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan.",
+    "to": "Say why no choice of simplest model applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan."
+    "final": "Say why no choice of simplest model applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-09.practiceSameAs",
@@ -4482,9 +4482,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No training record applies",
+    "to": "No recording for retraining applies",
     "decision": "pending",
-    "final": "No training record applies"
+    "final": "No recording for retraining applies"
   },
   {
     "row": "Q-IP-10.answerPrompts.done",
@@ -4522,9 +4522,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no training record applies to this project; this prints in the mitigation plan.",
+    "to": "Say why no recording for retraining applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no training record applies to this project; this prints in the mitigation plan."
+    "final": "Say why no recording for retraining applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-10.practiceSameAs",
@@ -5288,9 +5288,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No harm-by-group assessment applies",
+    "to": "No assessment of harm by group applies",
     "decision": "pending",
-    "final": "No harm-by-group assessment applies"
+    "final": "No assessment of harm by group applies"
   },
   {
     "row": "Q-IP-19.answerPrompts.done",
@@ -5328,9 +5328,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan.",
+    "to": "Say why no assessment of harm by group applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan."
+    "final": "Say why no assessment of harm by group applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-19.practiceSameAs",
@@ -5414,9 +5414,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No record of limits applies",
+    "to": "No recording of limits applies",
     "decision": "pending",
-    "final": "No record of limits applies"
+    "final": "No recording of limits applies"
   },
   {
     "row": "Q-IP-20.answerPrompts.done",
@@ -5454,9 +5454,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan.",
+    "to": "Say why no recording of limits applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan."
+    "final": "Say why no recording of limits applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-20.practiceSameAs",
@@ -7064,9 +7064,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan.",
+    "to": "Say why no monitoring by group will ever apply here; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan."
+    "final": "Say why no monitoring by group will ever apply here; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-17.practiceSameAs",
@@ -7432,9 +7432,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No way to ask for a review applies",
+    "to": "No review of decisions applies",
     "decision": "pending",
-    "final": "No way to ask for a review applies"
+    "final": "No review of decisions applies"
   },
   {
     "row": "Q-PO-09.answerPrompts.done",
@@ -7472,9 +7472,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan.",
+    "to": "Say why no review of decisions applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan."
+    "final": "Say why no review of decisions applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-09.practiceSameAs",
@@ -8288,9 +8288,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan.",
+    "to": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan."
+    "final": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PO-15.practiceSameAs",
@@ -8694,9 +8694,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement.",
+    "to": "Say why no data protection, research ethics or sector rule applies here; this prints in the mitigation plan. The platform makes no judgement of your statement.",
     "decision": "pending",
-    "final": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement."
+    "final": "Say why no data protection, research ethics or sector rule applies here; this prints in the mitigation plan. The platform makes no judgement of your statement."
   },
   {
     "row": "Q-PO-22.practiceSameAs",
@@ -8964,9 +8964,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no access check applies here; it prints in the mitigation plan.",
+    "to": "Say why no access check applies here; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no access check applies here; it prints in the mitigation plan."
+    "final": "Say why no access check applies here; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-24.practiceSameAs",
