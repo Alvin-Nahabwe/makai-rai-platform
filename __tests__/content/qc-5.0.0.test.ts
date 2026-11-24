@@ -40,7 +40,7 @@ function newTexts(): Array<{ where: string; text: string }> {
     const was = old.get(q.id);
     out.push({ where: `${q.id}.expectedPractice`, text: q.expectedPractice });
     out.push({ where: `${q.id}.whyAsked`, text: q.whyAsked });
-    out.push({ where: `${q.id}.reasonPrompt`, text: q.reasonPrompt });
+    if (q.reasonPrompt !== undefined) out.push({ where: `${q.id}.reasonPrompt`, text: q.reasonPrompt });
     q.evidenceExamples.forEach((e, i) => out.push({ where: `${q.id}.evidenceExamples[${i}]`, text: e }));
     if (was === undefined || q.text !== was.text) out.push({ where: `${q.id}.text`, text: q.text });
     if (q.helpText !== undefined && q.helpText !== was?.helpText) out.push({ where: `${q.id}.helpText`, text: q.helpText });

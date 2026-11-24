@@ -6,7 +6,7 @@ import { buildLoadedContent } from '@/lib/content/loader';
 import { riskAreaIdsOf } from '@/lib/content/riskAreas';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { CONDITIONAL_SIGN_OFF_BATCHES, SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
-import type { LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
+import type { AnswerKey, LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
 import { STAGES } from '@/types/record';
 
 /**
@@ -273,7 +273,11 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
 
   checkSourceLinks(c, opts.completeness, say);
   if (opts.completeness) {
-    for (const q of questions) checkTexts(q, say);
+    const versionUsesLabels = questions.some((q) => q.answerLabels !== undefined);
+    for (const q of questions) {
+      checkTexts(q, versionUsesLabels, say);
+      checkWordingFields(q, versionUsesLabels, say);
+    }
     if (records !== null) checkSignOffs(c, records, say);
   }
 }
@@ -549,7 +553,7 @@ function checkNewQuestions(questions: readonly LoadedQuestion[], approved: Appro
 }
 
 /** QC-01 (SRS line 4225; IC-6) and QC-06 (line 4231) for one question. */
-function checkTexts(q: LoadedQuestion, say: (p: string) => void): void {
+function checkTexts(q: LoadedQuestion, versionUsesLabels: boolean, say: (p: string) => void): void {
   const limit = (field: 'expectedPractice' | 'whyAsked' | 'reasonPrompt', min: number, max: number, sentences: number | null): void => {
     const v: unknown = q[field];
     if (typeof v !== 'string') return say(`question ${q.id}: ${field} is not text (QC-01)`);
@@ -559,7 +563,8 @@ function checkTexts(q: LoadedQuestion, say: (p: string) => void): void {
   };
   limit('expectedPractice', 40, 400, null);
   limit('whyAsked', 1, 300, 2);
-  limit('reasonPrompt', 1, 400, 4);
+  // A non-gate question of a version that words its answers per question has no reasonPrompt; checkWordingFields says so.
+  if (q.reasonPrompt !== undefined || !versionUsesLabels || q.type === 'gate') limit('reasonPrompt', 1, 400, 4);
   const ex: unknown = q.evidenceExamples;
   if (!Array.isArray(ex) || ex.length < 1 || ex.length > 4) {
     say(`question ${q.id}: evidenceExamples has ${Array.isArray(ex) ? ex.length : 'no list of'} items; 1 to 4 required (QC-01)`);
@@ -569,6 +574,51 @@ function checkTexts(q: LoadedQuestion, say: (p: string) => void): void {
   }
   if (q.id.includes('-EXTRA-') && typeof q.helpText === 'string' && q.helpText.startsWith('When ')) {
     say(`question ${q.id}: helpText begins with "When " (QC-06)`);
+  }
+}
+
+const ANSWER_KEYS: readonly AnswerKey[] = ['done', 'partly', 'not_yet', 'not_applicable'];
+
+/**
+ * Per-question wording (content 5.2.0, plan D1). In a version where any question has `answerLabels`, each non-gate question
+ * has `answerLabels` (four different labels, 1 to 40 characters) and `answerPrompts` (1 to 200 characters, at most two
+ * sentences each) and no `reasonPrompt`; the gate keeps its `reasonPrompt` and has neither new field.
+ */
+export function checkWordingFields(q: LoadedQuestion, versionUsesLabels: boolean, say: (p: string) => void): void {
+  const at = `question ${q.id}`;
+  if (q.practiceSameAs !== undefined && !listOf(q.practiceSameAs, isFilled)) say(`${at}: practiceSameAs is not a list of content versions`);
+  if (!versionUsesLabels) {
+    if (q.answerPrompts !== undefined) say(`${at}: answerPrompts is present but no question of this version has answerLabels`);
+    return;
+  }
+  if (q.type === 'gate') {
+    for (const f of ['answerLabels', 'answerPrompts'] as const) if (q[f] !== undefined) say(`${at}: the gate has no ${f}; it keeps its reasonPrompt`);
+    return;
+  }
+  if (q.reasonPrompt !== undefined) say(`${at}: reasonPrompt is not allowed; its answerPrompts say what to write`);
+  for (const field of ['answerLabels', 'answerPrompts'] as const) {
+    const v: unknown = q[field];
+    if (v === undefined) { say(`${at}: ${field} is missing`); continue; }
+    if (!isRecord(v)) { say(`${at}: ${field} is not an object`); continue; }
+    for (const k of Object.keys(v)) if (!(ANSWER_KEYS as readonly string[]).includes(k)) say(`${at}: ${field}.${k} is not one of ${ANSWER_KEYS.join(', ')}`);
+    const max = field === 'answerLabels' ? 40 : 200;
+    for (const k of ANSWER_KEYS) {
+      const t = v[k];
+      if (t === undefined) { say(`${at}: ${field}.${k} is missing`); continue; }
+      if (typeof t !== 'string') { say(`${at}: ${field}.${k} is not text`); continue; }
+      const n = codePoints(t);
+      if (n < 1 || n > max) say(`${at}: ${field}.${k} has ${n} characters; 1 to ${max} required`);
+      else if (field === 'answerPrompts' && sentenceCount(t) > 2) say(`${at}: ${field}.${k} has ${sentenceCount(t)} sentences; at most 2 allowed`);
+    }
+    if (field === 'answerLabels') {
+      const seen = new Set<string>();
+      for (const k of ANSWER_KEYS) {
+        const t = v[k];
+        if (typeof t !== 'string') continue;
+        if (seen.has(t)) say(`${at}: answerLabels: ${JSON.stringify(t)} is used twice`);
+        seen.add(t);
+      }
+    }
   }
 }
 

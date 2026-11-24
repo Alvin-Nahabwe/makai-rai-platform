@@ -98,8 +98,8 @@ describe('the fixture content bundle', () => {
         expect(q.expectedPractice.length, q.id).toBeLessThanOrEqual(400);
         expect(q.whyAsked.length, q.id).toBeLessThanOrEqual(300);
         expect(sentences(q.whyAsked), q.id).toBeLessThanOrEqual(2);
-        expect(q.reasonPrompt.length, q.id).toBeLessThanOrEqual(400);
-        expect(sentences(q.reasonPrompt), q.id).toBeLessThanOrEqual(4);
+        expect((q.reasonPrompt ?? '').length, q.id).toBeLessThanOrEqual(400);
+        expect(sentences(q.reasonPrompt ?? ''), q.id).toBeLessThanOrEqual(4);
         expect(q.evidenceExamples.length, q.id).toBeGreaterThanOrEqual(1);
         expect(q.evidenceExamples.length, q.id).toBeLessThanOrEqual(4);
       }

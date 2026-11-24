@@ -581,3 +581,44 @@ describe('the sign-off command', () => {
     expect(json(join(dir, 'signoffs.json')).records).toEqual([{ batch: 'pre-processing', approver: 'Product owner, MAK-AI', at: AT, sha256: signOffHash(p), items: signOffItems(p) }]);
   });
 });
+
+describe('sign-off payload keys added by per-question wording (D2)', () => {
+  const realBundle = (v: string) => buildLoadedContent(v, (f) => readFileSync(join('data', 'content', v, f)));
+
+  it('D2: 5.0.0 and 5.1.0 stage and question-set payload hashes equal their committed records', () => {
+    for (const v of ['5.0.0', '5.1.0']) {
+      const c = realBundle(v);
+      const records = json(join('data', 'content', v, 'signoffs.json')).records as Json[];
+      for (const batch of BATCHES.filter((b) => b !== 'help-and-reason-codes')) {
+        const latest = records.filter((r) => r.batch === batch).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).at(-1);
+        expect(latest, `${v} ${batch}`).toBeDefined();
+        expect(signOffHash(signOffPayload(c, batch)), `${v} ${batch}`).toBe(latest!.sha256);
+      }
+    }
+  });
+
+  it('D2: a question with answerLabels, answerPrompts and practiceSameAs puts each in its batch payload and no reasonPrompt key', () => {
+    const dir = copyFixture('0.0.2-fixture');
+    const labels = { done: 'Yes', partly: 'In part', not_yet: 'Not yet', not_applicable: 'Does not apply' };
+    const prompts = { done: 'Say what you did.', partly: 'Say what is left.', not_yet: 'Say what stops you.', not_applicable: 'Say why.' };
+    editQuestion(dir, 'Q-PP-01', (q) => {
+      const { reasonPrompt: _dropped, ...rest } = q;
+      return { ...rest, answerLabels: labels, answerPrompts: prompts, practiceSameAs: ['5.0.0'] };
+    });
+    const c = loadDir(dir);
+    const stage = signOffPayload(c, 'pre-processing');
+    const set = signOffPayload(c, 'question-set:pre-processing');
+    if (stage.batch !== 'pre-processing' || set.batch !== 'question-set:pre-processing') throw new Error('wrong batch');
+    const sq = stage.questions.find((q) => q.id === 'Q-PP-01')!;
+    expect(sq.answerLabels).toEqual(labels);
+    expect(sq.answerPrompts).toEqual(prompts);
+    expect('reasonPrompt' in sq).toBe(false);
+    expect('practiceSameAs' in sq).toBe(false);
+    expect(set.questions.find((q) => q.id === 'Q-PP-01')).toEqual({ id: 'Q-PP-01', text: c.questions.get('Q-PP-01')!.text, practiceSameAs: ['5.0.0'] });
+    // A question without the keys keeps the old shape exactly.
+    const other = stage.questions.find((q) => q.id !== 'Q-PP-01')!;
+    expect(Object.keys(other)).not.toContain('answerLabels');
+    expect(Object.keys(other)).toContain('reasonPrompt');
+    expect(() => signOffHash(stage)).not.toThrow();
+  });
+});

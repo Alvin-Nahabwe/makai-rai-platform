@@ -246,7 +246,7 @@ export function renderTextTables(c: LoadedContent, version: string): Record<Stag
     const lines = [`# The ${stage} texts of content ${version}`, '', `${p.questions.length} questions, in the order S-12 shows them.`, ''];
     for (const q of p.questions) {
       lines.push(`## ${q.id}`, '', `**Question:** ${q.text}`, '', '| Text | Wording |', '|---|---|');
-      lines.push(`| Expected practice | ${cell(q.expectedPractice)} |`, `| Why this is asked | ${cell(q.whyAsked)} |`, `| Reason prompt | ${cell(q.reasonPrompt)} |`);
+      lines.push(`| Expected practice | ${cell(q.expectedPractice)} |`, `| Why this is asked | ${cell(q.whyAsked)} |`, `| Reason prompt | ${cell(q.reasonPrompt ?? '')} |`);
       q.evidenceExamples.forEach((e, i) => lines.push(`| Evidence example ${i + 1} | ${cell(e)} |`));
       if (q.helpText !== null) lines.push(`| Help text | ${cell(q.helpText)} |`);
       if (q.example !== null) lines.push(`| Example | ${cell(q.example)} |`);
