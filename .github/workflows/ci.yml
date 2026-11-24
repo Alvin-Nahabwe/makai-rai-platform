@@ -785,7 +785,9 @@ jobs:
         # green, measured elsewhere at 96.3% green with a flake fully alive.
         # "Green" here means zero retries consumed.
         # --shard (D-422): this job runs its own slice of the chromium specs; the matrix above says how many slices.
-        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # --workers=1 (D-422 review I2): playwright.config.ts sets no worker count, so Playwright takes half the runner's
+        # CPUs, and GitHub has handed out both 2- and 4-vCPU runners (1 and 2 workers). The suite was validated on 1.
+        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --workers=1 --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       # NFR-AVL-04's fault harness: stops the Postgres service container, checks
       # that pages and writes answer with a support reference and that the log

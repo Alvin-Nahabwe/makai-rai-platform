@@ -34,7 +34,7 @@ describe('D-422: the chromium e2e suite is sharded across jobs', () => {
 
   it('the suite step runs this job’s shard, out of the matrix total', () => {
     expect(step('Run e2e suite')?.run?.trim()).toBe(
-      'npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }}',
+      'npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --workers=1 --shard=${{ matrix.shard }}/${{ strategy.job-total }}',
     );
   });
 
