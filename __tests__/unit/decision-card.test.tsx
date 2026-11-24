@@ -468,6 +468,23 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026 UTC`);
   });
 
+  it('critique P1 4: the save-status line of a save (M-03, M-04) draws the saved shape, not a green check', () => {
+    const css = readFileSync('components/decision/DecisionForm.css', 'utf8');
+    const rule = /\[data-message-id="M-03"\], \[data-message-id="M-04"\]\)::before\s*\{([^}]*)\}/.exec(css)![1];
+    expect(rule).toContain('var(--color-saved)');
+    const mask = decodeURIComponent(/mask-image:\s*url\("([^"]*)"\)/.exec(rule)![1]);
+    expect(mask).toContain('M7 3h7l5 5v12');            // SavedShape's page outline (SavedMark.tsx)
+    expect(mask).toContain('M14 3v5h5');
+    expect(mask).not.toMatch(/<circle|m16 9-5\.5 5\.5|M8 12\.5l2\.7/);  // no disc, no check
+  });
+
+  it('critique P1 4: the status grid of the decision card folds to one column when a card would be narrow', () => {
+    const css = readFileSync('components/decision/DecisionFields.css', 'utf8');
+    // At most two columns (each at least half the row), one when a card would be under 10rem.
+    expect(css).toMatch(/\.decision-fields__choice \.ui-radio-cards__list\s*\{[^}]*repeat\(auto-fit, minmax\(min\(100%, max\(10rem, calc\(\(100% - var\(--space-2\)\) \/ 2\)\)\), 1fr\)\)/);
+    expect(css).not.toMatch(/repeat\(2, minmax\(0, 1fr\)\)/);
+  });
+
   it('A N-1: the accepted types line has its own id, and the add buttons and the file input name it directly', () => {
     const ev = card().match(/<fieldset class="evidence-block evidence-block--card">[\s\S]*?<\/fieldset>/)![0];
     const types = /<p id="([^"]+)" class="evidence-block__types">([^<]*)<\/p>/.exec(ev);

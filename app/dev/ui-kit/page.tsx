@@ -33,6 +33,7 @@ import { PRODUCT_NAME } from '@/lib/ui/title';
 import { BusySubmitDemo, DateStates, DecidedOnDemo, ErrorSummaryDemo, InPlaceDemo, ReasonDemo, StatusDemo, TextAreaStates } from './FormDemos';
 import { DialogDemo, InlineConfirmDemo, LongDialogDemo, StatusRegionDemo } from './FeedbackDemos';
 import { SavedDemo } from './SavedDemo';
+import '@/components/decision/DecisionFields.css';
 import { SortableTableDemo } from './StructureDemos';
 
 /**
@@ -180,9 +181,15 @@ export default async function UiKitPage(): Promise<ReactElement> {
           options={[{ value: 'yes', label: 'Yes', help: 'It contains sensitive or personal information.' }, { value: 'no', label: 'No', help: 'It does not.' }, { value: 'not_sure', label: 'Not sure' }]} />
         <RadioCards name="kit-status-error" legend="Status, with an error" error="Choose a status." required
           options={[{ value: 'done', label: 'Done', mark: 'done' }, { value: 'partly', label: 'Partly', mark: 'partly' }]} />
-        {/* One label of 40 code points, as a question's own answer labels can be (per-question wording): the browser spec holds it to wrap inside its card. */}
-        <RadioCards name="kit-long-label" legend="A long answer label" columns={2}
-          options={[{ value: 'compared', label: 'Yes, we compared each group in the data.', mark: 'done' }, { value: 'not_compared', label: 'No.', mark: 'not_yet' }]} />
+        {/* One label of 40 code points, as a question's own answer labels can be (per-question wording), in the decision card's own
+            grid (.decision-fields__choice, with helpBelow): the browser spec holds it to wrap inside its card. */}
+        <div id="kit-long-label-wrap" className="decision-fields__choice">
+          <RadioCards name="kit-long-label" legend="A long answer label" columns={2} helpBelow
+            options={[
+              { value: 'compared', label: 'Yes, we compared each group in the data.', help: 'You looked at each group.', mark: 'done' },
+              { value: 'not_compared', label: 'No.', help: 'You did not.', mark: 'not_yet' },
+            ]} />
+        </div>
         <RadioCards name="kit-status-disabled" legend="Status, while saving" disabled defaultValue="partly"
           options={[{ value: 'done', label: 'Done', mark: 'done' }, { value: 'partly', label: 'Partly', mark: 'partly' }]} />
       </KitSection>

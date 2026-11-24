@@ -32,7 +32,9 @@
  * SCOPE_OPTIONS); an option without one would shift the pairs.
  */
 .decision-fields__choice .ui-radio-cards__list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Two columns (never three) while a card keeps 10rem, else one: a per-question label (up to 40 characters) wraps inside its card at
+     320 px and at 200% zoom instead of being squeezed (critique P1 4, Review Focus 4). Same pattern as RadioCards columns=2. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(10rem, calc((100% - var(--space-2)) / 2))), 1fr));
 }
 
 .decision-fields__choice .ui-radio-card {

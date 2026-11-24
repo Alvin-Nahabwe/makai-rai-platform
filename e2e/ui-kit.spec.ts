@@ -500,7 +500,24 @@ test.describe('RadioCards', () => {
     });
   });
 
-  test('a 40-character label wraps inside its card at 320 px and at 200% zoom with no sideways scroll; the radio is named by the label alone', async ({ page }) => {
+  test('an option with no mark shows its choice as a drawn dot, in normal and in forced colours', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'Does the data hold personal information?', exact: true });
+    await group.getByRole('radio', { name: 'No', exact: true }).check();
+    const expectDot = async (mode: string) => {
+      const dot = await group.locator('.ui-radio-card:has(:checked) .ui-radio-card__ring').evaluate((ring) => {
+        const s = getComputedStyle(ring, '::before');
+        return { width: parseFloat(s.borderTopWidth), colour: s.borderTopColor, ground: getComputedStyle(document.body).backgroundColor };
+      });
+      expect(dot.width, `${mode}, the chosen dot`).toBeGreaterThan(0);
+      expect(dot.colour, `${mode}, the chosen dot`).not.toBe(dot.ground);
+      await expect(group.locator('.ui-radio-card:not(:has(:checked)) .ui-radio-card__ring[data-on="true"]'), mode).toHaveCount(0);
+    };
+    await expectDot('normal colours');
+    await withForcedColors(page, () => expectDot('forced colours'));
+  });
+
+  test('a 40-character label wraps inside its card in the decision card\'s own grid at 320 px and at 200% zoom (160 CSS px), the whole document not scrolling sideways; the radio is named by the label alone', async ({ page }) => {
     const LABEL = 'Yes, we compared each group in the data.';
     expect([...LABEL]).toHaveLength(40);
     await page.setViewportSize({ width: 320, height: 640 });
@@ -509,20 +526,26 @@ test.describe('RadioCards', () => {
     const radio = group.getByRole('radio', { name: LABEL, exact: true });
     await expect(radio).toHaveCount(1);
     await radio.check();
+    await expect(radio).toHaveAccessibleName(LABEL);
+    // Hide every other part of the gallery (its own sections are not this check's business at 160 px), leaving the demo's path.
+    await page.evaluate(() => {
+      let el: Element | null = document.getElementById('kit-long-label-wrap');
+      while (el !== null && el !== document.body) {
+        for (const sib of Array.from(el.parentElement!.children)) if (sib !== el) (sib as HTMLElement).style.display = 'none';
+        el = el.parentElement;
+      }
+    });
     const inside = async (what: string) => {
       const m = await page.evaluate(() => {
-        const card = document.querySelector('[data-kit-section="radio-cards"] .ui-radio-card:has(input[name="kit-long-label"][value="compared"])')!;
+        const card = document.querySelector('#kit-long-label-wrap .ui-radio-card:has(input[value="compared"])')!;
         const label = card.querySelector('.ui-radio-card__label')!;
         const c = card.getBoundingClientRect();
-        const words = Array.from(label.childNodes).filter((n) => n.nodeType === 3 || (n as Element).nodeType === 1)
+        const text = Array.from(label.childNodes).filter((n) => n.nodeType === 3 || n.nodeType === 1)
           .map((n) => { const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect(); });
-        return {
-          card: { left: c.left, right: c.right }, text: words.map((r) => ({ left: r.left, right: r.right, height: r.height })),
-          // the group itself does not scroll sideways (other gallery sections are not this check's business at 160 px)
-          docScroll: (() => { const f = card.closest('fieldset')!; return f.scrollWidth - f.clientWidth; })(),
-        };
+        const de = document.documentElement;
+        return { card: { left: c.left, right: c.right }, text: text.map((r) => ({ left: r.left, right: r.right, height: r.height })), documentOverflow: de.scrollWidth - de.clientWidth };
       });
-      expect(m.docScroll, `${what}: the group scrolls sideways`).toBeLessThanOrEqual(0);
+      expect(m.documentOverflow, `${what}: the document scrolls sideways`).toBeLessThanOrEqual(0);
       for (const t of m.text) {
         if (t.height === 0) continue;
         expect(t.left, `${what}: text starts inside the card`).toBeGreaterThanOrEqual(m.card.left - 0.5);
@@ -530,10 +553,8 @@ test.describe('RadioCards', () => {
       }
     };
     await inside('320 px');
-    // 200% zoom of a 320 px window is a 160 CSS px layout viewport.
-    await page.setViewportSize({ width: 160, height: 640 });
+    await page.setViewportSize({ width: 160, height: 640 });   // 200% zoom of a 320 px window
     await inside('200% zoom (160 CSS px)');
-    await expect(radio).toHaveAccessibleName(LABEL);
   });
 });
 

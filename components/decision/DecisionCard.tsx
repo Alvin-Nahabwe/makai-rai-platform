@@ -52,8 +52,8 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
   const decision = current !== null && current.status !== 'withdrawn' ? current : null;
   const S = UI_COPY.saved;
 
-  // The corner (lead's ruling D1, the sketch's .fh): one line, the saved shape (Done's mark, the filled green disc with its
-  // check: design finish review m4, as the sketch draws it) and "Saved as version N · <saved date>" in the reader's zone;
+  // The corner (lead's ruling D1, the sketch's .fh): one line, the saved shape (SavedShape: a page with a folded corner,
+  // its own form, not Done's mark; critique P1 4) and "Saved as version N · <saved date>" in the reader's zone;
   // "No decision yet." with no version; the withdrawn line for a withdrawal. Not a live region: it is server-rendered
   // filled, and the save's own status line announces the save. The date is the reader's and names its zone (review A
   // A3-3), so it never reads as a contradiction of the foot's "Entered by", which is in East Africa time.
