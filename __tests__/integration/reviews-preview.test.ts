@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { sealPreview } from '@/lib/data/reviews';
 import { resetDb } from '../helpers/db';
@@ -11,6 +11,21 @@ import {
   type FixtureDecision, type OrgFixture,
 } from '../helpers/recordFixture';
 import type { Actor } from '@/types/record';
+
+// The fixture bundles hold no practiceSameAs; this lets one test have 0.0.2-fixture's Q-PP-01 list 0.0.1-fixture.
+const same = vi.hoisted(() => ({ on: false }));
+vi.mock('@/lib/content/loader', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/content/loader')>();
+  return {
+    ...real,
+    loadContent: (semver: Parameters<typeof real.loadContent>[0]) => {
+      const c = real.loadContent(semver);
+      const q = c.questions.get('Q-PP-01');
+      if (!same.on || c.semver !== '0.0.2-fixture' || q === undefined) return c;
+      return { ...c, questions: new Map(c.questions).set('Q-PP-01', { ...q, practiceSameAs: ['0.0.1-fixture'] }) };
+    },
+  };
+});
 
 /** FR-REV-02, UX-18 and FR-CNT-08's S-17 count: what a seal of the stage will hold, shown before sealing. */
 
@@ -119,6 +134,17 @@ describe('sealPreview', () => {
     expect((await preview('owner')).rewordedSinceDecision).toBe(1);
     await addDecision(fx, p.id, dec('Q-PP-01', f2));
     expect((await preview('owner')).rewordedSinceDecision).toBe(0);
+  });
+
+  it('FR-CNT-08: rewordedSinceDecision counts 0 for answers whose question lists their version in practiceSameAs', async () => {
+    await addDecision(fx, p.id, dec('Q-PP-01', fv));
+    const f2 = (await useFixtureContent('0.0.2-fixture')).contentVersionId;
+    same.on = true;
+    try {
+      expect(f2).not.toBe(fv);
+      expect((await preview('owner')).rewordedSinceDecision).toBe(0);
+    } finally { same.on = false; }
+    expect((await preview('owner')).rewordedSinceDecision).toBe(1);
   });
 
   it('NFR-SEC-02 FR-REV-02: a review of another organisation is not found', async () => {

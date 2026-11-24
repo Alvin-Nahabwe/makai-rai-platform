@@ -101,7 +101,7 @@ export function QuestionPanelRegions({ data, openWork, route, stage, arrival }: 
   const count = countFor(data);
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   const stageHref = `${base}/stages/${data.stage}`;
-  const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
+  const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.current.content.semver, data.runningQuestion);
   const { index, total, previousId, nextId } = data.position;
   const historyHref = `${stageHref}/questions/${question.id}/history`;
   const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);

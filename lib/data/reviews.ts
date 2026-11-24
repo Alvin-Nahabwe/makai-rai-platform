@@ -2,7 +2,8 @@ import type { OrgRole } from '@prisma/client';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type DecisionStatus, type DecisionVersionRow, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
 import type { ChangedSinceSeal, OpenReviewRequest, StageReviewView } from '@/types/api';
-import type { LoadedContent } from '@/types/content';
+import type { ContentQuestion, LoadedContent } from '@/types/content';
+import { practiceChanged } from '@/lib/question/answerWords';
 import { AppError, ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
@@ -422,15 +423,18 @@ export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: strin
       if (v.status === 'done' && v.evidenceIds.length === 0) doneWithoutEvidence += 1;
     }
 
-    const practiceOf = new Map<string, Map<string, string>>([[running.contentVersionId, practices(content)]]);
+    const runningQuestions = practices(content);
+    const thenOf = new Map<string, { semver: string; questions: Map<string, ContentQuestion> }>();
     let rewordedSinceDecision = 0;
     for (const v of decided) {
-      let theirs = practiceOf.get(v.contentVersionId);
-      if (theirs === undefined) {
-        theirs = practices(loadContent((await contentRefById(tx, v.contentVersionId)).semver));
-        practiceOf.set(v.contentVersionId, theirs);
+      let then = thenOf.get(v.contentVersionId);
+      if (then === undefined) {
+        const semver = (await contentRefById(tx, v.contentVersionId)).semver;
+        then = { semver, questions: practices(loadContent(semver)) };
+        thenOf.set(v.contentVersionId, then);
       }
-      if (theirs.get(v.questionId) !== practiceOf.get(running.contentVersionId)!.get(v.questionId)) rewordedSinceDecision += 1;
+      const now = runningQuestions.get(v.questionId);
+      if (now === undefined || practiceChanged(then.questions.get(v.questionId), then.semver, now)) rewordedSinceDecision += 1;
     }
 
     const evidence = await evidenceViews(tx, (await stageSnapshotIds(tx, review.projectId, stage)).evidence);
@@ -452,7 +456,7 @@ export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: strin
   return { ...out.preview, openFindings: open.length, openMitigations: open.reduce((n, f) => n + f.openMitigations, 0) };
 }
 
-/** Expected practice of every question of a content version, by question id. */
-function practices(c: ReturnType<typeof loadContent>): Map<string, string> {
-  return new Map(STAGES.flatMap((st) => questionsInStage(c, st)).map((q) => [q.id, q.expectedPractice]));
+/** Every question of a content version, by question id. */
+function practices(c: ReturnType<typeof loadContent>): Map<string, ContentQuestion> {
+  return new Map(STAGES.flatMap((st) => questionsInStage(c, st)).map((q) => [q.id, q]));
 }

@@ -1,4 +1,5 @@
 import { loadContent } from '@/lib/content/loader';
+import { practiceChanged } from '@/lib/question/answerWords';
 import type { LoadedContent, LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 
@@ -6,10 +7,11 @@ import type { DecisionVersionView } from '@/types/api';
  * FR-CNT-08's marker: a decision is measured against the expected practice of the content version it was
  * answered against (FR-CNT-07); when the running version words that practice differently, S-12 and S-11
  * say so. Only the expected practice is compared: a reworded question text does not change what the
- * decision was measured against.
+ * decision was measured against. A running question that lists the answered version in `practiceSameAs` is
+ * not reworded (see `practiceChanged`).
  */
-export function isReworded(answeredAgainst: LoadedQuestion, running: LoadedQuestion): boolean {
-  return answeredAgainst.expectedPractice !== running.expectedPractice;
+export function isReworded(answeredAgainst: LoadedQuestion, answeredSemver: string, running: LoadedQuestion): boolean {
+  return practiceChanged(answeredAgainst, answeredSemver, running);
 }
 
 /**
@@ -33,7 +35,7 @@ export function rewordedQuestionIds(
     if (v.status === 'withdrawn' || v.content.semver === running.semver) continue;
     const now = running.questions.get(questionId);
     const then = once(v.content.semver).questions.get(questionId);
-    if (now !== undefined && then !== undefined && isReworded(then, now)) ids.push(questionId);
+    if (now !== undefined && then !== undefined && isReworded(then, v.content.semver, now)) ids.push(questionId);
   }
   return ids.sort();
 }

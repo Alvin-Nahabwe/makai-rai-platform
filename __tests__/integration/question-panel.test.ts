@@ -36,7 +36,7 @@ describe('loadQuestionPanel', () => {
     await useFixtureContent('0.0.2-fixture');
     const d = await panel('assessor', 'Q-PP-01');
     expect(d.question.expectedPractice).not.toBe(d.runningQuestion.expectedPractice);
-    expect(isReworded(d.question, d.runningQuestion)).toBe(true);
+    expect(isReworded(d.question, d.current!.content.semver, d.runningQuestion)).toBe(true);
     expect(d.contentSemver).toBe('0.0.2-fixture');
     expect(d.current?.versionNumber).toBe(1);
     expect(d.historyCount).toBe(1);
