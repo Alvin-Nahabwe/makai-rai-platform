@@ -28,6 +28,21 @@ vi.mock('next/navigation', async (importOriginal) => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
+// The fixture bundles hold no answerLabels; this lets one test run the findings pages against running content that has them (D4).
+const wording = vi.hoisted(() => ({ on: false }));
+vi.mock('@/lib/content/loader', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/content/loader')>();
+  return {
+    ...real,
+    runningContent: () => {
+      const c = real.runningContent();
+      if (!wording.on) return c;
+      const answerLabels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+      return { ...c, questions: new Map([...c.questions].map(([id, q]) => [id, { ...q, answerLabels }])) };
+    },
+  };
+});
+
 let fx: OrgFixture;
 let contentVersionId: string;
 const identityOf = (role: OrgRole) => ({ userId: fx.members[role].userId } as Identity);
@@ -166,6 +181,17 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const html = await renderList('viewer', k.p.id);
     expect(html).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
     expect(html).toContain(FINDINGS_COPY.labels.raisedByTeam);
+  });
+
+  it('the findings page source label uses the running question\'s label (D4)', async () => {
+    const k = await everyKind();
+    wording.on = true;
+    try {
+      const html = await renderList('viewer', k.p.id);
+      expect(html).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not compared yet'));
+      expect(html).not.toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
+    } finally { wording.on = false; }
+    expect(await renderList('viewer', k.p.id)).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
   });
 
   it('FR-FND-02 FR-FND-08: members see their findings on S-14, and a non-member gets 404', async () => {

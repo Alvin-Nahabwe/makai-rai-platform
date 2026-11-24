@@ -521,6 +521,32 @@ describe('S-12 regions', () => {
     expect(v2).toMatch(new RegExp(`<a[^>]*href="/h"[^>]*>${esc(QUESTION_COPY.current.history(2))}</a>`));
   });
 
+  it('D4: CurrentDecision names the answer in the running question\'s label when given one, else the shared word', () => {
+    const labels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+    const withLabel = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} question={{ answerLabels: labels }} />);
+    expect(withLabel).toContain('Partly compared');
+    expect(withLabel).toContain('data-mark-kind="partly"');
+    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} question={{}} />);
+    expect(none).toContain('>Partly<');
+    expect(none).not.toContain('Partly compared');
+  });
+
+  it('D4: each history entry names its answer in its own version\'s label, and a version without labels reads the shared word', async () => {
+    const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
+    const labels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+    const w = (answerLabels: typeof labels | null) => ({ text: 'Q', expectedPractice: 'P', answerLabels });
+    const h = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[
+      { version: V2, wording: w(labels), seals: [] },
+      { version: { ...V2, status: 'partly' }, wording: w(null), seals: [] },
+      { version: { ...V2, id: 'dv0', versionNumber: 0, status: 'partly' }, wording: null, seals: [] },
+    ]} />);
+    const [first, second, third] = h.split('<li ').slice(1);
+    expect(first).toContain('Partly compared');
+    expect(second).toContain('>Partly<');
+    expect(second).not.toContain('Partly compared');
+    expect(third).toContain('>Partly<');
+  });
+
   it('U12 (d): the current decision shows the version\'s reason and its evidence, or None, for every role', () => {
     const withBoth = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={{ ...V2, reason: 'We checked the sources.', evidence: [{ id: 'e1', kind: 'link', url: 'https://example.org/a', label: 'Audit report', fileName: null, mimeType: null, byteSize: null, erased: null } as never] }} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} />);
     expect(withBoth).toMatch(/<dt>Reason<\/dt><dd>We checked the sources\.<\/dd>/);

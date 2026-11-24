@@ -8,7 +8,9 @@ import { textErasedLine } from '@/lib/documents/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
+import { answerLabel } from '@/lib/question/answerWords';
 import type { DecisionVersionView } from '@/types/api';
+import type { ContentQuestion } from '@/types/content';
 import type { SealRef } from '@/types/seal';
 
 const C = QUESTION_COPY.current;
@@ -17,6 +19,8 @@ export type CurrentDecisionProps = {
   orgSlug: string; current: DecisionVersionView | null; historyCount: number; historyHref: string; seals: SealRef[];
   /** Whether this is the personal data question itself, whose decision is an answer, not a status. */
   isScopeQuestion: boolean;
+  /** The RUNNING question (D4: the card reads beside the running wording), whose own word names the answer; without it the shared word. */
+  question?: Pick<ContentQuestion, 'answerLabels'>;
 };
 
 /**
@@ -29,7 +33,7 @@ export type CurrentDecisionProps = {
  * decision, says what kind of mistake it was, and has no mark (a mark has no kind for it). A server component: every
  * value is a React child, so it is text, never markup (NFR-SEC-11).
  */
-export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion }: CurrentDecisionProps): ReactElement | null {
+export function CurrentDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion, question }: CurrentDecisionProps): ReactElement | null {
   if (current === null) return <p>{C.none}</p>;
   const history = <p><Link href={historyHref}>{C.history(historyCount)}</Link></p>;
   if (current.status === 'withdrawn') {
@@ -46,7 +50,7 @@ export function CurrentDecision({ orgSlug, current, historyCount, historyHref, s
   const kind = markKindOf({ status: current.status, scopeAnswer: current.scopeAnswer, gated: false, isScopeQuestion });
   const firstLine = (
     <p>
-      <StatusMark kind={kind} scopeAnswer={current.scopeAnswer ?? undefined} />
+      <StatusMark kind={kind} scopeAnswer={current.scopeAnswer ?? undefined} label={question !== undefined && current.status !== null ? answerLabel(question, current.status) : undefined} />
       <span aria-hidden="true"> · </span>
       <span>{C.version(current.versionNumber)}</span>
     </p>

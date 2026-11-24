@@ -23,6 +23,12 @@ const v = (questionId: string, over: Partial<DecisionVersionView> = {}): Decisio
 const BASE = { questions: QUESTIONS, current: new Map<string, DecisionVersionView>(), gate: null, openFindingsByQuestion: new Map<string, number>(), changed: [] as string[], reworded: [] as string[] };
 
 describe('S-11 rows', () => {
+  it('D5 (per-question wording): a question with its own answer labels still reads the shared word in the stage list', () => {
+    const answerLabels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+    const rows = buildStageRows({ ...BASE, questions: [q('Q-PP-01', { answerLabels })], current: new Map([['Q-PP-01', v('Q-PP-01', { status: 'partly' })]]) });
+    expect(rows[0].statusText).toBe('Partly');
+  });
+
   it('FR-DEC-06 (screen): with nothing recorded every row reads No decision', () => {
     const rows = buildStageRows(BASE);
     expect(rows.map((r) => r.statusText)).toEqual(['No decision', 'No decision', 'No decision', 'No decision']);

@@ -11,6 +11,8 @@ export type StatusMarkProps = {
   noEvidence?: boolean;
   /** Only with `scope_answered`: the answer the words give. */
   scopeAnswer?: ScopeAnswer;
+  /** The question's own word for the answer (content 5.2.0), in place of the shared word, on the four answer kinds. */
+  label?: string;
 };
 
 const RING = { cx: 12, cy: 12, r: 8 } as const;
@@ -35,8 +37,11 @@ const SHAPES: Readonly<Record<StatusMarkKind, ReactElement>> = {
  * The words of a mark: its kind's words, with the no-evidence note on done and the answer on the personal data question.
  * The answer mark given no answer says only that the question is answered.
  */
-export function statusMarkWords(kind: StatusMarkKind, options: { noEvidence?: boolean; scopeAnswer?: ScopeAnswer } = {}): string {
-  const { noEvidence = false, scopeAnswer } = options;
+export function statusMarkWords(kind: StatusMarkKind, options: { noEvidence?: boolean; scopeAnswer?: ScopeAnswer; label?: string } = {}): string {
+  const { noEvidence = false, scopeAnswer, label } = options;
+  if (label !== undefined && (kind === 'done' || kind === 'partly' || kind === 'not_yet' || kind === 'not_applicable')) {
+    return kind === 'done' && noEvidence ? `${label}, ${STATUS_MARK_COPY.noEvidence}` : label;
+  }
   if (kind === 'scope_answered') return scopeAnswer === undefined ? UI_COPY.marks.answered : STATUS_MARK_COPY.scope_answered(scopeAnswer);
   if (kind === 'done' && noEvidence) return `${STATUS_MARK_COPY.done}, ${STATUS_MARK_COPY.noEvidence}`;
   return STATUS_MARK_COPY[kind];
@@ -56,11 +61,11 @@ export function MarkShape({ kind, size = 16 }: { kind: StatusMarkKind; size?: 16
 }
 
 /** A status as a shape and its words (spec 7.2): ink for every status but done, the filled green check (R8). */
-export function StatusMark({ kind, size = 16, words = 'visible', noEvidence = false, scopeAnswer }: StatusMarkProps): ReactElement {
+export function StatusMark({ kind, size = 16, words = 'visible', noEvidence = false, scopeAnswer, label }: StatusMarkProps): ReactElement {
   return (
     <span className={`ui-mark ui-mark--${kind}`} data-mark-kind={kind}>
       <MarkShape kind={kind} size={size} />
-      <span className={words === 'hidden' ? 'ui-mark__words visually-hidden' : 'ui-mark__words'}>{statusMarkWords(kind, { noEvidence, scopeAnswer })}</span>
+      <span className={words === 'hidden' ? 'ui-mark__words visually-hidden' : 'ui-mark__words'}>{statusMarkWords(kind, { noEvidence, scopeAnswer, label })}</span>
     </span>
   );
 }

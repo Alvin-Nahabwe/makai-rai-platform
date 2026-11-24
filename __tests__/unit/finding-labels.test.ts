@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AcceptedRiskView, FindingView, UserRef } from '@/types/api';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
-import { cancelReasonText, findingSourceLabel, findingStateLabel, OUTSIDE_ROLE_LABELS, overdueLabel, stageCountHeading, STAGE_NAMES } from '@/lib/findings/labels';
+import { cancelReasonText, decisionStatusWord, findingSourceLabel, findingStateLabel, OUTSIDE_ROLE_LABELS, overdueLabel, stageCountHeading, STAGE_NAMES } from '@/lib/findings/labels';
 import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
 
 const ANNA: UserRef = { userId: 'u-anna', name: 'Anna K.', formerMember: false };
@@ -23,6 +23,16 @@ describe('finding labels (7.5.6, 7.5.8)', () => {
     expect(findingSourceLabel(SHORTFALL, { versionNumber: 1, status: 'partly' })).toBe(FINDINGS_COPY.labels.fromDecisionWith('Partly'));
     expect(findingSourceLabel(TEAM, null)).toBe(FINDINGS_COPY.labels.raisedByTeam);
     expect(findingSourceLabel(SHORTFALL, null)).toBe(FINDINGS_COPY.labels.fromDecision);
+  });
+
+  it('D4: the source label and the status word use the running question\'s label when given one, else the shared word', () => {
+    const question = { answerLabels: { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' } };
+    expect(findingSourceLabel(SHORTFALL, { versionNumber: 3, status: 'not_yet', question })).toBe(FINDINGS_COPY.labels.fromDecisionWith('Not compared yet'));
+    expect(decisionStatusWord('partly', question)).toBe('Partly compared');
+    expect(decisionStatusWord('partly', {})).toBe('Partly');
+    expect(decisionStatusWord('partly')).toBe('Partly');
+    expect(decisionStatusWord('withdrawn', question)).toBe(FINDINGS_COPY.labels.withdrawn);
+    expect(decisionStatusWord(null, question)).toBe(FINDINGS_COPY.labels.noStatus);
   });
 
   it('FR-DEC-01: the outside roles are FR-DEC-01\'s list', () => {

@@ -12,7 +12,9 @@ import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { formatSize } from '@/lib/format/size';
+import { answerLabel } from '@/lib/question/answerWords';
 import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
+import type { ContentQuestion } from '@/types/content';
 import type { SealRef } from '@/types/seal';
 import '@/components/ui/buttonStyles';
 import './reading.css';
@@ -35,6 +37,8 @@ export type ReadingDecisionProps = {
   orgSlug: string; current: DecisionVersionView | null; historyCount: number; historyHref: string; seals: SealRef[];
   /** Whether this is the personal data question itself, whose decision is an answer, not a status. */
   isScopeQuestion: boolean;
+  /** The RUNNING question (D4: the card reads beside the running wording), whose own word names the answer; without it the shared word. */
+  question?: Pick<ContentQuestion, 'answerLabels'>;
 };
 
 /**
@@ -133,7 +137,7 @@ function Reason({ current }: { current: DecisionVersionView }): ReactElement | n
  * "No decision yet." Nothing here is a control but links: no form, no evidence control, no withdraw. A server component:
  * every value is a React child, so it is text, never markup (NFR-SEC-11).
  */
-export function ReadingDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion }: ReadingDecisionProps): ReactElement {
+export function ReadingDecision({ orgSlug, current, historyCount, historyHref, seals, isScopeQuestion, question }: ReadingDecisionProps): ReactElement {
   const origin = ownOrigin();
   const head = (state: ReactElement | null) => (
     <div className="reading-decision__head">
@@ -171,7 +175,7 @@ export function ReadingDecision({ orgSlug, current, historyCount, historyHref, s
   } else {
     const kind = markKindOf({ status: current.status, scopeAnswer: current.scopeAnswer, gated: false, isScopeQuestion });
     const enteredBy = current.enteredBy.formerMember ? C.formerMember(current.enteredBy.name) : current.enteredBy.name;
-    state = <StatusMark kind={kind} size={20} scopeAnswer={current.scopeAnswer ?? undefined} />;
+    state = <StatusMark kind={kind} size={20} scopeAnswer={current.scopeAnswer ?? undefined} label={question !== undefined && current.status !== null ? answerLabel(question, current.status) : undefined} />;
     const decided = current.decidedBy === null ? null : (
       <figcaption className="reading-decision__decided">
         {R.decidedBy(deciderLabel(current.decidedBy, '', 'record'))}

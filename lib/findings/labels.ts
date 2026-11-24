@@ -1,6 +1,8 @@
 import type { AcceptedRiskView, FindingView } from '@/types/api';
 import type { CalendarDate, FindingState, Stage, StoredDecisionStatus } from '@/types/record';
-import { OUTSIDE_ROLE_LABELS, STATUS_OPTIONS } from '@/lib/decision/copy';
+import { OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
+import { answerLabel } from '@/lib/question/answerWords';
+import type { ContentQuestion } from '@/types/content';
 import { formatDay } from '@/lib/format/dates';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { STORED_CANCEL_REASONS } from '@/lib/findings/storedCancelReasons';
@@ -39,19 +41,24 @@ export function findingStateLabel(state: FindingState, accepted: Pick<AcceptedRi
   }
 }
 
-/** The decision status as 7.5.6 words it. */
-export function decisionStatusWord(status: StoredDecisionStatus | null): string {
+/**
+ * The decision status as 7.5.6 words it: the question's own word for it when the caller passes the running question
+ * (D4: the findings pages read the running content), else the shared word. Withdrawn and no status have one wording.
+ */
+export function decisionStatusWord(status: StoredDecisionStatus | null, question?: Pick<ContentQuestion, 'answerLabels'>): string {
   if (status === 'withdrawn') return FINDINGS_COPY.labels.withdrawn;
-  return STATUS_OPTIONS.find((o) => o.value === status)?.label ?? FINDINGS_COPY.labels.noStatus;
+  if (status === null) return FINDINGS_COPY.labels.noStatus;
+  return answerLabel(question ?? {}, status);
 }
 
 /** C#414: "From a decision: <status>" (or "From a decision" when the version is not known, G-a9) or "Raised by the team". */
 export function findingSourceLabel(
-  f: Pick<FindingView, 'source' | 'questionId'>, version: { versionNumber: number; status: StoredDecisionStatus | null } | null,
+  f: Pick<FindingView, 'source' | 'questionId'>,
+  version: { versionNumber: number; status: StoredDecisionStatus | null; question?: Pick<ContentQuestion, 'answerLabels'> } | null,
 ): string {
   if (f.source === 'team') return FINDINGS_COPY.labels.raisedByTeam;
   if (version === null) return FINDINGS_COPY.labels.fromDecision;
-  return FINDINGS_COPY.labels.fromDecisionWith(decisionStatusWord(version.status));
+  return FINDINGS_COPY.labels.fromDecisionWith(decisionStatusWord(version.status, version.question));
 }
 
 /**

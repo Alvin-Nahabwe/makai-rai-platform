@@ -65,7 +65,7 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
   return {
     decision: (
       <ReadingDecision orgSlug={data.orgSlug} current={data.current} historyCount={data.historyCount} historyHref={historyHref}
-        seals={data.seals} isScopeQuestion={data.question.type === 'gate'} />
+        seals={data.seals} isScopeQuestion={data.question.type === 'gate'} question={data.runningQuestion} />
     ),
     openWork: <StillOpen work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />,
     aside: (
