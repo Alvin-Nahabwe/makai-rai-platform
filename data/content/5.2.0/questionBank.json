@@ -899,13 +899,13 @@
                 "done": "Yes, we recorded why",
                 "partly": "Partly, some of it is recorded",
                 "not_yet": "No, not yet",
-                "not_applicable": "A choice of model does not apply"
+                "not_applicable": "No choice of model type applies"
               },
               "answerPrompts": {
-                "done": "Name the model type, the alternatives, why you chose it and where this is recorded; it prints in the model card.",
-                "partly": "Name the model type and the alternatives weighed so far, then what is still open; it prints in the model card.",
-                "not_yet": "Name the model type you expect and when you will record the choice; it prints in the model card.",
-                "not_applicable": "Say why no choice of model type applies; it prints in the model card."
+                "done": "Name the model type, the alternatives, why you chose it and where this is recorded; this prints in the model card.",
+                "partly": "Name the model type and the alternatives weighed so far, then what is still open; this prints in the model card.",
+                "not_yet": "Name the model type you expect and when you will record the choice; this prints in the model card.",
+                "not_applicable": "Say why no choice of model type applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -932,13 +932,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some checks done",
                 "not_yet": "No, not yet",
-                "not_applicable": "Splitting the data does not apply"
+                "not_applicable": "No data split applies"
               },
               "answerPrompts": {
-                "done": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; it prints in the model card.",
-                "partly": "Say how you split the data, which checks are done and which are not; it prints in the model card.",
-                "not_yet": "Say how and when you plan to split and check the data; it prints in the model card.",
-                "not_applicable": "Say why splitting the data does not apply; it prints in the model card."
+                "done": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; this prints in the model card.",
+                "partly": "Say how you split the data, which checks are done and which are not, and how the test data differs from the setting of use; this prints in the model card.",
+                "not_yet": "Say how and when you plan to split and check the data; this prints in the model card.",
+                "not_applicable": "Say why no data split applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -958,19 +958,19 @@
               "evidenceExamples": [
                 "the evaluation report with the confusion matrix",
                 "the summary file from the evaluation notebook",
-                "a link to the metrics in the repository"
+                "a link to the measures in the repository"
               ],
               "answerLabels": {
                 "done": "Yes, we measured them",
                 "partly": "Partly, some measures so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Measuring errors does not apply"
+                "not_applicable": "No error measurement applies"
               },
               "answerPrompts": {
                 "done": "Name the measures, why those, and the costliest error; give numbers, not judgements. Attach the results file: the model card lists it, and you type the numbers in when you generate it.",
                 "partly": "Name the measures reported so far and those still to do; give numbers, not judgements.",
                 "not_yet": "Say when you will measure the errors on held-out data, or what is blocking it.",
-                "not_applicable": "Say why measuring kinds of error does not apply to your model."
+                "not_applicable": "Say why no error measurement applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -991,19 +991,19 @@
               "whyAsked": "A model can look good on average and still work badly for one group, whose people carry the cost of its errors.",
               "evidenceExamples": [
                 "the summary file from the C-14 notebook",
-                "a per-group metrics table with group sizes"
+                "a per-group measures table with group sizes"
               ],
               "answerLabels": {
                 "done": "Yes, for each group",
                 "partly": "Partly, some groups so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Measuring by group does not apply"
+                "not_applicable": "No measurement by group applies"
               },
               "answerPrompts": {
                 "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
-                "partly": "Name the groups measured so far and those still to do. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+                "partly": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
-                "not_applicable": "Say why measuring by group does not apply to your model."
+                "not_applicable": "Say why no measurement by group applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1107,10 +1107,10 @@
                 "not_applicable": "No fairness measure applies"
               },
               "answerPrompts": {
-                "done": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; it prints in the model card.",
-                "partly": "Say which fitting measures you computed, with thresholds and groups, and which are still to compute; it prints in the model card.",
-                "not_yet": "Write that no fairness measure is computed yet, which you plan and when; it prints in the model card.",
-                "not_applicable": "Write why no fairness measure applies to this system; it prints in the model card."
+                "done": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; this prints in the model card.",
+                "partly": "Say which fitting measures you computed, with thresholds and groups, which are still to compute and why any other does not fit; this prints in the model card.",
+                "not_yet": "Write that no fairness measure is computed yet, which you plan and when; this prints in the model card.",
+                "not_applicable": "Say why no fairness measure applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1125,7 +1125,7 @@
               "gaps": [
                 "IP-03"
               ],
-              "expectedPractice": "You apply at least one explanation method that fits your model (feature importance, SHAP or LIME), ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
+              "expectedPractice": "You apply at least one explanation method that fits your model, such as feature importance, SHAP or LIME, ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
               "whyAsked": "Explanations show whether a model relies on what it should; a driver that makes no sense to a domain expert often first signals a data problem.",
               "evidenceExamples": [
                 "the summary file from the C-18 notebook",
@@ -1136,13 +1136,13 @@
                 "done": "Yes, we used them",
                 "partly": "Partly, some of it so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Explanation methods do not apply"
+                "not_applicable": "No explanation method applies"
               },
               "answerPrompts": {
                 "done": "Name the method, the main drivers, the domain expert who reviewed them, by role, their conclusion and where it is recorded.",
                 "partly": "Name the method used and the drivers found so far, and what is still to do, such as the expert review.",
                 "not_yet": "Say when you will apply an explanation method, or what is blocking it.",
-                "not_applicable": "Say why no explanation method fits your model."
+                "not_applicable": "Say why no explanation method applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1170,13 +1170,13 @@
                 "done": "Yes, we tested it",
                 "partly": "Partly, some inputs so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Inputs in use will not differ"
+                "not_applicable": "No test on other inputs applies"
               },
               "answerPrompts": {
-                "done": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; it prints in the model card.",
-                "partly": "Say which input changes you tested, how performance moved and what is still to test; it prints in the model card.",
-                "not_yet": "Say which input changes you expect in use and when you will test them; it prints in the model card.",
-                "not_applicable": "Say why inputs in use will not differ from the training data; it prints in the model card."
+                "done": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; this prints in the model card.",
+                "partly": "Say which input changes you tested, how performance moved and what is still to test; this prints in the model card.",
+                "not_yet": "Say which input changes you expect in use and when you will test them; this prints in the model card.",
+                "not_applicable": "Say why no test on other inputs applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1191,7 +1191,7 @@
               "gaps": [
                 "IP-04"
               ],
-              "expectedPractice": "On the same test data, you compare your model with at least one simple baseline (always predicting the most common class, the current rule or a logistic regression) and record whether the gain justifies the complexity.",
+              "expectedPractice": "On the same test data, you compare your model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression, and record whether the gain justifies the complexity.",
               "whyAsked": "A complex model barely beating a simple rule costs more to run and explain for little gain; a baseline shows if its numbers mean anything.",
               "evidenceExamples": [
                 "the evaluation report with the baseline results",
@@ -1207,7 +1207,7 @@
                 "done": "Name the baseline, both results, what you decided from them and where it is recorded.",
                 "partly": "Name the baselines compared so far and those still to compare.",
                 "not_yet": "Say when you will compare, or what is blocking it.",
-                "not_applicable": "Say why no simple baseline applies to your problem."
+                "not_applicable": "Say why no simple baseline applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1234,13 +1234,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some features so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Checking for shortcuts does not apply"
+                "not_applicable": "No shortcut check applies"
               },
               "answerPrompts": {
                 "done": "Name the suspect features you checked, how, what you found and changed, and where it is recorded.",
                 "partly": "Name the features checked so far and those still to check.",
                 "not_yet": "Say when you will check, or what is blocking it.",
-                "not_applicable": "Say why checking for shortcuts does not apply to your data."
+                "not_applicable": "Say why no shortcut check applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1266,13 +1266,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some of it so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Checking confidence does not apply"
+                "not_applicable": "No confidence check applies"
               },
               "answerPrompts": {
                 "done": "Say how you checked calibration, what you found, how low-confidence outputs are handled and where this is recorded.",
                 "partly": "Say what you have checked so far and what is still to do, such as handling low-confidence outputs.",
                 "not_yet": "Say when you will check calibration, or what is blocking it.",
-                "not_applicable": "Say why checking the model's confidence does not apply."
+                "not_applicable": "Say why no confidence check applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1299,7 +1299,7 @@
               "gaps": [
                 "IP-03"
               ],
-              "expectedPractice": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs must follow each decision, and record the choice and trade-offs.",
+              "expectedPractice": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs need to understand each decision, and record the choice and trade-offs.",
               "whyAsked": "Simpler models are easier to explain, check and maintain, which matters most where people must understand decisions about them; small accuracy gains may not be worth it.",
               "evidenceExamples": [
                 "the model choice note, stating the acceptable performance",
@@ -1309,13 +1309,13 @@
                 "done": "Yes, we chose the simplest",
                 "partly": "Partly, some of it is decided",
                 "not_yet": "No, not yet",
-                "not_applicable": "Choosing a model does not apply"
+                "not_applicable": "No simplest-model choice applies"
               },
               "answerPrompts": {
                 "done": "Give your acceptable performance, the simpler models tried, why you chose this one and where it is recorded.",
                 "partly": "Say what is decided, such as acceptable performance, and what is still open.",
                 "not_yet": "Say when you will set acceptable performance and compare models.",
-                "not_applicable": "Say why choosing a model does not apply."
+                "not_applicable": "Say why no simplest-model choice applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1341,13 +1341,13 @@
                 "done": "Yes, all of it is recorded",
                 "partly": "Partly, some of it is recorded",
                 "not_yet": "No, not yet",
-                "not_applicable": "Training records do not apply"
+                "not_applicable": "No training record applies"
               },
               "answerPrompts": {
                 "done": "Say where the training records are kept, what they include and whether someone has re-run training from them.",
                 "partly": "Say which records are kept so far and which are missing.",
                 "not_yet": "Say when you will record them, or what is blocking it.",
-                "not_applicable": "Say why keeping training records does not apply."
+                "not_applicable": "Say why no training record applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1373,13 +1373,13 @@
                 "done": "Yes, we check each step",
                 "partly": "Partly, some steps so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Pipeline checks do not apply"
+                "not_applicable": "No pipeline check applies"
               },
               "answerPrompts": {
                 "done": "Name the checks, the steps they run at, what they found and fixed, and where this is recorded.",
                 "partly": "Name the steps checked so far and those still to check.",
                 "not_yet": "Say when you will add checks, or what is blocking it.",
-                "not_applicable": "Say why your data needs no pipeline checks."
+                "not_applicable": "Say why no pipeline check applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1406,13 +1406,13 @@
                 "done": "Yes, it is up to date",
                 "partly": "Partly, some of it is written",
                 "not_yet": "No, not yet",
-                "not_applicable": "A model card does not apply"
+                "not_applicable": "No model card applies"
               },
               "answerPrompts": {
                 "done": "Say which model version the card describes and where it is kept. Attach or link it; the model card lists it.",
                 "partly": "Say which model version the card describes, which parts are written and which are not.",
                 "not_yet": "Say when you will write the card; one issued by this platform counts.",
-                "not_applicable": "Say why this model needs no model card."
+                "not_applicable": "Say why no model card applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1497,15 +1497,15 @@
               ],
               "answerLabels": {
                 "done": "Every method our model needs",
-                "partly": "Some of the methods it needs",
+                "partly": "Some of the methods our model needs",
                 "not_yet": "None yet",
-                "not_applicable": "No evaluation method applies"
+                "not_applicable": "No other evaluation method applies"
               },
               "answerPrompts": {
-                "done": "Give each ticked method's main result, where the report is and why any unticked one does not fit. A tick on AUC-ROC prints in the model card.",
-                "partly": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. A tick on AUC-ROC prints in the model card.",
-                "not_yet": "Say which methods you plan and when, or what is blocking them.",
-                "not_applicable": "Say why no further evaluation method applies."
+                "done": "Give each ticked method's main result, where the report is and why any unticked one does not fit. This and your AUC-ROC tick print in the model card.",
+                "partly": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. This and your AUC-ROC tick print in the model card.",
+                "not_yet": "Write that no other method is used yet, which you plan and when, or what is blocking them; this prints in the model card.",
+                "not_applicable": "Say why no other evaluation method applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1530,13 +1530,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some subpopulations so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Pooling does not apply to our data"
+                "not_applicable": "No pooling check applies"
               },
               "answerPrompts": {
                 "done": "Name the subpopulations compared, what you found, what you decided and where it is recorded.",
                 "partly": "Name the subpopulations compared so far and those still to compare.",
                 "not_yet": "Say when you will compare them, or what is blocking it.",
-                "not_applicable": "Say why your data pools no populations."
+                "not_applicable": "Say why no pooling check applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1563,13 +1563,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some choices so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Tuning does not apply to this model"
+                "not_applicable": "No tuning check applies"
               },
               "answerPrompts": {
-                "done": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; it prints in the model card.",
-                "partly": "Say which tuning choices you checked so far, what changed by group and what is still to check; it prints in the model card.",
-                "not_yet": "Say which tuning choices you will check by group, and when; it prints in the model card.",
-                "not_applicable": "Say why tuning does not apply to this model; it prints in the model card."
+                "done": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; this prints in the model card.",
+                "partly": "Say which tuning choices you checked so far, what changed by group and what is still to check; this prints in the model card.",
+                "not_yet": "Say which tuning choices you will check by group, and when; this prints in the model card.",
+                "not_applicable": "Say why no tuning check applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1596,13 +1596,13 @@
                 "done": "Yes, we assessed it",
                 "partly": "Partly, some of it so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Assessing harm by group does not apply"
+                "not_applicable": "No harm-by-group assessment applies"
               },
               "answerPrompts": {
-                "done": "Describe each error's consequences, the groups bearing more and where this is recorded; it prints in the model card. Give rates, never records about people.",
-                "partly": "Describe the consequences assessed so far and what is still open; it prints in the model card. Give rates, never records about people.",
-                "not_yet": "Describe the errors you expect, their consequences and when you will compare groups; it prints in the model card.",
-                "not_applicable": "Say why assessing harm by group does not apply; it prints in the model card."
+                "done": "Describe each error's consequences, the groups bearing more and where this is recorded; this prints in the model card. Give rates, never records about people.",
+                "partly": "Describe the consequences assessed so far and what is still open; this prints in the model card. Give rates, never records about people.",
+                "not_yet": "Describe the errors you expect, their consequences and when you will compare groups, with no records about people; this prints in the model card.",
+                "not_applicable": "Say why no harm-by-group assessment applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1611,7 +1611,7 @@
             },
             {
               "id": "Q-IP-20",
-              "text": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
+              "text": "Have you recorded the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
@@ -1625,16 +1625,16 @@
                 "a test report showing the cases where the model goes wrong"
               ],
               "answerLabels": {
-                "done": "Yes, they are written down",
+                "done": "Yes, they are recorded",
                 "partly": "Partly, some limits so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Recording limits does not apply"
+                "not_applicable": "No record of limits applies"
               },
               "answerPrompts": {
-                "done": "State the limits in two or three sentences, then where the full text is kept; they print in the model card.",
-                "partly": "State the limits known so far in two or three sentences and what is still to test; they print in the model card.",
+                "done": "State the limits, including where the model must not be used, in two or three sentences, then where the full text is kept; they print in the model card.",
+                "partly": "State the limits and conditions of use known so far in two or three sentences, and what is still to test; they print in the model card.",
                 "not_yet": "Write that the limits are not yet recorded, any you already know and when you will record them; this prints in the model card.",
-                "not_applicable": "Write why no limits apply to this model; this prints in the model card."
+                "not_applicable": "Say why no record of limits applies to this project; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1660,13 +1660,13 @@
                 "done": "Yes, all of it",
                 "partly": "Partly, some of it",
                 "not_yet": "No, not yet",
-                "not_applicable": "Version control does not apply"
+                "not_applicable": "No version control applies"
               },
               "answerPrompts": {
                 "done": "Say what is under version control, with which tools, where it is kept and the current model's version.",
                 "partly": "Say what is under version control so far and what is not.",
                 "not_yet": "Say when you will set up version control, or what is blocking it.",
-                "not_applicable": "Say why version control does not apply."
+                "not_applicable": "Say why no version control applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1682,7 +1682,7 @@
                 "IP-05",
                 "IP-07"
               ],
-              "expectedPractice": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model (altered images, reworded text, fake inputs), test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
+              "expectedPractice": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs, test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
               "whyAsked": "Outputs that bring a benefit or a penalty invite gaming, and small input changes can flip a prediction.",
               "evidenceExamples": [
                 "an adversarial test report",
@@ -1693,13 +1693,13 @@
                 "done": "Yes, as far as the risk needs",
                 "partly": "Partly, some ways so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Checking for manipulation does not apply"
+                "not_applicable": "No manipulation check applies"
               },
               "answerPrompts": {
                 "done": "Name the manipulations considered, how you tested them, what you found, the safeguards chosen and where it is recorded.",
                 "partly": "Name the kinds of manipulation tested so far and those still to test.",
                 "not_yet": "Say when you will check, or what is blocking it.",
-                "not_applicable": "Say why checking for manipulation does not apply."
+                "not_applicable": "Say why no manipulation check applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1725,13 +1725,13 @@
                 "done": "Yes, we tested it",
                 "partly": "Partly, some periods so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Change over time does not apply"
+                "not_applicable": "No test on later data applies"
               },
               "answerPrompts": {
                 "done": "Give the training and test periods, how results changed, your conclusion on retraining and where it is recorded.",
                 "partly": "Give the periods tested so far and what is still to test.",
                 "not_yet": "Say when you will test on later data, or what is blocking it.",
-                "not_applicable": "Say why change over time does not apply to your model."
+                "not_applicable": "Say why no test on later data applies to this project."
               },
               "practiceSameAs": [
                 "5.0.0",

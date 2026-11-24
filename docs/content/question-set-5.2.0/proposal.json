@@ -310,7 +310,7 @@
       "action": "reword",
       "id": "Q-IP-20",
       "originalText": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
-      "text": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
+      "text": "Have you recorded the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
       "reason": "Written limits and failure modes; feeds MC-11 and MC-26."
     },
     {

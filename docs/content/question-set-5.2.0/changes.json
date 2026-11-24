@@ -2965,9 +2965,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "A choice of model does not apply",
+    "to": "No choice of model type applies",
     "decision": "pending",
-    "final": "A choice of model does not apply"
+    "final": "No choice of model type applies"
   },
   {
     "row": "Q-IP-01.answerPrompts.done",
@@ -2975,9 +2975,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Name the model type, the alternatives, why you chose it and where this is recorded; it prints in the model card.",
+    "to": "Name the model type, the alternatives, why you chose it and where this is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the model type, the alternatives, why you chose it and where this is recorded; it prints in the model card."
+    "final": "Name the model type, the alternatives, why you chose it and where this is recorded; this prints in the model card."
   },
   {
     "row": "Q-IP-01.answerPrompts.partly",
@@ -2985,9 +2985,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the model type and the alternatives weighed so far, then what is still open; it prints in the model card.",
+    "to": "Name the model type and the alternatives weighed so far, then what is still open; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the model type and the alternatives weighed so far, then what is still open; it prints in the model card."
+    "final": "Name the model type and the alternatives weighed so far, then what is still open; this prints in the model card."
   },
   {
     "row": "Q-IP-01.answerPrompts.not_yet",
@@ -2995,9 +2995,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Name the model type you expect and when you will record the choice; it prints in the model card.",
+    "to": "Name the model type you expect and when you will record the choice; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the model type you expect and when you will record the choice; it prints in the model card."
+    "final": "Name the model type you expect and when you will record the choice; this prints in the model card."
   },
   {
     "row": "Q-IP-01.answerPrompts.not_applicable",
@@ -3005,9 +3005,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no choice of model type applies; it prints in the model card.",
+    "to": "Say why no choice of model type applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why no choice of model type applies; it prints in the model card."
+    "final": "Say why no choice of model type applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-01.practiceSameAs",
@@ -3101,9 +3101,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Splitting the data does not apply",
+    "to": "No data split applies",
     "decision": "pending",
-    "final": "Splitting the data does not apply"
+    "final": "No data split applies"
   },
   {
     "row": "Q-IP-02.answerPrompts.done",
@@ -3111,9 +3111,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; it prints in the model card.",
+    "to": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; it prints in the model card."
+    "final": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; this prints in the model card."
   },
   {
     "row": "Q-IP-02.answerPrompts.partly",
@@ -3121,9 +3121,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say how you split the data, which checks are done and which are not; it prints in the model card.",
+    "to": "Say how you split the data, which checks are done and which are not, and how the test data differs from the setting of use; this prints in the model card.",
     "decision": "pending",
-    "final": "Say how you split the data, which checks are done and which are not; it prints in the model card."
+    "final": "Say how you split the data, which checks are done and which are not, and how the test data differs from the setting of use; this prints in the model card."
   },
   {
     "row": "Q-IP-02.answerPrompts.not_yet",
@@ -3131,9 +3131,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say how and when you plan to split and check the data; it prints in the model card.",
+    "to": "Say how and when you plan to split and check the data; this prints in the model card.",
     "decision": "pending",
-    "final": "Say how and when you plan to split and check the data; it prints in the model card."
+    "final": "Say how and when you plan to split and check the data; this prints in the model card."
   },
   {
     "row": "Q-IP-02.answerPrompts.not_applicable",
@@ -3141,9 +3141,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why splitting the data does not apply; it prints in the model card.",
+    "to": "Say why no data split applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why splitting the data does not apply; it prints in the model card."
+    "final": "Say why no data split applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-02.practiceSameAs",
@@ -3192,6 +3192,28 @@
     "final": "Accuracy alone can hide a model that misses most cases that matter, and whether a missed case or a false alarm is worse depends on the use."
   },
   {
+    "row": "Q-IP-03.evidenceExamples",
+    "id": "Q-IP-03",
+    "file": "questionBank.json",
+    "field": "evidenceExamples",
+    "from": [
+      "the evaluation report with the confusion matrix",
+      "the summary file from the evaluation notebook",
+      "a link to the metrics in the repository"
+    ],
+    "to": [
+      "the evaluation report with the confusion matrix",
+      "the summary file from the evaluation notebook",
+      "a link to the measures in the repository"
+    ],
+    "decision": "pending",
+    "final": [
+      "the evaluation report with the confusion matrix",
+      "the summary file from the evaluation notebook",
+      "a link to the measures in the repository"
+    ]
+  },
+  {
     "row": "Q-IP-03.reasonPrompt",
     "id": "Q-IP-03",
     "file": "questionBank.json",
@@ -3237,9 +3259,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Measuring errors does not apply",
+    "to": "No error measurement applies",
     "decision": "pending",
-    "final": "Measuring errors does not apply"
+    "final": "No error measurement applies"
   },
   {
     "row": "Q-IP-03.answerPrompts.done",
@@ -3277,9 +3299,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why measuring kinds of error does not apply to your model.",
+    "to": "Say why no error measurement applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why measuring kinds of error does not apply to your model."
+    "final": "Say why no error measurement applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-03.practiceSameAs",
@@ -3328,6 +3350,25 @@
     "final": "A model can look good on average and still work badly for one group, whose people carry the cost of its errors."
   },
   {
+    "row": "Q-IP-04.evidenceExamples",
+    "id": "Q-IP-04",
+    "file": "questionBank.json",
+    "field": "evidenceExamples",
+    "from": [
+      "the summary file from the C-14 notebook",
+      "a per-group metrics table with group sizes"
+    ],
+    "to": [
+      "the summary file from the C-14 notebook",
+      "a per-group measures table with group sizes"
+    ],
+    "decision": "pending",
+    "final": [
+      "the summary file from the C-14 notebook",
+      "a per-group measures table with group sizes"
+    ]
+  },
+  {
     "row": "Q-IP-04.reasonPrompt",
     "id": "Q-IP-04",
     "file": "questionBank.json",
@@ -3373,9 +3414,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Measuring by group does not apply",
+    "to": "No measurement by group applies",
     "decision": "pending",
-    "final": "Measuring by group does not apply"
+    "final": "No measurement by group applies"
   },
   {
     "row": "Q-IP-04.answerPrompts.done",
@@ -3393,9 +3434,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the groups measured so far and those still to do. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+    "to": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
     "decision": "pending",
-    "final": "Name the groups measured so far and those still to do. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13)."
+    "final": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13)."
   },
   {
     "row": "Q-IP-04.answerPrompts.not_yet",
@@ -3413,9 +3454,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why measuring by group does not apply to your model.",
+    "to": "Say why no measurement by group applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why measuring by group does not apply to your model."
+    "final": "Say why no measurement by group applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-04.practiceSameAs",
@@ -3519,9 +3560,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; it prints in the model card.",
+    "to": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; it prints in the model card."
+    "final": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; this prints in the model card."
   },
   {
     "row": "Q-IP-06.answerPrompts.partly",
@@ -3529,9 +3570,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which fitting measures you computed, with thresholds and groups, and which are still to compute; it prints in the model card.",
+    "to": "Say which fitting measures you computed, with thresholds and groups, which are still to compute and why any other does not fit; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which fitting measures you computed, with thresholds and groups, and which are still to compute; it prints in the model card."
+    "final": "Say which fitting measures you computed, with thresholds and groups, which are still to compute and why any other does not fit; this prints in the model card."
   },
   {
     "row": "Q-IP-06.answerPrompts.not_yet",
@@ -3539,9 +3580,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Write that no fairness measure is computed yet, which you plan and when; it prints in the model card.",
+    "to": "Write that no fairness measure is computed yet, which you plan and when; this prints in the model card.",
     "decision": "pending",
-    "final": "Write that no fairness measure is computed yet, which you plan and when; it prints in the model card."
+    "final": "Write that no fairness measure is computed yet, which you plan and when; this prints in the model card."
   },
   {
     "row": "Q-IP-06.answerPrompts.not_applicable",
@@ -3549,9 +3590,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Write why no fairness measure applies to this system; it prints in the model card.",
+    "to": "Say why no fairness measure applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Write why no fairness measure applies to this system; it prints in the model card."
+    "final": "Say why no fairness measure applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-06.practiceSameAs",
@@ -3585,9 +3626,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team used at least one explanation method that fits its model, such as feature importance, SHAP or LIME. It checked with people who know the field whether the main drivers of predictions make sense, and wrote down what it found, including any driver that should not matter.",
-    "to": "You apply at least one explanation method that fits your model (feature importance, SHAP or LIME), ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
+    "to": "You apply at least one explanation method that fits your model, such as feature importance, SHAP or LIME, ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
     "decision": "pending",
-    "final": "You apply at least one explanation method that fits your model (feature importance, SHAP or LIME), ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter."
+    "final": "You apply at least one explanation method that fits your model, such as feature importance, SHAP or LIME, ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter."
   },
   {
     "row": "Q-IP-07.whyAsked",
@@ -3645,9 +3686,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Explanation methods do not apply",
+    "to": "No explanation method applies",
     "decision": "pending",
-    "final": "Explanation methods do not apply"
+    "final": "No explanation method applies"
   },
   {
     "row": "Q-IP-07.answerPrompts.done",
@@ -3685,9 +3726,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no explanation method fits your model.",
+    "to": "Say why no explanation method applies to this project.",
     "decision": "pending",
-    "final": "Say why no explanation method fits your model."
+    "final": "Say why no explanation method applies to this project."
   },
   {
     "row": "Q-IP-07.practiceSameAs",
@@ -3781,9 +3822,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Inputs in use will not differ",
+    "to": "No test on other inputs applies",
     "decision": "pending",
-    "final": "Inputs in use will not differ"
+    "final": "No test on other inputs applies"
   },
   {
     "row": "Q-IP-08.answerPrompts.done",
@@ -3791,9 +3832,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; it prints in the model card.",
+    "to": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; it prints in the model card."
+    "final": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; this prints in the model card."
   },
   {
     "row": "Q-IP-08.answerPrompts.partly",
@@ -3801,9 +3842,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which input changes you tested, how performance moved and what is still to test; it prints in the model card.",
+    "to": "Say which input changes you tested, how performance moved and what is still to test; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which input changes you tested, how performance moved and what is still to test; it prints in the model card."
+    "final": "Say which input changes you tested, how performance moved and what is still to test; this prints in the model card."
   },
   {
     "row": "Q-IP-08.answerPrompts.not_yet",
@@ -3811,9 +3852,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which input changes you expect in use and when you will test them; it prints in the model card.",
+    "to": "Say which input changes you expect in use and when you will test them; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which input changes you expect in use and when you will test them; it prints in the model card."
+    "final": "Say which input changes you expect in use and when you will test them; this prints in the model card."
   },
   {
     "row": "Q-IP-08.answerPrompts.not_applicable",
@@ -3821,9 +3862,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why inputs in use will not differ from the training data; it prints in the model card.",
+    "to": "Say why no test on other inputs applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why inputs in use will not differ from the training data; it prints in the model card."
+    "final": "Say why no test on other inputs applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-08.practiceSameAs",
@@ -3857,9 +3898,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team compared its model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression. It used the same test data, and wrote down whether the gain justifies the extra complexity.",
-    "to": "On the same test data, you compare your model with at least one simple baseline (always predicting the most common class, the current rule or a logistic regression) and record whether the gain justifies the complexity.",
+    "to": "On the same test data, you compare your model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression, and record whether the gain justifies the complexity.",
     "decision": "pending",
-    "final": "On the same test data, you compare your model with at least one simple baseline (always predicting the most common class, the current rule or a logistic regression) and record whether the gain justifies the complexity."
+    "final": "On the same test data, you compare your model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression, and record whether the gain justifies the complexity."
   },
   {
     "row": "Q-IP-16.whyAsked",
@@ -3957,9 +3998,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no simple baseline applies to your problem.",
+    "to": "Say why no simple baseline applies to this project.",
     "decision": "pending",
-    "final": "Say why no simple baseline applies to your problem."
+    "final": "Say why no simple baseline applies to this project."
   },
   {
     "row": "Q-IP-16.practiceSameAs",
@@ -4053,9 +4094,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking for shortcuts does not apply",
+    "to": "No shortcut check applies",
     "decision": "pending",
-    "final": "Checking for shortcuts does not apply"
+    "final": "No shortcut check applies"
   },
   {
     "row": "Q-IP-17.answerPrompts.done",
@@ -4093,9 +4134,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why checking for shortcuts does not apply to your data.",
+    "to": "Say why no shortcut check applies to this project.",
     "decision": "pending",
-    "final": "Say why checking for shortcuts does not apply to your data."
+    "final": "Say why no shortcut check applies to this project."
   },
   {
     "row": "Q-IP-17.practiceSameAs",
@@ -4179,9 +4220,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking confidence does not apply",
+    "to": "No confidence check applies",
     "decision": "pending",
-    "final": "Checking confidence does not apply"
+    "final": "No confidence check applies"
   },
   {
     "row": "Q-IP-18.answerPrompts.done",
@@ -4219,9 +4260,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why checking the model's confidence does not apply.",
+    "to": "Say why no confidence check applies to this project.",
     "decision": "pending",
-    "final": "Say why checking the model's confidence does not apply."
+    "final": "Say why no confidence check applies to this project."
   },
   {
     "row": "Q-IP-18.practiceSameAs",
@@ -4245,9 +4286,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team set what acceptable performance means for this use, then chose the simplest model that reaches it. It weighed how far the people affected, and those who act on the outputs, need to follow each decision, and wrote down the choice and what was traded.",
-    "to": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs must follow each decision, and record the choice and trade-offs.",
+    "to": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs need to understand each decision, and record the choice and trade-offs.",
     "decision": "pending",
-    "final": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs must follow each decision, and record the choice and trade-offs."
+    "final": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs need to understand each decision, and record the choice and trade-offs."
   },
   {
     "row": "Q-IP-09.whyAsked",
@@ -4305,9 +4346,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Choosing a model does not apply",
+    "to": "No simplest-model choice applies",
     "decision": "pending",
-    "final": "Choosing a model does not apply"
+    "final": "No simplest-model choice applies"
   },
   {
     "row": "Q-IP-09.answerPrompts.done",
@@ -4345,9 +4386,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why choosing a model does not apply.",
+    "to": "Say why no simplest-model choice applies to this project.",
     "decision": "pending",
-    "final": "Say why choosing a model does not apply."
+    "final": "Say why no simplest-model choice applies to this project."
   },
   {
     "row": "Q-IP-09.practiceSameAs",
@@ -4441,9 +4482,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Training records do not apply",
+    "to": "No training record applies",
     "decision": "pending",
-    "final": "Training records do not apply"
+    "final": "No training record applies"
   },
   {
     "row": "Q-IP-10.answerPrompts.done",
@@ -4481,9 +4522,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why keeping training records does not apply.",
+    "to": "Say why no training record applies to this project.",
     "decision": "pending",
-    "final": "Say why keeping training records does not apply."
+    "final": "Say why no training record applies to this project."
   },
   {
     "row": "Q-IP-10.practiceSameAs",
@@ -4577,9 +4618,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Pipeline checks do not apply",
+    "to": "No pipeline check applies",
     "decision": "pending",
-    "final": "Pipeline checks do not apply"
+    "final": "No pipeline check applies"
   },
   {
     "row": "Q-IP-11.answerPrompts.done",
@@ -4617,9 +4658,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why your data needs no pipeline checks.",
+    "to": "Say why no pipeline check applies to this project.",
     "decision": "pending",
-    "final": "Say why your data needs no pipeline checks."
+    "final": "Say why no pipeline check applies to this project."
   },
   {
     "row": "Q-IP-11.practiceSameAs",
@@ -4703,9 +4744,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "A model card does not apply",
+    "to": "No model card applies",
     "decision": "pending",
-    "final": "A model card does not apply"
+    "final": "No model card applies"
   },
   {
     "row": "Q-IP-12.answerPrompts.done",
@@ -4743,9 +4784,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why this model needs no model card.",
+    "to": "Say why no model card applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why this model needs no model card."
+    "final": "Say why no model card applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-12.practiceSameAs",
@@ -4819,9 +4860,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.partly",
     "from": null,
-    "to": "Some of the methods it needs",
+    "to": "Some of the methods our model needs",
     "decision": "pending",
-    "final": "Some of the methods it needs"
+    "final": "Some of the methods our model needs"
   },
   {
     "row": "Q-IP-13.answerLabels.not_yet",
@@ -4839,9 +4880,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No evaluation method applies",
+    "to": "No other evaluation method applies",
     "decision": "pending",
-    "final": "No evaluation method applies"
+    "final": "No other evaluation method applies"
   },
   {
     "row": "Q-IP-13.answerPrompts.done",
@@ -4849,9 +4890,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Give each ticked method's main result, where the report is and why any unticked one does not fit. A tick on AUC-ROC prints in the model card.",
+    "to": "Give each ticked method's main result, where the report is and why any unticked one does not fit. This and your AUC-ROC tick print in the model card.",
     "decision": "pending",
-    "final": "Give each ticked method's main result, where the report is and why any unticked one does not fit. A tick on AUC-ROC prints in the model card."
+    "final": "Give each ticked method's main result, where the report is and why any unticked one does not fit. This and your AUC-ROC tick print in the model card."
   },
   {
     "row": "Q-IP-13.answerPrompts.partly",
@@ -4859,9 +4900,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. A tick on AUC-ROC prints in the model card.",
+    "to": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. This and your AUC-ROC tick print in the model card.",
     "decision": "pending",
-    "final": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. A tick on AUC-ROC prints in the model card."
+    "final": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. This and your AUC-ROC tick print in the model card."
   },
   {
     "row": "Q-IP-13.answerPrompts.not_yet",
@@ -4869,9 +4910,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which methods you plan and when, or what is blocking them.",
+    "to": "Write that no other method is used yet, which you plan and when, or what is blocking them; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which methods you plan and when, or what is blocking them."
+    "final": "Write that no other method is used yet, which you plan and when, or what is blocking them; this prints in the model card."
   },
   {
     "row": "Q-IP-13.answerPrompts.not_applicable",
@@ -4879,9 +4920,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no further evaluation method applies.",
+    "to": "Say why no other evaluation method applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why no further evaluation method applies."
+    "final": "Say why no other evaluation method applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-13.practiceSameAs",
@@ -4975,9 +5016,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Pooling does not apply to our data",
+    "to": "No pooling check applies",
     "decision": "pending",
-    "final": "Pooling does not apply to our data"
+    "final": "No pooling check applies"
   },
   {
     "row": "Q-IP-14.answerPrompts.done",
@@ -5015,9 +5056,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why your data pools no populations.",
+    "to": "Say why no pooling check applies to this project.",
     "decision": "pending",
-    "final": "Say why your data pools no populations."
+    "final": "Say why no pooling check applies to this project."
   },
   {
     "row": "Q-IP-14.practiceSameAs",
@@ -5111,9 +5152,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Tuning does not apply to this model",
+    "to": "No tuning check applies",
     "decision": "pending",
-    "final": "Tuning does not apply to this model"
+    "final": "No tuning check applies"
   },
   {
     "row": "Q-IP-15.answerPrompts.done",
@@ -5121,9 +5162,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; it prints in the model card.",
+    "to": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; it prints in the model card."
+    "final": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; this prints in the model card."
   },
   {
     "row": "Q-IP-15.answerPrompts.partly",
@@ -5131,9 +5172,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which tuning choices you checked so far, what changed by group and what is still to check; it prints in the model card.",
+    "to": "Say which tuning choices you checked so far, what changed by group and what is still to check; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which tuning choices you checked so far, what changed by group and what is still to check; it prints in the model card."
+    "final": "Say which tuning choices you checked so far, what changed by group and what is still to check; this prints in the model card."
   },
   {
     "row": "Q-IP-15.answerPrompts.not_yet",
@@ -5141,9 +5182,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which tuning choices you will check by group, and when; it prints in the model card.",
+    "to": "Say which tuning choices you will check by group, and when; this prints in the model card.",
     "decision": "pending",
-    "final": "Say which tuning choices you will check by group, and when; it prints in the model card."
+    "final": "Say which tuning choices you will check by group, and when; this prints in the model card."
   },
   {
     "row": "Q-IP-15.answerPrompts.not_applicable",
@@ -5151,9 +5192,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why tuning does not apply to this model; it prints in the model card.",
+    "to": "Say why no tuning check applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why tuning does not apply to this model; it prints in the model card."
+    "final": "Say why no tuning check applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-15.practiceSameAs",
@@ -5247,9 +5288,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Assessing harm by group does not apply",
+    "to": "No harm-by-group assessment applies",
     "decision": "pending",
-    "final": "Assessing harm by group does not apply"
+    "final": "No harm-by-group assessment applies"
   },
   {
     "row": "Q-IP-19.answerPrompts.done",
@@ -5257,9 +5298,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Describe each error's consequences, the groups bearing more and where this is recorded; it prints in the model card. Give rates, never records about people.",
+    "to": "Describe each error's consequences, the groups bearing more and where this is recorded; this prints in the model card. Give rates, never records about people.",
     "decision": "pending",
-    "final": "Describe each error's consequences, the groups bearing more and where this is recorded; it prints in the model card. Give rates, never records about people."
+    "final": "Describe each error's consequences, the groups bearing more and where this is recorded; this prints in the model card. Give rates, never records about people."
   },
   {
     "row": "Q-IP-19.answerPrompts.partly",
@@ -5267,9 +5308,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Describe the consequences assessed so far and what is still open; it prints in the model card. Give rates, never records about people.",
+    "to": "Describe the consequences assessed so far and what is still open; this prints in the model card. Give rates, never records about people.",
     "decision": "pending",
-    "final": "Describe the consequences assessed so far and what is still open; it prints in the model card. Give rates, never records about people."
+    "final": "Describe the consequences assessed so far and what is still open; this prints in the model card. Give rates, never records about people."
   },
   {
     "row": "Q-IP-19.answerPrompts.not_yet",
@@ -5277,9 +5318,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Describe the errors you expect, their consequences and when you will compare groups; it prints in the model card.",
+    "to": "Describe the errors you expect, their consequences and when you will compare groups, with no records about people; this prints in the model card.",
     "decision": "pending",
-    "final": "Describe the errors you expect, their consequences and when you will compare groups; it prints in the model card."
+    "final": "Describe the errors you expect, their consequences and when you will compare groups, with no records about people; this prints in the model card."
   },
   {
     "row": "Q-IP-19.answerPrompts.not_applicable",
@@ -5287,9 +5328,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why assessing harm by group does not apply; it prints in the model card.",
+    "to": "Say why no harm-by-group assessment applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why assessing harm by group does not apply; it prints in the model card."
+    "final": "Say why no harm-by-group assessment applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-19.practiceSameAs",
@@ -5313,9 +5354,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
-    "to": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
+    "to": "Have you recorded the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
     "decision": "pending",
-    "final": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?"
+    "final": "Have you recorded the model's known limits, the ways it goes wrong and the conditions where it must not be used?"
   },
   {
     "row": "Q-IP-20.expectedPractice",
@@ -5343,9 +5384,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.done",
     "from": null,
-    "to": "Yes, they are written down",
+    "to": "Yes, they are recorded",
     "decision": "pending",
-    "final": "Yes, they are written down"
+    "final": "Yes, they are recorded"
   },
   {
     "row": "Q-IP-20.answerLabels.partly",
@@ -5373,9 +5414,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Recording limits does not apply",
+    "to": "No record of limits applies",
     "decision": "pending",
-    "final": "Recording limits does not apply"
+    "final": "No record of limits applies"
   },
   {
     "row": "Q-IP-20.answerPrompts.done",
@@ -5383,9 +5424,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "State the limits in two or three sentences, then where the full text is kept; they print in the model card.",
+    "to": "State the limits, including where the model must not be used, in two or three sentences, then where the full text is kept; they print in the model card.",
     "decision": "pending",
-    "final": "State the limits in two or three sentences, then where the full text is kept; they print in the model card."
+    "final": "State the limits, including where the model must not be used, in two or three sentences, then where the full text is kept; they print in the model card."
   },
   {
     "row": "Q-IP-20.answerPrompts.partly",
@@ -5393,9 +5434,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "State the limits known so far in two or three sentences and what is still to test; they print in the model card.",
+    "to": "State the limits and conditions of use known so far in two or three sentences, and what is still to test; they print in the model card.",
     "decision": "pending",
-    "final": "State the limits known so far in two or three sentences and what is still to test; they print in the model card."
+    "final": "State the limits and conditions of use known so far in two or three sentences, and what is still to test; they print in the model card."
   },
   {
     "row": "Q-IP-20.answerPrompts.not_yet",
@@ -5413,9 +5454,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Write why no limits apply to this model; this prints in the model card.",
+    "to": "Say why no record of limits applies to this project; this prints in the model card.",
     "decision": "pending",
-    "final": "Write why no limits apply to this model; this prints in the model card."
+    "final": "Say why no record of limits applies to this project; this prints in the model card."
   },
   {
     "row": "Q-IP-20.practiceSameAs",
@@ -5499,9 +5540,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Version control does not apply",
+    "to": "No version control applies",
     "decision": "pending",
-    "final": "Version control does not apply"
+    "final": "No version control applies"
   },
   {
     "row": "Q-IP-21.answerPrompts.done",
@@ -5539,9 +5580,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why version control does not apply.",
+    "to": "Say why no version control applies to this project.",
     "decision": "pending",
-    "final": "Say why version control does not apply."
+    "final": "Say why no version control applies to this project."
   },
   {
     "row": "Q-IP-21.practiceSameAs",
@@ -5565,9 +5606,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "In proportion to the risk of misuse, the team considered how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs. It tested the most likely ways, for example with the Adversarial Robustness Toolbox or by hand, and wrote down the results and the safeguards it chose.",
-    "to": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model (altered images, reworded text, fake inputs), test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
+    "to": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs, test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
     "decision": "pending",
-    "final": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model (altered images, reworded text, fake inputs), test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen."
+    "final": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs, test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen."
   },
   {
     "row": "Q-IP-22.whyAsked",
@@ -5625,9 +5666,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking for manipulation does not apply",
+    "to": "No manipulation check applies",
     "decision": "pending",
-    "final": "Checking for manipulation does not apply"
+    "final": "No manipulation check applies"
   },
   {
     "row": "Q-IP-22.answerPrompts.done",
@@ -5665,9 +5706,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why checking for manipulation does not apply.",
+    "to": "Say why no manipulation check applies to this project.",
     "decision": "pending",
-    "final": "Say why checking for manipulation does not apply."
+    "final": "Say why no manipulation check applies to this project."
   },
   {
     "row": "Q-IP-22.practiceSameAs",
@@ -5761,9 +5802,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Change over time does not apply",
+    "to": "No test on later data applies",
     "decision": "pending",
-    "final": "Change over time does not apply"
+    "final": "No test on later data applies"
   },
   {
     "row": "Q-IP-24.answerPrompts.done",
@@ -5801,9 +5842,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why change over time does not apply to your model.",
+    "to": "Say why no test on later data applies to this project.",
     "decision": "pending",
-    "final": "Say why change over time does not apply to your model."
+    "final": "Say why no test on later data applies to this project."
   },
   {
     "row": "Q-IP-24.practiceSameAs",
