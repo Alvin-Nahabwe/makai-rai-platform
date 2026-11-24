@@ -1,0 +1,589 @@
+{
+  "Q-IP-01": {
+    "text": "Have you recorded why this type of model suits your problem and data?",
+    "expectedPractice": "You record the model types you considered, why the chosen one fits the problem, the data and the people who must understand or maintain it, and what you gave up by choosing it.",
+    "whyAsked": "A model chosen by habit can be harder to explain and maintain than the problem needs; a written choice tells later users what it is for.",
+    "evidenceExamples": [
+      "the model choice note",
+      "the methods section of the protocol",
+      "a comparison table of candidate models"
+    ],
+    "answerLabels": {
+      "done": "Yes, we recorded why",
+      "partly": "Partly, some of it is recorded",
+      "not_yet": "No, not yet",
+      "not_applicable": "A choice of model does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the model type, the alternatives, why you chose it and where this is recorded; it prints in the model card.",
+      "partly": "Name the model type and the alternatives weighed so far, then what is still open; it prints in the model card.",
+      "not_yet": "Name the model type you expect and when you will record the choice; it prints in the model card.",
+      "not_applicable": "Say why no choice of model type applies; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-02": {
+    "text": "Have you checked that your training, validation and test sets come from the same population?",
+    "expectedPractice": "You split the data into training, validation and test sets so no person, household or site is in more than one where that would leak information, check they come from the same population, and record how the test set differs from the setting of use.",
+    "whyAsked": "Test data that overlaps the training data, or comes from another population, makes reported performance wrong in ways nobody sees until the system is in use.",
+    "evidenceExamples": [
+      "the data split code or its description",
+      "a table comparing the sets by group and source",
+      "the evaluation section of the protocol"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, some checks done",
+      "not_yet": "No, not yet",
+      "not_applicable": "Splitting the data does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; it prints in the model card.",
+      "partly": "Say how you split the data, which checks are done and which are not; it prints in the model card.",
+      "not_yet": "Say how and when you plan to split and check the data; it prints in the model card.",
+      "not_applicable": "Say why splitting the data does not apply; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-03": {
+    "text": "Have you measured the kinds of error your model makes, for example with a confusion matrix, precision, recall, specificity and F1?",
+    "expectedPractice": "On held-out test data, you report the confusion matrix and the measures that matter for your use, such as precision, recall, specificity and F1, and record which error costs the people affected more, and so which measure you watch most.",
+    "whyAsked": "Accuracy alone can hide a model that misses most cases that matter, and whether a missed case or a false alarm is worse depends on the use.",
+    "evidenceExamples": [
+      "the evaluation report with the confusion matrix",
+      "the summary file from the evaluation notebook",
+      "a link to the metrics in the repository"
+    ],
+    "answerLabels": {
+      "done": "Yes, we measured them",
+      "partly": "Partly, some measures so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Measuring errors does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the measures, why those, and the costliest error; give numbers, not judgements. Attach the results file: the model card lists it, and you type the numbers in when you generate it.",
+      "partly": "Name the measures reported so far and those still to do; give numbers, not judgements.",
+      "not_yet": "Say when you will measure the errors on held-out data, or what is blocking it.",
+      "not_applicable": "Say why measuring kinds of error does not apply to your model."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-04": {
+    "text": "Have you measured performance separately for each relevant group, for example by age, gender or ethnicity?",
+    "expectedPractice": "You report the model's main measures separately for each group that matters where it is used, such as sex, age group, district, language, or rural and urban, including groups the data under-represents. Each result gives its number of cases, and you name groups too small for a reliable estimate rather than leave them out.",
+    "whyAsked": "A model can look good on average and still work badly for one group, whose people carry the cost of its errors.",
+    "evidenceExamples": [
+      "the summary file from the C-14 notebook",
+      "a per-group metrics table with group sizes"
+    ],
+    "answerLabels": {
+      "done": "Yes, for each group",
+      "partly": "Partly, some groups so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Measuring by group does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
+      "partly": "Name the groups measured so far and those still to do. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+      "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
+      "not_applicable": "Say why measuring by group does not apply to your model."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-06": {
+    "text": "Which fairness measures have you computed?",
+    "expectedPractice": "You choose the fairness measures that fit how your system's errors affect people, compute them for the groups you compare and record why those. Most systems that predict something about people need an error-rate measure and a calibration or precision measure. You explain each unticked measure as not fitting and name any fitting measure not listed.",
+    "whyAsked": "Fairness measures answer different questions and cannot all hold at once, so a result means something only if the measures fit the use and you say why.",
+    "evidenceExamples": [
+      "the summary file from the C-13 notebook",
+      "a fairness report with the measures by group",
+      "the decision note on which measures fit"
+    ],
+    "answerLabels": {
+      "done": "Every measure that fits our use",
+      "partly": "Some of the measures that fit",
+      "not_yet": "None yet",
+      "not_applicable": "No fairness measure applies"
+    },
+    "answerPrompts": {
+      "done": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; it prints in the model card.",
+      "partly": "Say which fitting measures you computed, with thresholds and groups, and which are still to compute; it prints in the model card.",
+      "not_yet": "Write that no fairness measure is computed yet, which you plan and when; it prints in the model card.",
+      "not_applicable": "Write why no fairness measure applies to this system; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-07": {
+    "text": "Have you used explanation methods, such as SHAP, LIME or feature importance, to understand your model?",
+    "expectedPractice": "You apply at least one explanation method that fits your model (feature importance, SHAP or LIME), ask people who know the field whether the main drivers of predictions make sense, and record the findings, including any driver that should not matter.",
+    "whyAsked": "Explanations show whether a model relies on what it should; a driver that makes no sense to a domain expert often first signals a data problem.",
+    "evidenceExamples": [
+      "the summary file from the C-18 notebook",
+      "an explanation report with its plots",
+      "notes from the expert review of the drivers"
+    ],
+    "answerLabels": {
+      "done": "Yes, we used them",
+      "partly": "Partly, some of it so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Explanation methods do not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the method, the main drivers, the domain expert who reviewed them, by role, their conclusion and where it is recorded.",
+      "partly": "Name the method used and the drivers found so far, and what is still to do, such as the expert review.",
+      "not_yet": "Say when you will apply an explanation method, or what is blocking it.",
+      "not_applicable": "Say why no explanation method fits your model."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-08": {
+    "text": "Have you tested the model on data unlike its training data, such as noisy, incomplete or unusual inputs?",
+    "expectedPractice": "You test the model on inputs that differ from its training data in the ways expected in use, such as added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites, with methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox. You record how much performance changed and what you did.",
+    "whyAsked": "Field data is noisier than training data, so a model never tested on worse inputs can lose much of its accuracy in use without warning.",
+    "evidenceExamples": [
+      "the summary file from the perturbation part of the C-18 notebook",
+      "a robustness test report",
+      "results on a held-out site or device"
+    ],
+    "answerLabels": {
+      "done": "Yes, we tested it",
+      "partly": "Partly, some inputs so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Inputs in use will not differ"
+    },
+    "answerPrompts": {
+      "done": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; it prints in the model card.",
+      "partly": "Say which input changes you tested, how performance moved and what is still to test; it prints in the model card.",
+      "not_yet": "Say which input changes you expect in use and when you will test them; it prints in the model card.",
+      "not_applicable": "Say why inputs in use will not differ from the training data; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-16": {
+    "text": "Have you compared your model with a simple baseline such as majority class or logistic regression?",
+    "expectedPractice": "On the same test data, you compare your model with at least one simple baseline (always predicting the most common class, the current rule or a logistic regression) and record whether the gain justifies the complexity.",
+    "whyAsked": "A complex model barely beating a simple rule costs more to run and explain for little gain; a baseline shows if its numbers mean anything.",
+    "evidenceExamples": [
+      "the evaluation report with the baseline results",
+      "the summary file from the evaluation notebook"
+    ],
+    "answerLabels": {
+      "done": "Yes, we compared it",
+      "partly": "Partly, some comparison so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "No simple baseline applies"
+    },
+    "answerPrompts": {
+      "done": "Name the baseline, both results, what you decided from them and where it is recorded.",
+      "partly": "Name the baselines compared so far and those still to compare.",
+      "not_yet": "Say when you will compare, or what is blocking it.",
+      "not_applicable": "Say why no simple baseline applies to your problem."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-17": {
+    "text": "Have you checked whether the model relies on shortcuts in the data that will not hold in use?",
+    "expectedPractice": "You look for features that only happen to go with the outcome in your data, such as source site, a watermark or recording time, check whether the model relies on them through explanations, tests on data from other sources or removing the suspect feature, and record what you found.",
+    "whyAsked": "A shortcut in the data can make a model look good in testing but not in use, and it stays invisible until someone looks for it.",
+    "evidenceExamples": [
+      "an explanation report showing the main drivers",
+      "results on data from another site",
+      "a note on the features removed and why"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, some features so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Checking for shortcuts does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the suspect features you checked, how, what you found and changed, and where it is recorded.",
+      "partly": "Name the features checked so far and those still to check.",
+      "not_yet": "Say when you will check, or what is blocking it.",
+      "not_applicable": "Say why checking for shortcuts does not apply to your data."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-18": {
+    "text": "Have you checked whether the model's confidence matches how often it is right?",
+    "expectedPractice": "You check whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, correct it if needed, and record how users should treat low-confidence outputs.",
+    "whyAsked": "Users act on stated confidence, so a model that is confidently wrong is more dangerous than one that says it is unsure.",
+    "evidenceExamples": [
+      "a calibration plot or table",
+      "the summary file from the evaluation notebook",
+      "the rule for handling outputs with low confidence"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, some of it so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Checking confidence does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say how you checked calibration, what you found, how low-confidence outputs are handled and where this is recorded.",
+      "partly": "Say what you have checked so far and what is still to do, such as handling low-confidence outputs.",
+      "not_yet": "Say when you will check calibration, or what is blocking it.",
+      "not_applicable": "Say why checking the model's confidence does not apply."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-09": {
+    "text": "Have you chosen the simplest model that performs well enough?",
+    "expectedPractice": "You define acceptable performance for this use, then choose the simplest model that reaches it, weighing how far those affected and those acting on outputs must follow each decision, and record the choice and trade-offs.",
+    "whyAsked": "Simpler models are easier to explain, check and maintain, which matters most where people must understand decisions about them; small accuracy gains may not be worth it.",
+    "evidenceExamples": [
+      "the model choice note, stating the acceptable performance",
+      "a comparison table of simpler and more complex models"
+    ],
+    "answerLabels": {
+      "done": "Yes, we chose the simplest",
+      "partly": "Partly, some of it is decided",
+      "not_yet": "No, not yet",
+      "not_applicable": "Choosing a model does not apply"
+    },
+    "answerPrompts": {
+      "done": "Give your acceptable performance, the simpler models tried, why you chose this one and where it is recorded.",
+      "partly": "Say what is decided, such as acceptable performance, and what is still open.",
+      "not_yet": "Say when you will set acceptable performance and compare models.",
+      "not_applicable": "Say why choosing a model does not apply."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-10": {
+    "text": "Have you recorded what you need to retrain the same model: settings, random seeds, code and software versions?",
+    "expectedPractice": "You keep with the model what is needed to re-run training and get the same model: code and data versions, preprocessing steps, settings including hyperparameters and random seeds, and software versions.",
+    "whyAsked": "Small setting or software changes can alter a model's behaviour; without these records nobody, even your team a year later, can repeat or check a result.",
+    "evidenceExamples": [
+      "a link to the configuration files in the repository",
+      "an experiment-tracking record, for example from MLflow",
+      "the environment file listing package versions"
+    ],
+    "answerLabels": {
+      "done": "Yes, all of it is recorded",
+      "partly": "Partly, some of it is recorded",
+      "not_yet": "No, not yet",
+      "not_applicable": "Training records do not apply"
+    },
+    "answerPrompts": {
+      "done": "Say where the training records are kept, what they include and whether someone has re-run training from them.",
+      "partly": "Say which records are kept so far and which are missing.",
+      "not_yet": "Say when you will record them, or what is blocking it.",
+      "not_applicable": "Say why keeping training records does not apply."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-11": {
+    "text": "Have you checked that your data pipeline does not lose or change records?",
+    "expectedPractice": "You add checks, such as row counts, value ranges, units, date formats and the character encoding of local languages, at each step of your data pipeline to catch lost, duplicated or changed records, and record what they find.",
+    "whyAsked": "Errors made moving and transforming data are silent and can bias a model; checks at each step catch them while cheap to fix.",
+    "evidenceExamples": [
+      "the validation rules or test code",
+      "a pipeline log showing the checks",
+      "a note on the errors found and fixed"
+    ],
+    "answerLabels": {
+      "done": "Yes, we check each step",
+      "partly": "Partly, some steps so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Pipeline checks do not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the checks, the steps they run at, what they found and fixed, and where this is recorded.",
+      "partly": "Name the steps checked so far and those still to check.",
+      "not_yet": "Say when you will add checks, or what is blocking it.",
+      "not_applicable": "Say why your data needs no pipeline checks."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-12": {
+    "text": "Have you created or updated a model card for this model?",
+    "expectedPractice": "You keep a model card for the current model version, updated when the model changes, covering intended use, data, performance overall and by group, limits and conditions for use. One issued by this platform counts.",
+    "whyAsked": "A model card tells those who deploy or rely on the model what it can and cannot do; without one, its limits leave with your team.",
+    "evidenceExamples": [
+      "the model card (C-17)",
+      "an issued model card from this platform",
+      "a link to the model card in the repository"
+    ],
+    "answerLabels": {
+      "done": "Yes, it is up to date",
+      "partly": "Partly, some of it is written",
+      "not_yet": "No, not yet",
+      "not_applicable": "A model card does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say which model version the card describes and where it is kept. Attach or link it; the model card lists it.",
+      "partly": "Say which model version the card describes, which parts are written and which are not.",
+      "not_yet": "Say when you will write the card; one issued by this platform counts.",
+      "not_applicable": "Say why this model needs no model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-13": {
+    "text": "Which other evaluation methods have you used?",
+    "expectedPractice": "You use the evaluation methods your model and data need for stable, honest estimates and record what each showed: for most projects cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. You explain unticked methods as not relevant.",
+    "whyAsked": "One test split gives one estimate, which may be lucky; several methods together show how stable the results are and where the model is weak.",
+    "evidenceExamples": [
+      "the evaluation report",
+      "the summary file from the evaluation notebook"
+    ],
+    "answerLabels": {
+      "done": "Every method our model needs",
+      "partly": "Some of the methods it needs",
+      "not_yet": "None yet",
+      "not_applicable": "No evaluation method applies"
+    },
+    "answerPrompts": {
+      "done": "Give each ticked method's main result, where the report is and why any unticked one does not fit. A tick on AUC-ROC prints in the model card.",
+      "partly": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. A tick on AUC-ROC prints in the model card.",
+      "not_yet": "Say which methods you plan and when, or what is blocking them.",
+      "not_applicable": "Say why no further evaluation method applies."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-14": {
+    "text": "Have you checked whether pooling data across populations hides important differences between them?",
+    "expectedPractice": "You compare results for the main subpopulations you pooled, such as regions, languages or types of facility, check whether pooled results hide opposite trends within them, and record whether one model serves all or separate handling is needed.",
+    "whyAsked": "Pooling can hide a group the model serves badly, or even reverse a trend, and this decides whether one model can serve everyone.",
+    "evidenceExamples": [
+      "a table of results by subpopulation",
+      "a note on the decision to pool or to separate"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, some subpopulations so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Pooling does not apply to our data"
+    },
+    "answerPrompts": {
+      "done": "Name the subpopulations compared, what you found, what you decided and where it is recorded.",
+      "partly": "Name the subpopulations compared so far and those still to compare.",
+      "not_yet": "Say when you will compare them, or what is blocking it.",
+      "not_applicable": "Say why your data pools no populations."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-15": {
+    "text": "When you tuned the model's settings, such as the decision threshold, did you check that results did not get worse for some groups?",
+    "expectedPractice": "You check whether your tuning choices, such as the decision threshold, class weights and the measure you optimised, made results worse for some groups, by comparing results by group before and after tuning, and record the changes you made.",
+    "whyAsked": "Tuning for the best overall result often favours the largest group, and a threshold set on the whole population can leave a smaller group with far more missed cases.",
+    "evidenceExamples": [
+      "results by group before and after tuning",
+      "the summary file from the C-15 notebook",
+      "the tuning configuration with notes"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, some choices so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Tuning does not apply to this model"
+    },
+    "answerPrompts": {
+      "done": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; it prints in the model card.",
+      "partly": "Say which tuning choices you checked so far, what changed by group and what is still to check; it prints in the model card.",
+      "not_yet": "Say which tuning choices you will check by group, and when; it prints in the model card.",
+      "not_applicable": "Say why tuning does not apply to this model; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-19": {
+    "text": "Have you assessed whether the model's errors harm some groups more than others?",
+    "expectedPractice": "You describe what each kind of error means for those affected, such as a missed diagnosis or a service wrongly refused, compare error rates across groups, and record which groups bear more harm and your response.",
+    "whyAsked": "The same error rate can mean very different harm across groups; knowing who bears errors shows where safeguards are needed.",
+    "evidenceExamples": [
+      "a table of error rates by group",
+      "a written note on the consequences of each kind of error",
+      "the summary file from the C-14 notebook"
+    ],
+    "answerLabels": {
+      "done": "Yes, we assessed it",
+      "partly": "Partly, some of it so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Assessing harm by group does not apply"
+    },
+    "answerPrompts": {
+      "done": "Describe each error's consequences, the groups bearing more and where this is recorded; it prints in the model card. Give rates, never records about people.",
+      "partly": "Describe the consequences assessed so far and what is still open; it prints in the model card. Give rates, never records about people.",
+      "not_yet": "Describe the errors you expect, their consequences and when you will compare groups; it prints in the model card.",
+      "not_applicable": "Say why assessing harm by group does not apply; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-20": {
+    "text": "Have you written down the model's known limits, the ways it goes wrong and the conditions where it must not be used?",
+    "expectedPractice": "You record where the model is known to perform poorly or was not tested, by population, place, device, language and time period, the kinds of errors it makes and the situations where it must not be used. You write it for those who will deploy or rely on the model and keep it with the model.",
+    "whyAsked": "People who deploy a model later often use it outside its setting, and written limits stop a model built in one district or language being used untested in another.",
+    "evidenceExamples": [
+      "the model card or its limitations section",
+      "a test report showing the cases where the model goes wrong"
+    ],
+    "answerLabels": {
+      "done": "Yes, they are written down",
+      "partly": "Partly, some limits so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Recording limits does not apply"
+    },
+    "answerPrompts": {
+      "done": "State the limits in two or three sentences, then where the full text is kept; they print in the model card.",
+      "partly": "State the limits known so far in two or three sentences and what is still to test; they print in the model card.",
+      "not_yet": "Write that the limits are not yet recorded, any you already know and when you will record them; this prints in the model card.",
+      "not_applicable": "Write why no limits apply to this model; this prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-21": {
+    "text": "Have you used version control for your code, data processing and trained models?",
+    "expectedPractice": "You keep code, data processing and trained models under version control (for example Git for code, DVC or MLflow for data and models), so each model in use traces to the code and data that made it.",
+    "whyAsked": "Without versions, nobody can trace the model in use to its code and data, which is how you find the cause when something goes wrong.",
+    "evidenceExamples": [
+      "a link to the repository",
+      "the model registry entry",
+      "the data version record"
+    ],
+    "answerLabels": {
+      "done": "Yes, all of it",
+      "partly": "Partly, some of it",
+      "not_yet": "No, not yet",
+      "not_applicable": "Version control does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say what is under version control, with which tools, where it is kept and the current model's version.",
+      "partly": "Say what is under version control so far and what is not.",
+      "not_yet": "Say when you will set up version control, or what is blocking it.",
+      "not_applicable": "Say why version control does not apply."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-22": {
+    "text": "Have you checked whether someone could trick or manipulate the model?",
+    "expectedPractice": "In proportion to the risk of misuse, you consider how someone could trick or manipulate the model (altered images, reworded text, fake inputs), test the likeliest ways, by hand or with the Adversarial Robustness Toolbox, and record the results and safeguards chosen.",
+    "whyAsked": "Outputs that bring a benefit or a penalty invite gaming, and small input changes can flip a prediction.",
+    "evidenceExamples": [
+      "an adversarial test report",
+      "the summary file from the C-18 notebook",
+      "a note on the safeguards chosen"
+    ],
+    "answerLabels": {
+      "done": "Yes, as far as the risk needs",
+      "partly": "Partly, some ways so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Checking for manipulation does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the manipulations considered, how you tested them, what you found, the safeguards chosen and where it is recorded.",
+      "partly": "Name the kinds of manipulation tested so far and those still to test.",
+      "not_yet": "Say when you will check, or what is blocking it.",
+      "not_applicable": "Say why checking for manipulation does not apply."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-IP-24": {
+    "text": "Have you tested the model on data from after its training period?",
+    "expectedPractice": "You test the model on data from after its training period, or hold the most recent data back for testing, and record how performance changed over time and so how long the model can be used.",
+    "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip with them; a test on later data shows how fast.",
+    "evidenceExamples": [
+      "results by time period",
+      "the evaluation report with a split by time"
+    ],
+    "answerLabels": {
+      "done": "Yes, we tested it",
+      "partly": "Partly, some periods so far",
+      "not_yet": "No, not yet",
+      "not_applicable": "Change over time does not apply"
+    },
+    "answerPrompts": {
+      "done": "Give the training and test periods, how results changed, your conclusion on retraining and where it is recorded.",
+      "partly": "Give the periods tested so far and what is still to test.",
+      "not_yet": "Say when you will test on later data, or what is blocking it.",
+      "not_applicable": "Say why change over time does not apply to your model."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  }
+}
