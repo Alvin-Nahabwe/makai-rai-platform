@@ -50,16 +50,29 @@ function deciderOf(v: DeciderView | null): Decider | null {
 export const isDecision = (v: DecisionVersionView | null): v is DecisionVersionView => v !== null && v.status !== 'withdrawn';
 
 /**
+ * Whether the form is changing a decision someone other than the viewer made: the current version is a decision and
+ * names a decider (another member, a former member, or an outside role) who is not the viewer. Read from the page's
+ * data alone, so the server render and the browser agree.
+ */
+export function keptDeciderIsOther(data: Pick<QuestionPanelData, 'current' | 'viewer'>): boolean {
+  const c = data.current;
+  if (!isDecision(c) || c.decidedBy === null) return false;
+  return c.decidedBy.kind !== 'member' || c.decidedBy.user.userId !== data.viewer.userId;
+}
+
+/**
  * FR-DEC-01: a new version opens from the current version's fields. Who and when open filled in (the owner's rulings of
  * 19 and 22 Nov 2026, design 2026-11-22 section 2 item 1): "Decided by" is the viewer on a first answer and after a
  * withdrawal, and the current version's decider on a change (the viewer if that version names none); "Decided on" is
  * `today`, the device's date as three boxes, or empty when `today` is null (the server render, which does not know the
- * reader's day). `whoWhenChanged` starts false: the person has not yet touched either.
+ * reader's day). On a change of a decision someone else made (`keptDeciderIsOther`) the date opens empty, as in v0.9.0,
+ * so one press of Save cannot record that person deciding today (D-425; owner, 23 Nov 2026, "Open, date empty").
+ * `whoWhenChanged` starts false: the person has not yet touched either.
  */
 export function draftFromCurrent(data: QuestionPanelData, today: DateParts | null): DecisionDraft {
   const href = questionHref(data, data.question.id);
   const viewer: Decider = { kind: 'member', userId: data.viewer.userId };
-  const date = { ...(today ?? EMPTY_DATE) };
+  const date = { ...(today === null || keptDeciderIsOther(data) ? EMPTY_DATE : today) };
   const c = data.current;
   if (!isDecision(c)) {
     return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: viewer,
@@ -70,6 +83,15 @@ export function draftFromCurrent(data: QuestionPanelData, today: DateParts | nul
     reason: c.reason ?? '', decidedBy: deciderOf(c.decidedBy) ?? viewer,
     date, evidenceIds: c.evidence.map((e) => e.id), notUploaded: [], href, whoWhenChanged: false,
   };
+}
+
+/**
+ * The form's fill of the device's today once it is known, after hydration: only while the date is still the default
+ * (`whoWhenChanged` false), and never on a change of a decision someone else made, whose date stays empty (D-425). Pure.
+ */
+export function fillToday(v: DecisionDraft, data: QuestionPanelData, today: DateParts): DecisionDraft {
+  // The default date is `draftFromCurrent`'s, so the rule has one source.
+  return v.whoWhenChanged ? v : { ...v, date: draftFromCurrent(data, today).date };
 }
 
 /** The three date fields of a declared date at its precision (the form's two date shortcuts). */

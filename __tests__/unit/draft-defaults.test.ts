@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
-import { draftFromCurrent, EMPTY_DATE, isDraftValue, patchDraft, restoreDraft, toSaveBody } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, EMPTY_DATE, fillToday, isDraftValue, keptDeciderIsOther, patchDraft, restoreDraft, toSaveBody } from '@/lib/question/draft';
 
 /**
  * Answer cost, Task 3 (design 2026-11-22 section 2 item 1 and section 8 "Browser drafts and the defaults"): the answer
@@ -43,10 +43,10 @@ describe('answer cost 3: the answer form opens with who and when filled in', () 
     expect(draftFromCurrent(withdrawn, T)).toMatchObject({ status: null, decidedBy: viewer, date: T, whoWhenChanged: false });
   });
 
-  it('a change keeps the current decider, and the date is today', () => {
+  it('a change keeps the current decider', () => {
     const d = draftFromCurrent(changeOf, T);
     expect(d.decidedBy).toEqual({ kind: 'member', userId: 'u-m' });
-    expect(d).toMatchObject({ date: T, whoWhenChanged: false, status: 'partly', reason: 'Theirs' });
+    expect(d).toMatchObject({ whoWhenChanged: false, status: 'partly', reason: 'Theirs' });
   });
 
   it('a change whose version has no decider falls back to the viewer', () => {
@@ -61,6 +61,62 @@ describe('answer cost 3: the answer form opens with who and when filled in', () 
     const a = draftFromCurrent(PANEL, T);
     expect(a.date).not.toBe(T);
     expect(draftFromCurrent(PANEL, null).date).not.toBe(EMPTY_DATE);
+  });
+});
+
+/**
+ * D-425 (DEFERRED_REGISTER; owner, 23 Nov 2026, "Open, date empty"): on a change whose kept decider is not the viewer,
+ * "Decided on" opens empty, as in v0.9.0, so one press of Save cannot record that person deciding today.
+ */
+describe('D-425: a change of someone else\'s decision opens with the date empty', () => {
+  const byViewer = { ...PANEL, current: { ...BY_MEMBER, decidedBy: { kind: 'member', user: { userId: VIEWER, name: 'Amina N.', formerMember: false } } as never } };
+  const byFormer = { ...PANEL, current: { ...BY_MEMBER, decidedBy: { kind: 'member', user: { userId: 'u-gone', name: 'Alice', formerMember: true } } as never } };
+  const byRole = { ...PANEL, current: { ...BY_MEMBER, decidedBy: { kind: 'outside_role', role: 'principal_investigator' } as never } };
+
+  it('another member\'s decision: the date is empty although today is known', () => {
+    expect(draftFromCurrent(changeOf, T).date).toEqual(EMPTY_DATE);
+    expect(keptDeciderIsOther(changeOf)).toBe(true);
+  });
+
+  it('a former member\'s decision: the same', () => {
+    expect(draftFromCurrent(byFormer, T)).toMatchObject({ decidedBy: { kind: 'member', userId: 'u-gone' }, date: EMPTY_DATE });
+    expect(keptDeciderIsOther(byFormer)).toBe(true);
+  });
+
+  it('an outside role\'s decision: the same', () => {
+    expect(draftFromCurrent(byRole, T)).toMatchObject({ decidedBy: { kind: 'outside_role', role: 'principal_investigator' }, date: EMPTY_DATE });
+    expect(keptDeciderIsOther(byRole)).toBe(true);
+  });
+
+  it('the viewer\'s own decision keeps today ("Prefill today")', () => {
+    expect(draftFromCurrent(byViewer, T).date).toEqual(T);
+    expect(keptDeciderIsOther(byViewer)).toBe(false);
+  });
+
+  it('a version with no decider falls back to the viewer and keeps today', () => {
+    const none = { ...PANEL, current: { ...BY_MEMBER, decidedBy: null } };
+    expect(draftFromCurrent(none, T).date).toEqual(T);
+    expect(keptDeciderIsOther(none)).toBe(false);
+  });
+
+  it('a first answer and a withdrawal are not changes of someone else\'s decision', () => {
+    expect(keptDeciderIsOther(PANEL)).toBe(false);
+    expect(keptDeciderIsOther(withdrawn)).toBe(false);
+  });
+
+  it('the form\'s mount fill of today (fillToday) leaves the date empty on someone else\'s decision, and fills it otherwise', () => {
+    expect(fillToday(draftFromCurrent(byFormer, null), byFormer, T).date).toEqual(EMPTY_DATE);
+    expect(fillToday(draftFromCurrent(byRole, null), byRole, T).date).toEqual(EMPTY_DATE);
+    expect(fillToday(draftFromCurrent(byViewer, null), byViewer, T).date).toEqual(T);
+    expect(fillToday(draftFromCurrent(PANEL, null), PANEL, T).date).toEqual(T);
+    // a date the person set is theirs, whoever decided
+    const own = { ...draftFromCurrent(PANEL, null), date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: true };
+    expect(fillToday(own, PANEL, T).date).toEqual(own.date);
+  });
+
+  it('one press of Save on the opened draft is refused on the date, so it cannot record the earlier decider deciding today', () => {
+    const d = { ...draftFromCurrent(byFormer, T), status: 'done' as const };
+    expect(draftErrors(d, byFormer, new Date('2026-11-22T12:00:00Z')).map((e) => e.field)).toContain('declaredDate');
   });
 });
 
@@ -86,7 +142,8 @@ describe('answer cost 3: a stored draft keeps who and when only if the person ch
   it('restoreDraft with whoWhenChanged false uses the defaults, so the date is today and the stored decider is not trusted', () => {
     const old = { decidedBy: { kind: 'member', userId: 'u-other' }, date: { day: '3', month: '11', year: '2026' }, whoWhenChanged: false };
     expect(restoreDraft(stored(old), PANEL, T)).toMatchObject({ decidedBy: viewer, date: T, whoWhenChanged: false });
-    expect(restoreDraft(stored(old), changeOf, T)).toMatchObject({ decidedBy: { kind: 'member', userId: 'u-m' }, date: T });
+    // D-425: the kept decider is not the viewer, so the date opens empty there too.
+    expect(restoreDraft(stored(old), changeOf, T)).toMatchObject({ decidedBy: { kind: 'member', userId: 'u-m' }, date: EMPTY_DATE });
   });
 
   it('a flagless (v0.9.0) draft with a typed date keeps its date and decider, and counts as changed', () => {

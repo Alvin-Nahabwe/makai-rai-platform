@@ -28,7 +28,7 @@ import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
 import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
 import { todayParts } from '@/lib/ui/dateParts';
-import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, fillToday, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
@@ -317,7 +317,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const [ready, setReady] = useState(false);
   // The device's date as three boxes, known only after mount: the server render does not depend on it (no hydration mismatch),
   // and until then the summary line reads "today". Decided by and Decided on stay closed behind Change until it is pressed,
-  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls).
+  // and stay open once opened, or when the server finds a field error in either (the M-11 links need their controls). On a
+  // change of a decision someone else made they are open from the start, the date empty (D-425: DecisionFields, `fillToday`).
   const [today, setToday] = useState<DateParts | null>(null);
   const [whoWhenOpen, setWhoWhenOpen] = useState(false);
   const focusWhoWhen = useRef(false);
@@ -374,11 +375,12 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     const s = openDraftStore();
     store.current = s;
     // The device's date exists only in the browser, after hydration: filled here while the date is still the default
-    // (whoWhenChanged false), never on the server (the owner's "Prefill today", 22 Nov 2026).
+    // (whoWhenChanged false), never on the server (the owner's "Prefill today", 22 Nov 2026), and not on a change of a
+    // decision someone else made (D-425: `fillToday`).
     const t = todayParts(new Date());
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setToday(t);
-    setValue((v) => (v.whoWhenChanged ? v : { ...v, date: t }));
+    setValue((v) => fillToday(v, data, t));
     // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
     setReady(true);
     if (s === null) { setStorageUnavailable(true); return; }
