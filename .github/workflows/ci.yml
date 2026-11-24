@@ -544,9 +544,10 @@ jobs:
     # 120 covers the documented worst case: up to 35 min of browser install,
     # ~3.5 min of setup, ~62 min of suite, then the three follow-on steps.
     # Sharding the suite across jobs is the lasting fix (D-422).
-    # Lowered from 120 to 60 on 2026-11-24 with the shards (D-422): up to 35 min of browser install, ~4 min of setup,
-    # ~14 min for the longest shard and ~4 min for the follow-on steps one shard runs.
-    timeout-minutes: 60
+    # Lowered from 120 to 75 on 2026-11-24 with the shards (D-422): up to 35 min of browser install, ~4 min of setup,
+    # ~14 min for the longest shard on one worker and ~4 min for the follow-on steps one shard runs, about 57 in all.
+    # The shards run side by side, so the margin costs nothing unless a job hangs.
+    timeout-minutes: 75
 
     # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
@@ -819,6 +820,8 @@ jobs:
       # app is given RESEND_API_KEY=re_test_local and talks to the catcher only.
       # D-422: these three steps and the idle sign-out step above run once, on shard 2, the shortest shard in run
       # 45168146610 (~7 min of specs against ~14 for the longest), so the ~4 minutes they take do not lengthen the check.
+      # That is a snapshot: Playwright splits the files by test count, so adding specs, changing the matrix or the worker
+      # count moves files between shards. Whoever does any of those re-measures the legs and re-picks this shard.
       # The outage step stays on every shard: it takes 8 s, and its place straight after the suite with no condition is
       # pinned by __tests__/unit/e2e-port.test.ts.
       - name: Pull the nginx image the nginx-in-front run pins

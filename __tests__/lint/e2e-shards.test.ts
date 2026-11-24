@@ -13,9 +13,10 @@ import { describe, expect, it } from 'vitest';
 interface Step { name?: string; run?: string; if?: string; uses?: string; with?: Record<string, unknown>; env?: Record<string, string> }
 interface Job {
   name?: string;
+  'continue-on-error'?: unknown;
   if?: string;
   needs?: string | string[];
-  strategy?: { 'fail-fast'?: boolean; matrix?: { shard?: number[] } };
+  strategy?: { 'fail-fast'?: boolean; matrix?: { shard?: number[] } & Record<string, unknown> };
   steps: Step[];
 }
 
@@ -29,10 +30,16 @@ describe('D-422: the chromium e2e suite is sharded across jobs', () => {
     expect(list.length).toBeGreaterThan(1);
     expect(list).toEqual(Array.from({ length: list.length }, (_, i) => i + 1));
     expect(shards.strategy?.['fail-fast']).toBe(false);
+    // One key only: a second dimension (or include/exclude) would raise job-total past the shard list and drop slices.
+    expect(Object.keys(shards.strategy?.matrix ?? {})).toEqual(['shard']);
+    // A leg that may fail without failing the job would let the aggregate below read success.
+    expect(shards).not.toHaveProperty('continue-on-error');
     expect(shards.name).toBe('e2e (shard ${{ matrix.shard }}/${{ strategy.job-total }})');
   });
 
-  it('the suite step runs this job’s shard, out of the matrix total', () => {
+  it('the suite step runs this job’s shard, out of the matrix total, on every leg', () => {
+    expect(step('Run e2e suite')).not.toHaveProperty('if');
+    expect(step('Run e2e suite')).not.toHaveProperty('continue-on-error');
     expect(step('Run e2e suite')?.run?.trim()).toBe(
       'npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --workers=1 --shard=${{ matrix.shard }}/${{ strategy.job-total }}',
     );
@@ -62,6 +69,7 @@ describe('D-422: the chromium e2e suite is sharded across jobs', () => {
     expect(agg.steps[0].env).toEqual({ RESULT: '${{ needs.test-e2e.result }}' });
     // The result reaches the script through env, never interpolated into it.
     expect(agg.steps[0].run).not.toContain('${{');
-    expect(agg.steps[0].run).toContain('[ "$RESULT" = success ]');
+    expect(agg.steps[0].run?.trim().split('\n')).toEqual(['echo "e2e shards: $RESULT"', '[ "$RESULT" = success ]']);
+    expect(agg).not.toHaveProperty('continue-on-error');
   });
 });
