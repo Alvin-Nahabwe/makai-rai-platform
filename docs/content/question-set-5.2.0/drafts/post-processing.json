@@ -1,0 +1,619 @@
+{
+  "Q-PO-01": {
+    "text": "Once your system is in use, do you regularly check whether its inputs or its performance have changed?",
+    "expectedPractice": "Once the system is in use, a named person checks on a set schedule whether its inputs and its performance have moved away from what it was tested on. You record the checks, their thresholds and who acts when a threshold is crossed.",
+    "whyAsked": "Data changes with seasons, new clinics, new phones and new policies; a model nobody watches gets worse unnoticed, often until it harms the people it serves.",
+    "evidenceExamples": [
+      "the monitoring plan",
+      "a link to the dashboard or check script",
+      "the C-21 notebook summary used to set thresholds"
+    ],
+    "answerLabels": {
+      "done": "Yes, on a set schedule",
+      "partly": "Partly, some checks in place",
+      "not_yet": "No, not yet",
+      "not_applicable": "It will never be used outside the study"
+    },
+    "answerPrompts": {
+      "done": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; it prints in the model card.",
+      "partly": "Say which checks, thresholds and roles are set so far and which are still open; it prints in the model card.",
+      "not_yet": "If the system is not in use yet, say so; say what you plan to check and when. It prints in the model card.",
+      "not_applicable": "Say why the system will never be used outside the study; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-02": {
+    "text": "Have you written down when and how your model is retrained?",
+    "expectedPractice": "You record what triggers retraining, such as a monitored measure crossing your threshold, a change in the population served or a set date; the steps to retrain and check the new model; and who decides, by role.",
+    "whyAsked": "Without agreed triggers and written steps, a worsening model runs on, or is retrained and used unchecked.",
+    "evidenceExamples": [
+      "the retraining procedure",
+      "the monitoring plan with its thresholds",
+      "the record of a past retraining"
+    ],
+    "answerLabels": {
+      "done": "Yes, we wrote them down",
+      "partly": "Partly, some of it is written",
+      "not_yet": "No, not yet",
+      "not_applicable": "Retraining will never apply"
+    },
+    "answerPrompts": {
+      "done": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; it prints in the model card.",
+      "partly": "Name the triggers, steps and roles set so far and what is still open; it prints in the model card.",
+      "not_yet": "Say when you will set the triggers and steps, and whether the system is in use yet; it prints in the model card.",
+      "not_applicable": "Say why your model will never be retrained; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-03": {
+    "text": "Can a person review and override your system's outputs before they are acted on?",
+    "expectedPractice": "Users can review each output before it is acted on, or a sample in proportion to the risk, and override it. Your written rules on how to override, who may do it, by role, and how overrides are recorded are in use.",
+    "whyAsked": "A person who can check and override the system catches errors before they cause harm, if overriding is clear and used.",
+    "evidenceExamples": [
+      "the workflow showing the review step",
+      "a log or summary of overrides",
+      "the user guide section on overriding"
+    ],
+    "answerLabels": {
+      "done": "Yes, a person can override",
+      "partly": "Partly, for some outputs",
+      "not_yet": "No, not yet",
+      "not_applicable": "Review by a person does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say who reviews outputs, by role, when, how they override, how often overrides happen and where they are recorded.",
+      "partly": "Say which outputs a person can review and override so far, and which not.",
+      "not_yet": "Say how and when you plan to add review by a person, or what is blocking it.",
+      "not_applicable": "Say why no output needs review by a person before it is acted on."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-04": {
+    "text": "Have you agreed who is responsible for each part of your system's outcomes?",
+    "expectedPractice": "You record who is responsible, by role and organisation, for each part of the system's outcomes, including deciding to deploy it, monitoring, responding to harm, fixing errors and deciding to stop it, and each role holder agreed.",
+    "whyAsked": "When organisations share a system, harms go unaddressed if each thinks another is responsible; named roles say who acts.",
+    "evidenceExamples": [
+      "a governance and accountability matrix (C-26)",
+      "a memorandum of understanding naming the roles",
+      "minutes of the meeting where the roles were agreed"
+    ],
+    "answerLabels": {
+      "done": "Yes, roles are agreed",
+      "partly": "Partly, some roles agreed",
+      "not_yet": "No, not yet",
+      "not_applicable": "Assigning roles does not apply"
+    },
+    "answerPrompts": {
+      "done": "List who holds each responsibility, by role and organisation, never by name, and how they agreed; link the matrix.",
+      "partly": "List the responsibilities agreed so far, by role and organisation, never by name, and those still open.",
+      "not_yet": "Say when you will agree the roles, and with which organisations.",
+      "not_applicable": "Say why no responsibility for outcomes needs assigning."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-05": {
+    "text": "Have you written an incident response plan for when your system causes harm?",
+    "expectedPractice": "You have a written plan for when the system causes or may cause harm. It says how a problem is reported, who is alerted, by role, how the system is paused or limited, how the people affected are told and helped, and how the cause is found and fixed.",
+    "whyAsked": "Harm from a system in use needs a fast response that planning in the moment cannot give; a written plan shows the people affected that you take problems seriously.",
+    "evidenceExamples": [
+      "the incident response plan",
+      "the record of an exercise or a real incident",
+      "the contact route shown to users"
+    ],
+    "answerLabels": {
+      "done": "Yes, we wrote one",
+      "partly": "Partly, some of the plan",
+      "not_yet": "No, not yet",
+      "not_applicable": "An incident plan does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say how harm is reported and what happens next, naming roles, not people, whether the plan was tried in an exercise or used, and where it is kept.",
+      "partly": "Say which parts of the plan exist, naming roles, not people, and which are missing.",
+      "not_yet": "Say when you will write the plan, or what is blocking it.",
+      "not_applicable": "Say why your system could not cause harm that needs a response."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-06": {
+    "text": "Have you given your system's users training or guidance?",
+    "expectedPractice": "You train or guide the people who use the system's outputs, in a language and form that suits them, on what outputs mean, how far to trust them, when not to rely on them and how to report a problem.",
+    "whyAsked": "Users who misunderstand a system trust it too much or ignore it; short, practical training is often the cheapest safeguard.",
+    "evidenceExamples": [
+      "the training materials or user guide",
+      "a record of the training sessions, by role and number",
+      "feedback from trained users"
+    ],
+    "answerLabels": {
+      "done": "Yes, training or guidance given",
+      "partly": "Partly, for some users",
+      "not_yet": "No, not yet",
+      "not_applicable": "Training users does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name who was trained, by role, how, in which languages and how you checked it worked; link the materials.",
+      "partly": "Name who has been trained so far, by role, and who or what is still to cover.",
+      "not_yet": "Say who you plan to train, by role, how and when.",
+      "not_applicable": "Say why no one who uses the system's outputs needs training."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-07": {
+    "text": "Can your users understand each output, how confident it is and its limits?",
+    "expectedPractice": "Your system shows users each output with how confident it is and the main limits that apply, in words they understand, and you checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see its main reasons. Telling stakeholders the limits in general is a separate question.",
+    "whyAsked": "An output users misread is as harmful as a wrong one; seeing the confidence and the reasons lets a user decide when to question the system.",
+    "evidenceExamples": [
+      "screenshots of the output screen",
+      "results of testing with users",
+      "the user guide section on reading outputs"
+    ],
+    "answerLabels": {
+      "done": "Yes, they can",
+      "partly": "Partly, for some outputs",
+      "not_yet": "No, not yet",
+      "not_applicable": "Showing outputs does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say what users see with each output, how you checked they read it correctly, whether outputs about a person show the main reasons, and where this is recorded.",
+      "partly": "Say what users see so far and what is missing: confidence, limits, main reasons or a check with users.",
+      "not_yet": "Say what you plan to show users and when you will check they read it correctly.",
+      "not_applicable": "Say why no user sees the outputs."
+    },
+    "practiceSameAs": [
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person. Not 5.0.0: its last sentence named the other question by code, which 5.1.0 replaced with \"a separate question\"."
+  },
+  "Q-PO-16": {
+    "text": "Have you introduced your system in stages before using it everywhere?",
+    "expectedPractice": "You introduce the system in stages, such as at one site or with one group first, compare outcomes with existing practice before expanding, and record the measures and the result needed to go further.",
+    "whyAsked": "Real use shows problems that testing missed; starting small limits who is affected while you find them.",
+    "evidenceExamples": [
+      "the rollout plan",
+      "results from the first site",
+      "the decision note to expand or to stop"
+    ],
+    "answerLabels": {
+      "done": "Yes, in stages",
+      "partly": "Partly, some steps taken",
+      "not_yet": "No, not yet",
+      "not_applicable": "A staged start does not apply"
+    },
+    "answerPrompts": {
+      "done": "Give the stages, sites by type, what you compared, the result set for expanding, whether it was reached and where it is recorded.",
+      "partly": "Say which stages are done and what is compared so far, then what is still open.",
+      "not_yet": "Say how you plan to stage the start and when.",
+      "not_applicable": "Say why a staged start does not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-17": {
+    "text": "Once in use, do you check results for each group, not only overall accuracy?",
+    "expectedPractice": "Once the system is in use, a person in a set role checks each relevant group's results on a schedule against your thresholds, and you record the groups, measures, checks and who acts when one is crossed.",
+    "whyAsked": "Fairness can worsen in use while overall accuracy holds, as the people served change; only per-group results show it.",
+    "evidenceExamples": [
+      "the monitoring plan with its group measures",
+      "a link to the monitoring dashboard",
+      "a monitoring report by group"
+    ],
+    "answerLabels": {
+      "done": "Yes, for each group",
+      "partly": "Partly, for some groups",
+      "not_yet": "No, not yet",
+      "not_applicable": "Results by group do not apply"
+    },
+    "answerPrompts": {
+      "done": "Give the groups, measures, thresholds and schedule, who acts, by role, and where it is recorded.",
+      "partly": "Say which groups and measures are checked so far and which are still open.",
+      "not_yet": "Say which groups you plan to check and when.",
+      "not_applicable": "Say why results by group do not apply; a system not yet in use is Not yet."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-18": {
+    "text": "Have you set thresholds at which your system is flagged or stopped?",
+    "expectedPractice": "You set your own thresholds for flagging the system for review or stopping it, and record how that happens, automatically or by a person in a set role, and how decisions are made while it is stopped.",
+    "whyAsked": "A degraded system left running can harm many people before anyone acts; a set threshold makes the decision quick and clear.",
+    "evidenceExamples": [
+      "the monitoring plan with the stop thresholds",
+      "the fallback procedure",
+      "the alert settings, described or linked"
+    ],
+    "answerLabels": {
+      "done": "Yes, thresholds are set",
+      "partly": "Partly, some thresholds set",
+      "not_yet": "No, not yet",
+      "not_applicable": "Flag or stop thresholds do not apply"
+    },
+    "answerPrompts": {
+      "done": "Give each threshold, what happens when crossed, how decisions are made while stopped, and where it is recorded.",
+      "partly": "Give the thresholds set so far and what is still open, such as decisions while stopped.",
+      "not_yet": "Say when you will set the thresholds, or what is blocking it.",
+      "not_applicable": "Say why no threshold for flagging or stopping applies."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-08": {
+    "text": "Can users and the people affected report problems to your team?",
+    "expectedPractice": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did.",
+    "whyAsked": "People affected often see problems first; a channel they can use, with visible action on what they say, keeps the system honest.",
+    "evidenceExamples": [
+      "a description of the feedback channels",
+      "a summary of the reports received and the actions taken",
+      "the notice telling people how to give feedback"
+    ],
+    "answerLabels": {
+      "done": "Yes, they can",
+      "partly": "Partly, some channels in place",
+      "not_yet": "No, not yet",
+      "not_applicable": "Feedback channels do not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the channels, the role receiving reports, how many came in and where actions are logged; upload nothing that identifies people.",
+      "partly": "Name the channels open so far, who receives reports, by role, and what is missing.",
+      "not_yet": "Say which channels you plan and when.",
+      "not_applicable": "Say why no user or affected person needs a way to report problems."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-09": {
+    "text": "Can people affected by a decision your system supports request a review?",
+    "expectedPractice": "People affected by a decision the system supports are told they can ask for a review and have a simple way to ask; a person in a set role reviews the case, and you record requests and outcomes.",
+    "whyAsked": "Someone unable to challenge a decision about them has no remedy for an error; a person's review catches the system's mistakes.",
+    "evidenceExamples": [
+      "the review procedure",
+      "the notice to the people affected",
+      "a summary of requests and outcomes"
+    ],
+    "answerLabels": {
+      "done": "Yes, they can",
+      "partly": "Partly, some of it in place",
+      "not_yet": "No, not yet",
+      "not_applicable": "It supports no decision about people"
+    },
+    "answerPrompts": {
+      "done": "Say how people learn of and make requests, who reviews, by role, and where requests are logged; give counts and outcomes, never personal details.",
+      "partly": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not.",
+      "not_yet": "Say how and when you plan to let people ask for a review.",
+      "not_applicable": "Say why the system supports no decision about a person."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-10": {
+    "text": "Have you fully documented your deployed system?",
+    "expectedPractice": "Your documentation, enough for someone else to run the deployed system, covers what it does, its parts and data flows, how to install and update it, the infrastructure it needs, such as power, connectivity and devices, its other dependencies and known limits.",
+    "whyAsked": "Documentation keeps a system running safely after its builder leaves; in low-resource settings, systems often stop over an unwritten dependency.",
+    "evidenceExamples": [
+      "the codebook and deployment document (C-28)",
+      "a link to the documentation in the repository"
+    ],
+    "answerLabels": {
+      "done": "Yes, fully documented",
+      "partly": "Partly, some of it documented",
+      "not_yet": "No, not yet",
+      "not_applicable": "Documentation does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say what it covers, where it is kept and whether anyone outside the build team has used it.",
+      "partly": "Say which parts are documented so far and which are missing.",
+      "not_yet": "Say when you will write the documentation, or what is blocking it.",
+      "not_applicable": "Say why the system needs no documentation to run."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-11": {
+    "text": "Which of these governance measures do you have in place?",
+    "expectedPractice": "You have the governance measures your setting needs, usually data governance, an ethics review process, logging, version control and access control, and record how each works. A tick on national data protection laws means you identified the law and hold what it requires. Outside reviews and a community board fit higher-risk systems.",
+    "whyAsked": "Governance measures keep a system's use responsible after the build team moves on; which ones fit depends on the risk and the setting.",
+    "evidenceExamples": [
+      "the terms of reference of the governance or ethics body",
+      "the access control policy",
+      "approval letters or registrations, with their references"
+    ],
+    "answerLabels": {
+      "done": "Every measure our setting needs",
+      "partly": "Some of the measures it needs",
+      "not_yet": "None yet",
+      "not_applicable": "No governance measure applies"
+    },
+    "answerPrompts": {
+      "done": "Say how each ticked measure works, naming bodies and roles, not people, why each unticked one does not fit, and where it is recorded.",
+      "partly": "Say how each ticked measure works, naming bodies and roles, not people; for each unticked one, whether it does not fit or is still to do.",
+      "not_yet": "Say which measures you plan and when.",
+      "not_applicable": "Say why no governance measure applies to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-12": {
+    "text": "Have you checked your system's results for each place, language and kind of user?",
+    "expectedPractice": "You check results for each place, language and kind of user the system serves, such as districts, dialects, devices or literacy, and record where it works less well and what you did.",
+    "whyAsked": "A system tested in one place or language often works worse in another; users there carry the cost unless someone checks.",
+    "evidenceExamples": [
+      "results by setting",
+      "notes from field testing at different sites",
+      "results of testing with users in each language"
+    ],
+    "answerLabels": {
+      "done": "Yes, for each setting",
+      "partly": "Partly, for some settings",
+      "not_yet": "No, not yet",
+      "not_applicable": "Checking by setting does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the settings compared, what you found, what you changed or stated as a limit, and where it is recorded.",
+      "partly": "Name the settings compared so far and what you found, then those still to compare.",
+      "not_yet": "Say which settings you plan to compare and when, or what is blocking it.",
+      "not_applicable": "Say why comparing settings does not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-13": {
+    "text": "Have you planned when and how your system will be retired or replaced?",
+    "expectedPractice": "You record when the system should be retired or replaced, such as when the need ends, a better method exists or upkeep costs too much, and how: who decides, how users and data are handled, and what replaces it. The plan counts the computing and energy the system uses while running, estimated from hardware hours and power draw.",
+    "whyAsked": "Systems left running after their purpose ends keep using money and power and drift without oversight; planning the end at the start means someone decides when to stop.",
+    "evidenceExamples": [
+      "the retirement section of the deployment plan",
+      "the running cost estimate, with energy"
+    ],
+    "answerLabels": {
+      "done": "Yes, we planned it",
+      "partly": "Partly, some of the plan",
+      "not_yet": "No, not yet",
+      "not_applicable": "Planning the end does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say what would trigger retirement, who decides, by role, your estimate of computing and energy while running, and where the plan is kept.",
+      "partly": "Say which parts of the plan exist, such as the triggers or the energy estimate, and which are missing.",
+      "not_yet": "Say when you will plan the end of the system, or what is blocking it.",
+      "not_applicable": "Say why planning the end does not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-14": {
+    "text": "Does your system handle unusual inputs safely, such as by flagging them for a person rather than giving a confident answer?",
+    "expectedPractice": "Your system detects inputs unlike those it was built on, such as by checking value ranges or the model's confidence, and handles them safely: it flags them, asks a person to decide or falls back to the earlier practice. You tested this and record how it works.",
+    "whyAsked": "Every system meets inputs it was not built for; a safe one flags them for a person to decide instead of giving a confident wrong answer.",
+    "evidenceExamples": [
+      "the design note on handling unusual inputs",
+      "test results with unusual inputs",
+      "the fallback procedure"
+    ],
+    "answerLabels": {
+      "done": "Yes, it does",
+      "partly": "Partly, for some inputs",
+      "not_yet": "No, not yet",
+      "not_applicable": "Unusual inputs do not apply"
+    },
+    "answerPrompts": {
+      "done": "Say how unusual inputs are detected, what the system then does, how you tested it and where this is recorded.",
+      "partly": "Say which unusual inputs are detected and handled so far, and which are not.",
+      "not_yet": "Say how and when you plan to detect and handle unusual inputs.",
+      "not_applicable": "Say why your system cannot meet inputs unlike those it was built on."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-15": {
+    "text": "Have you told all stakeholders what your system is for and its limits?",
+    "expectedPractice": "You tell the people who decide on, run or rely on the system, in writing and in their language, what it is for, where it may not be used and its main limits, and record who was told, by role. How each output is shown to users is a separate question.",
+    "whyAsked": "Limits that only the build team knows protect nobody; decision-makers and partners need them in writing before they rely on the system.",
+    "evidenceExamples": [
+      "the briefing note to partners",
+      "the model card or its limitations section",
+      "minutes of the handover meeting"
+    ],
+    "answerLabels": {
+      "done": "Yes, we told them",
+      "partly": "Partly, some were told",
+      "not_yet": "No, not yet",
+      "not_applicable": "Telling stakeholders does not apply"
+    },
+    "answerPrompts": {
+      "done": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; it prints in the model card.",
+      "partly": "Give the intended use and main limits first, then who has been told so far and who not; it prints in the model card.",
+      "not_yet": "Give the intended use and main limits first, then when and how you will tell people; it prints in the model card.",
+      "not_applicable": "Say why no one else needs to know the intended use and limits; it prints in the model card."
+    },
+    "practiceSameAs": [
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person. Not 5.0.0: its last sentence named the other question by code, which 5.1.0 replaced with \"a separate question\"."
+  },
+  "Q-PO-20": {
+    "text": "Have representatives of the affected communities helped design and evaluate your system?",
+    "expectedPractice": "Representatives of the affected communities help design and evaluate the system, such as in a community advisory group or review sessions; you record their input, by role or group, and what it changed.",
+    "whyAsked": "Communities know what will help or harm them as a project team cannot; their review checks your blind spots from outside.",
+    "evidenceExamples": [
+      "notes from community review sessions",
+      "the terms of reference of a community advisory group",
+      "a note of the changes made after their input"
+    ],
+    "answerLabels": {
+      "done": "Yes, they helped",
+      "partly": "Partly, in some of the work",
+      "not_yet": "No, not yet",
+      "not_applicable": "Community input does not apply"
+    },
+    "answerPrompts": {
+      "done": "Say who took part, by group or role, how and when, and what you changed; link the notes, never a participant list.",
+      "partly": "Say who has taken part so far, by group or role, and in which parts of the work not yet.",
+      "not_yet": "Say which communities you plan to involve, how and when.",
+      "not_applicable": "Say why community input does not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-21": {
+    "text": "Have you checked how your system changes existing workflows and professional practice?",
+    "expectedPractice": "You look at how the system changes its users' work, such as extra steps, time and responsibilities, try it in the real workflow, and record the problems found and what you changed.",
+    "whyAsked": "A system that adds work or confusion is used badly or not at all, and staff may rely on it in unplanned ways.",
+    "evidenceExamples": [
+      "notes from a trial in the workflow",
+      "feedback from users, by role",
+      "the updated workflow description"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked",
+      "partly": "Partly, for some of the work",
+      "not_yet": "No, not yet",
+      "not_applicable": "Workflow changes do not apply"
+    },
+    "answerPrompts": {
+      "done": "Say what workflow changes you found and how, naming staff by role, what you changed and where it is recorded.",
+      "partly": "Say which parts of the workflow you have looked at so far and what is still open.",
+      "not_yet": "Say when you will try the system in the real workflow, or what is blocking it.",
+      "not_applicable": "Say why workflow changes do not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-22": {
+    "text": "Have you identified the data protection and ethics rules that apply and obtained the approvals they require?",
+    "expectedPractice": "You identify which data-protection, research-ethics and sector rules apply where the system is built and where it is used, such as the national data protection law and the national research ethics guidelines of each such country. You obtain the approvals and registrations they require and record each with its reference and date.",
+    "whyAsked": "Approvals are easy to lose track of when research moves into use; a missing one can stop a deployment and expose the people whose data is used.",
+    "evidenceExamples": [
+      "approval letters",
+      "registration documents",
+      "a data protection impact assessment",
+      "a note from the institution's data protection officer"
+    ],
+    "answerLabels": {
+      "done": "Yes, identified and obtained",
+      "partly": "Partly, some approvals held",
+      "not_yet": "No, not yet",
+      "not_applicable": "No such rule applies"
+    },
+    "answerPrompts": {
+      "done": "List each rule and its approval or registration: body, reference and date; attach the letters. The platform records your statement and makes no judgement of it.",
+      "partly": "List each rule, the approvals held with body, reference and date, and those you still wait for. The platform makes no judgement of your statement.",
+      "not_yet": "Say which rules you have identified so far and when you expect each approval.",
+      "not_applicable": "Say why no data protection, research ethics or sector rule applies."
+    },
+    "practiceSameAs": [
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person. Not 5.0.0: its example named one country's law, which 5.1.0 replaced with each country's national law and guidelines."
+  },
+  "Q-PO-23": {
+    "text": "Do you regularly review your system's performance and whether it should still be used?",
+    "expectedPractice": "On a set schedule, in proportion to the risk, you review performance, results by group, user feedback and whether the system is still needed, and record and act on the decisions.",
+    "whyAsked": "Monitoring watches the numbers; only a review on a set date asks whether the system should still be used as it is.",
+    "evidenceExamples": [
+      "the review schedule",
+      "minutes of the last review",
+      "the decision record of a review"
+    ],
+    "answerLabels": {
+      "done": "Yes, on a set schedule",
+      "partly": "Partly, some reviews held",
+      "not_yet": "No, not yet",
+      "not_applicable": "Regular reviews do not apply"
+    },
+    "answerPrompts": {
+      "done": "Give how often you review, who takes part, by role, and the last review's date and decision; link its minutes.",
+      "partly": "Say what your reviews cover so far, how often they happen, and what is missing.",
+      "not_yet": "Say when the first review will be and who will take part, by role.",
+      "not_applicable": "Say why regular reviews do not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  },
+  "Q-PO-24": {
+    "text": "Have you checked whether your system leaves anyone without access to the service?",
+    "expectedPractice": "You check whether people with less access, such as those with older phones, poor connectivity, low literacy or another language, can reach and use the system, and record any gap and your response.",
+    "whyAsked": "A service run through an AI system can leave out those who need it most; checking access shows who is left behind.",
+    "evidenceExamples": [
+      "results of testing on basic phones or offline",
+      "notes from users with limited access",
+      "a note on the changes made"
+    ],
+    "answerLabels": {
+      "done": "Yes, we checked access",
+      "partly": "Partly, for some groups",
+      "not_yet": "No, not yet",
+      "not_applicable": "Checking access does not apply"
+    },
+    "answerPrompts": {
+      "done": "Name the groups checked, what you found and changed, and where it is recorded.",
+      "partly": "Name the groups checked so far, what you found, and those still to check.",
+      "not_yet": "Say which groups you plan to check and when, or what is blocking it.",
+      "not_applicable": "Say why checking access does not apply to your system."
+    },
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
+  }
+}
