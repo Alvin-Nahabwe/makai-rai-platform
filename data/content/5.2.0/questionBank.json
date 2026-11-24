@@ -41,7 +41,7 @@
                 "done": "Name the options compared, what decided it and where the choice is recorded.",
                 "partly": "Name the options compared so far and those still to compare.",
                 "not_yet": "Say when you plan to compare, or what is blocking it.",
-                "not_applicable": "Say why no comparison applies; this is unusual here."
+                "not_applicable": "Say why no comparison applies, which is unusual; it prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -73,7 +73,7 @@
                 "done": "State the problem, who it affects, your success measures and where the full statement is kept; this prints in the data card and model card.",
                 "partly": "State the problem and the measures defined so far, then what is still open; this prints in the data card and model card.",
                 "not_yet": "State the problem as you see it now and when you will define it; this prints in the data card and model card.",
-                "not_applicable": "Say why this system needs no problem statement; this prints in the data card and model card."
+                "not_applicable": "Say why this system needs no problem statement; this prints in the data card, model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -105,7 +105,7 @@
                 "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; this prints in the model card.",
                 "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; this prints in the model card.",
                 "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; this prints in the model card.",
-                "not_applicable": "Say why no list of those affected applies to this project; this prints in the model card."
+                "not_applicable": "Say why no list of those affected applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -138,7 +138,7 @@
                 "done": "Name each group, its main effect, your response to the largest risk and where it is recorded. Describe groups, never individuals; upload no records about them.",
                 "partly": "Name the groups assessed and those still to assess. Describe groups, never individuals, and upload no records about them.",
                 "not_yet": "Say when you will assess this, or what is blocking it.",
-                "not_applicable": "Say why no group assessment applies to this project."
+                "not_applicable": "Say why no group assessment applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -171,7 +171,7 @@
                 "done": "Name the rights you assessed, what you found and changed, any reviewer by role and where it is recorded; for a short note, say why the risk is low.",
                 "partly": "Name the rights assessed so far and those still to assess.",
                 "not_yet": "Say when you will assess this, or what is blocking it.",
-                "not_applicable": "Say why no rights assessment applies, not even a short note."
+                "not_applicable": "Say why no rights assessment applies, not even a short note; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -204,7 +204,7 @@
                 "done": "Name any missing perspectives, who now provides each by role, and where the list is kept. Record no one's gender, nationality or other personal details.",
                 "partly": "Name the gaps filled, by role, and those still open. Record no one's personal details.",
                 "not_yet": "Name the perspectives you lack and how you plan to bring them in. Record no one's personal details.",
-                "not_applicable": "Say why checking for missing perspectives does not apply to this problem."
+                "not_applicable": "Say why checking for missing perspectives does not apply to this problem; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -236,7 +236,7 @@
                 "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; this prints in the model card.",
                 "partly": "Give what you have estimated so far and what is still missing; this prints in the model card.",
                 "not_yet": "Give the computing you expect and when you will estimate it; this prints in the model card.",
-                "not_applicable": "Say why the system needs no estimate of computing or energy; this prints in the model card."
+                "not_applicable": "Say why the system needs no estimate of computing or energy; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -284,7 +284,7 @@
                 "done": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself.",
                 "partly": "Say why the data was gathered, what is recorded so far and what is not; this prints in the data card. Never upload the data itself.",
                 "not_yet": "Say why the data is being gathered, what you know of its sources and when you will record them; this prints in the data card.",
-                "not_applicable": "Say why the project uses no data source; this prints in the data card."
+                "not_applicable": "Say why the project uses no data source; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -318,7 +318,7 @@
                 "done": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; this prints in the data card and model card.",
                 "partly": "Give the make-up checked so far and the groups still to check, in counts, never records; this prints in the data card and model card.",
                 "not_yet": "Give what you know of the make-up so far, in counts, never records, and your plan; this prints in the data card and model card.",
-                "not_applicable": "Say why no population comparison applies; this prints in the data card and model card."
+                "not_applicable": "Say why no population comparison applies; this prints in the data card, model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -350,7 +350,7 @@
                 "done": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; this prints in the model card. Record no one's attributes.",
                 "partly": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; this prints in the model card. Record no one's attributes.",
                 "not_yet": "Say whether the model uses or predicts a sensitive attribute, and your plan; this prints in the model card. Record no one's attributes.",
-                "not_applicable": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card."
+                "not_applicable": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -382,7 +382,7 @@
                 "done": "Say how labels were assigned and by whom, by role; this prints in the data card. Attach the agreement results.",
                 "partly": "Say how labels were assigned and by whom, by role, which checks are done and which remain; this prints in the data card.",
                 "not_yet": "Say how labels are assigned and by whom, by role, and when you will check them; this prints in the data card.",
-                "not_applicable": "Say why the data has no labels to check; this prints in the data card."
+                "not_applicable": "Say why the data has no labels to check; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -436,7 +436,7 @@
                 "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones.",
                 "partly": "Say how consent was obtained and which uses or people it does not yet cover; this prints in the data card. Attach the blank form, never signed ones.",
                 "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; this prints in the data card.",
-                "not_applicable": "Say why the data needs neither consent nor a waiver; this prints in the data card."
+                "not_applicable": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -472,7 +472,7 @@
                 "done": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; this prints in the data card. Say who holds any linking key, by role, never the key itself.",
                 "partly": "Say what you have removed, replaced or coarsened so far and what remains; this prints in the data card.",
                 "not_yet": "Say how and when you plan to de-identify the data; this prints in the data card.",
-                "not_applicable": "Say why the data needs no de-identification; this prints in the data card."
+                "not_applicable": "Say why the data needs no de-identification; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -569,7 +569,7 @@
                 "done": "Say what the checks found, where it is recorded and why any unticked check does not fit; this prints in the data card.",
                 "partly": "Say which needed checks are still to do, and why any others do not fit your data; this prints in the data card.",
                 "not_yet": "Say when you will run the checks, or what is blocking them; this prints in the data card.",
-                "not_applicable": "Say why no data quality check applies to your data; this prints in the data card."
+                "not_applicable": "Say why no data quality check applies to your data; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -659,7 +659,7 @@
                 "done": "Say what you found, where it is recorded and why any unticked type does not fit; this prints in the data card.",
                 "partly": "Say which fitting types are still to assess, and why any others do not fit; this prints in the data card.",
                 "not_yet": "Say when you will assess bias, or what is blocking it; this prints in the data card.",
-                "not_applicable": "Say why no bias type applies to your data; this prints in the data card."
+                "not_applicable": "Say why no bias type applies to your data; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -692,7 +692,7 @@
                 "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; this prints in the data card.",
                 "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; this prints in the data card.",
                 "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; this prints in the data card.",
-                "not_applicable": "Say why no selection-bias check applies to this project; this prints in the data card."
+                "not_applicable": "Say why no selection-bias check applies to this project; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -724,7 +724,7 @@
                 "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card.",
                 "partly": "Say which past patterns you have examined and which remain; this prints in the data card.",
                 "not_yet": "Say which past patterns you plan to examine, and when; this prints in the data card.",
-                "not_applicable": "Say why the data holds no past decisions about people; this prints in the data card."
+                "not_applicable": "Say why the data holds no past decisions about people; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -757,7 +757,7 @@
                 "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; this prints in the data card.",
                 "partly": "Give the period the data covers, the changes checked and those still to check; this prints in the data card.",
                 "not_yet": "Give the period the data covers and when you will check for changes; this prints in the data card.",
-                "not_applicable": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card."
+                "not_applicable": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -790,7 +790,7 @@
                 "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; this prints in the data card. Name people by role, never by name.",
                 "partly": "Say which rules are set and which are still open; this prints in the data card. Name people by role, never by name.",
                 "not_yet": "Say where the data is stored now, who can use it and your plan; this prints in the data card. Name people by role, never by name.",
-                "not_applicable": "Say why the project holds no data to govern; this prints in the data card."
+                "not_applicable": "Say why the project holds no data to govern; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -823,7 +823,7 @@
                 "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; this prints in the data card and model card.",
                 "partly": "Name the rare cases counted so far and those still to count; this prints in the data card and model card.",
                 "not_yet": "Name the rare cases you expect the system to meet and when you will count them; this prints in the data card and model card.",
-                "not_applicable": "Say why no rare-case check applies to this project; this prints in the data card and model card."
+                "not_applicable": "Say why no rare-case check applies to this project; this prints in the data card, model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -856,7 +856,7 @@
                 "done": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; this prints in the data card.",
                 "partly": "Say who reviewed which part, by role, and what is still to review; this prints in the data card.",
                 "not_yet": "Say which experts you plan to involve, by role, and when; this prints in the data card.",
-                "not_applicable": "Say why no domain expertise applies to this data; this prints in the data card."
+                "not_applicable": "Say why no domain expertise applies to this data; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -905,7 +905,7 @@
                 "done": "Name the model type, the alternatives, why you chose it and where this is recorded; this prints in the model card.",
                 "partly": "Name the model type and the alternatives weighed so far, then what is still open; this prints in the model card.",
                 "not_yet": "Name the model type you expect and when you will record the choice; this prints in the model card.",
-                "not_applicable": "Say why no choice of model type applies to this project; this prints in the model card."
+                "not_applicable": "Say why no choice of model type applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -938,7 +938,7 @@
                 "done": "Say how you split and checked the sets, how the test data differs from the setting of use and where this is recorded; this prints in the model card.",
                 "partly": "Say how you split the data, which checks are done and which are not, and how the test data differs from the setting of use; this prints in the model card.",
                 "not_yet": "Say how and when you plan to split and check the data; this prints in the model card.",
-                "not_applicable": "Say why no data split applies to this project; this prints in the model card."
+                "not_applicable": "Say why no data split applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -970,7 +970,7 @@
                 "done": "Name the measures, why those, and the costliest error; give numbers, not judgements. Attach the results file: the model card lists it, and you type the numbers in when you generate it.",
                 "partly": "Name the measures reported so far and those still to do; give numbers, not judgements.",
                 "not_yet": "Say when you will measure the errors on held-out data, or what is blocking it.",
-                "not_applicable": "Say why no error measurement applies to this project; this prints in the model card."
+                "not_applicable": "Say why no error measurement applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1003,7 +1003,7 @@
                 "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
                 "partly": "Name the groups measured so far and those still to do; the platform does not compute them. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
-                "not_applicable": "Say why no measurement by group applies to this project; this prints in the model card."
+                "not_applicable": "Say why no measurement by group applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1110,7 +1110,7 @@
                 "done": "Say why the ticked measures fit, the threshold for each, the groups compared, why each unticked one does not fit and where the report is; this prints in the model card.",
                 "partly": "Say which fitting measures you computed, with thresholds and groups, which are still to compute and why any other does not fit; this prints in the model card.",
                 "not_yet": "Write that no fairness measure is computed yet, which you plan and when; this prints in the model card.",
-                "not_applicable": "Say why no fairness measure applies to this project; this prints in the model card."
+                "not_applicable": "Say why no fairness measure applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1142,7 +1142,7 @@
                 "done": "Name the method, the main drivers, the domain expert who reviewed them, by role, their conclusion and where it is recorded.",
                 "partly": "Name the method used and the drivers found so far, and what is still to do, such as the expert review.",
                 "not_yet": "Say when you will apply an explanation method, or what is blocking it.",
-                "not_applicable": "Say why no explanation method applies to this project."
+                "not_applicable": "Say why no explanation method applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1176,7 +1176,7 @@
                 "done": "Say which input changes you tested, how far performance moved, what you changed or stated as a limit, and where it is recorded; this prints in the model card.",
                 "partly": "Say which input changes you tested, how performance moved and what is still to test; this prints in the model card.",
                 "not_yet": "Say which input changes you expect in use and when you will test them; this prints in the model card.",
-                "not_applicable": "Say why no test on other inputs applies to this project; this prints in the model card."
+                "not_applicable": "Say why no test on other inputs applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1207,7 +1207,7 @@
                 "done": "Name the baseline, both results, what you decided from them and where it is recorded.",
                 "partly": "Name the baselines compared so far and those still to compare.",
                 "not_yet": "Say when you will compare, or what is blocking it.",
-                "not_applicable": "Say why no simple baseline applies to this project."
+                "not_applicable": "Say why no simple baseline applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1240,7 +1240,7 @@
                 "done": "Name the suspect features you checked, how, what you found and changed, and where it is recorded.",
                 "partly": "Name the features checked so far and those still to check.",
                 "not_yet": "Say when you will check, or what is blocking it.",
-                "not_applicable": "Say why no shortcut check applies to this project."
+                "not_applicable": "Say why no shortcut check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1272,7 +1272,7 @@
                 "done": "Say how you checked calibration, what you found, how low-confidence outputs are handled and where this is recorded.",
                 "partly": "Say what you have checked so far and what is still to do, such as handling low-confidence outputs.",
                 "not_yet": "Say when you will check calibration, or what is blocking it.",
-                "not_applicable": "Say why no confidence check applies to this project."
+                "not_applicable": "Say why no confidence check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1315,7 +1315,7 @@
                 "done": "Give your acceptable performance, the simpler models tried, why you chose this one and where it is recorded.",
                 "partly": "Say what is decided, such as acceptable performance, and what is still open.",
                 "not_yet": "Say when you will set acceptable performance and compare models.",
-                "not_applicable": "Say why no simplest-model choice applies to this project."
+                "not_applicable": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1347,7 +1347,7 @@
                 "done": "Say where the training records are kept, what they include and whether someone has re-run training from them.",
                 "partly": "Say which records are kept so far and which are missing.",
                 "not_yet": "Say when you will record them, or what is blocking it.",
-                "not_applicable": "Say why no training record applies to this project."
+                "not_applicable": "Say why no training record applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1379,7 +1379,7 @@
                 "done": "Name the checks, the steps they run at, what they found and fixed, and where this is recorded.",
                 "partly": "Name the steps checked so far and those still to check.",
                 "not_yet": "Say when you will add checks, or what is blocking it.",
-                "not_applicable": "Say why no pipeline check applies to this project."
+                "not_applicable": "Say why no pipeline check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1412,7 +1412,7 @@
                 "done": "Say which model version the card describes and where it is kept. Attach or link it; the model card lists it.",
                 "partly": "Say which model version the card describes, which parts are written and which are not.",
                 "not_yet": "Say when you will write the card; one issued by this platform counts.",
-                "not_applicable": "Say why no model card applies to this project; this prints in the model card."
+                "not_applicable": "Say why no model card applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1505,7 +1505,7 @@
                 "done": "Give each ticked method's main result, where the report is and why any unticked one does not fit. This and your AUC-ROC tick print in the model card.",
                 "partly": "Give the main result of each ticked method; for each unticked one, say whether it does not fit or is still to do. This and your AUC-ROC tick print in the model card.",
                 "not_yet": "Write that no other method is used yet, which you plan and when, or what is blocking them; this prints in the model card.",
-                "not_applicable": "Say why no other evaluation method applies to this project; this prints in the model card."
+                "not_applicable": "Say why no other evaluation method applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1536,7 +1536,7 @@
                 "done": "Name the subpopulations compared, what you found, what you decided and where it is recorded.",
                 "partly": "Name the subpopulations compared so far and those still to compare.",
                 "not_yet": "Say when you will compare them, or what is blocking it.",
-                "not_applicable": "Say why no pooling check applies to this project."
+                "not_applicable": "Say why no pooling check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1569,7 +1569,7 @@
                 "done": "Say which tuning choices you checked, what changed by group, what you changed in response and where it is recorded; this prints in the model card.",
                 "partly": "Say which tuning choices you checked so far, what changed by group and what is still to check; this prints in the model card.",
                 "not_yet": "Say which tuning choices you will check by group, and when; this prints in the model card.",
-                "not_applicable": "Say why no tuning check applies to this project; this prints in the model card."
+                "not_applicable": "Say why no tuning check applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1602,7 +1602,7 @@
                 "done": "Describe each error's consequences, the groups bearing more and where this is recorded; this prints in the model card. Give rates, never records about people.",
                 "partly": "Describe the consequences assessed so far and what is still open; this prints in the model card. Give rates, never records about people.",
                 "not_yet": "Describe the errors you expect, their consequences and when you will compare groups, with no records about people; this prints in the model card.",
-                "not_applicable": "Say why no harm-by-group assessment applies to this project; this prints in the model card."
+                "not_applicable": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1634,7 +1634,7 @@
                 "done": "State the limits, including where the model must not be used, in two or three sentences, then where the full text is kept; they print in the model card.",
                 "partly": "State the limits and conditions of use known so far in two or three sentences, and what is still to test; they print in the model card.",
                 "not_yet": "Write that the limits are not yet recorded, any you already know and when you will record them; this prints in the model card.",
-                "not_applicable": "Say why no record of limits applies to this project; this prints in the model card."
+                "not_applicable": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1666,7 +1666,7 @@
                 "done": "Say what is under version control, with which tools, where it is kept and the current model's version.",
                 "partly": "Say what is under version control so far and what is not.",
                 "not_yet": "Say when you will set up version control, or what is blocking it.",
-                "not_applicable": "Say why no version control applies to this project."
+                "not_applicable": "Say why no version control applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1699,7 +1699,7 @@
                 "done": "Name the manipulations considered, how you tested them, what you found, the safeguards chosen and where it is recorded.",
                 "partly": "Name the kinds of manipulation tested so far and those still to test.",
                 "not_yet": "Say when you will check, or what is blocking it.",
-                "not_applicable": "Say why no manipulation check applies to this project."
+                "not_applicable": "Say why no manipulation check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1731,7 +1731,7 @@
                 "done": "Give the training and test periods, how results changed, your conclusion on retraining and where it is recorded.",
                 "partly": "Give the periods tested so far and what is still to test.",
                 "not_yet": "Say when you will test on later data, or what is blocking it.",
-                "not_applicable": "Say why no test on later data applies to this project."
+                "not_applicable": "Say why no test on later data applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1779,7 +1779,7 @@
                 "done": "Say what is checked, how often, the thresholds, who acts, by role, and where the plan is kept; this prints in the model card.",
                 "partly": "Say which checks, thresholds and roles are set so far and which are still open; this prints in the model card.",
                 "not_yet": "If the system is not in use yet, say so, then what you plan to check and when; this prints in the model card.",
-                "not_applicable": "Say why the system will never be used outside the study; this prints in the model card."
+                "not_applicable": "Say why the system will never be used outside the study; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1811,7 +1811,7 @@
                 "done": "Name the triggers and your thresholds, the steps, who decides, by role, and where it is recorded; this prints in the model card.",
                 "partly": "Name the triggers, steps and roles set so far and what is still open; this prints in the model card.",
                 "not_yet": "Say when you will set the triggers and steps, and whether the system is in use yet; this prints in the model card.",
-                "not_applicable": "Say why no retraining procedure will ever apply to this project; this prints in the model card."
+                "not_applicable": "Say why no retraining procedure will ever apply to this project; this prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1843,7 +1843,7 @@
                 "done": "Say who reviews outputs, by role, when, how they override, how often overrides happen and where they are recorded.",
                 "partly": "Say which outputs a person can review and override so far, and which not.",
                 "not_yet": "Say how and when you plan to add review by a person, or what is blocking it.",
-                "not_applicable": "Say why no review by a person applies to this project."
+                "not_applicable": "Say why no review by a person applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1875,7 +1875,7 @@
                 "done": "List each responsibility's holder, by role and organisation, never by name, and how they agreed; link the matrix.",
                 "partly": "List the responsibilities agreed so far, by role and organisation, never by name, and those still open.",
                 "not_yet": "Say when you will agree the roles, and with which organisations.",
-                "not_applicable": "Say why no accountability matrix applies to this project."
+                "not_applicable": "Say why no accountability matrix applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1908,7 +1908,7 @@
                 "done": "Say how harm is reported and what happens next, naming roles, not people, whether the plan was tried in an exercise or used, and where it is kept.",
                 "partly": "Say which parts of the plan exist, naming roles, not people, and which are missing.",
                 "not_yet": "Say when you will write the plan, or what is blocking it.",
-                "not_applicable": "Say why no incident plan applies to this project."
+                "not_applicable": "Say why no incident plan applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1940,7 +1940,7 @@
                 "done": "Name who was trained, by role, how, in which languages and how you checked it worked; link the materials.",
                 "partly": "Name who has been trained so far, by role, and who or what is still to cover.",
                 "not_yet": "Say who you plan to train, by role, how and when.",
-                "not_applicable": "Say why no user training or guidance applies to this project."
+                "not_applicable": "Say why no user training or guidance applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -1973,7 +1973,7 @@
                 "done": "Say what users see with each output, how you checked they read it correctly, whether outputs about a person show the main reasons, and where this is recorded.",
                 "partly": "Say what users see so far and what is missing: confidence, limits, main reasons or a check with users.",
                 "not_yet": "Say what you plan to show users and when you will check they read it correctly.",
-                "not_applicable": "Say why no display of outputs applies to this project."
+                "not_applicable": "Say why no display of outputs applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.1.0"
@@ -2004,7 +2004,7 @@
                 "done": "Give the stages, sites by type, comparison and result set for expanding, whether it was reached and where it is recorded.",
                 "partly": "Say which stages are done and what is compared so far, then what is still open.",
                 "not_yet": "Say how you plan to stage the start and when.",
-                "not_applicable": "Say why no staged start applies to this project."
+                "not_applicable": "Say why no staged start applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2037,7 +2037,7 @@
                 "done": "Give the groups, measures, thresholds and schedule, who acts, by role, and where it is recorded.",
                 "partly": "Say which groups and measures are checked so far and which are still open.",
                 "not_yet": "Say which groups you plan to check and when.",
-                "not_applicable": "Say why no monitoring by group will ever apply to this project."
+                "not_applicable": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2070,7 +2070,7 @@
                 "done": "Give each threshold, what happens when crossed, how decisions are made while stopped, and where it is recorded.",
                 "partly": "Give the thresholds set so far and what is still open, such as decisions while stopped.",
                 "not_yet": "Say when you will set the thresholds, or what is blocking it.",
-                "not_applicable": "Say why no flag or stop threshold applies to this project."
+                "not_applicable": "Say why no flag or stop threshold applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2114,7 +2114,7 @@
                 "done": "Name the channels, the role receiving reports, the number received and where actions are logged; upload nothing that identifies people.",
                 "partly": "Name the channels open so far, who receives reports, by role, and what is missing; upload nothing that identifies people.",
                 "not_yet": "Say which channels you plan and when.",
-                "not_applicable": "Say why no feedback channel applies to this project."
+                "not_applicable": "Say why no feedback channel applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2146,7 +2146,7 @@
                 "done": "Say how people learn of and make requests, who reviews, by role, and where requests are logged; give counts and outcomes, never personal details.",
                 "partly": "Say which parts are in place, such as the notice, the way to ask or the reviewer, and which are not; never personal details.",
                 "not_yet": "Say how and when you plan to let people ask for a review.",
-                "not_applicable": "Say why no way to ask for a review applies to this project."
+                "not_applicable": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2177,7 +2177,7 @@
                 "done": "Say what it covers, where it is kept and whether anyone outside the build team has used it.",
                 "partly": "Say which parts are documented so far and which are missing.",
                 "not_yet": "Say when you will write the documentation, or what is blocking it.",
-                "not_applicable": "Say why no system documentation applies to this project."
+                "not_applicable": "Say why no system documentation applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2275,7 +2275,7 @@
                 "done": "Say how each ticked measure works, naming bodies and roles, not people, why each unticked one does not fit, and where it is recorded.",
                 "partly": "Say how each ticked measure works, naming bodies and roles, not people; for each unticked one, whether it does not fit or is still to do.",
                 "not_yet": "Say which measures you plan and when.",
-                "not_applicable": "Say why no governance measure applies to this project."
+                "not_applicable": "Say why no governance measure applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2307,7 +2307,7 @@
                 "done": "Name the settings compared, what you found, what you changed or stated as a limit, and where it is recorded.",
                 "partly": "Name the settings compared so far and what you found, then those still to compare.",
                 "not_yet": "Say which settings you plan to compare and when, or what is blocking it.",
-                "not_applicable": "Say why no check by setting applies to this project."
+                "not_applicable": "Say why no check by setting applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2338,7 +2338,7 @@
                 "done": "Say what would trigger retirement, who decides, by role, your estimate of computing and energy while running, and where the plan is kept.",
                 "partly": "Say which parts of the plan exist, such as the triggers or the energy estimate, and which are missing.",
                 "not_yet": "Say when you will plan the end of the system, or what is blocking it.",
-                "not_applicable": "Say why no retirement plan applies to this project."
+                "not_applicable": "Say why no retirement plan applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2372,7 +2372,7 @@
                 "done": "Say how unusual inputs are detected, what the system then does, how you tested it and where this is recorded.",
                 "partly": "Say which unusual inputs are detected and handled so far, and which are not.",
                 "not_yet": "Say how and when you plan to detect and handle unusual inputs.",
-                "not_applicable": "Say why no unusual-input handling applies to this project."
+                "not_applicable": "Say why no unusual-input handling applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2405,7 +2405,7 @@
                 "done": "Give the intended use and main limits first, then who was told, by role or organisation, how, and where it is recorded; this prints in the model card.",
                 "partly": "Give the intended use and main limits first, then who has been told so far and who not, by role or organisation; this prints in the model card.",
                 "not_yet": "Give the intended use and main limits first, then when and how you will tell people; this prints in the model card.",
-                "not_applicable": "Give the intended use and main limits first, then say why no briefing on use and limits applies to this project; this prints in the model card."
+                "not_applicable": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.1.0"
@@ -2437,7 +2437,7 @@
                 "done": "Say who took part, by group or role, how and when, and what you changed; link the notes, never a participant list.",
                 "partly": "Say who has taken part so far, by group or role, and where not yet; upload no participant list.",
                 "not_yet": "Say which communities you plan to involve, how and when.",
-                "not_applicable": "Say why no community input applies to this project."
+                "not_applicable": "Say why no community input applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2470,7 +2470,7 @@
                 "done": "Say what workflow changes you found and how, naming staff by role, what you changed and where it is recorded.",
                 "partly": "Say which parts of the workflow you have looked at so far and what is still open.",
                 "not_yet": "Say when you will try the system in the real workflow, or what is blocking it.",
-                "not_applicable": "Say why no workflow check applies to this project."
+                "not_applicable": "Say why no workflow check applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2503,7 +2503,7 @@
                 "done": "List each rule and its approval or registration: body, reference and date; attach the letters. The platform records your statement and makes no judgement of it.",
                 "partly": "List each rule, the approvals held with body, reference and date, and those you still wait for. The platform makes no judgement of your statement.",
                 "not_yet": "Say when you will identify the rules that apply, or what is blocking it.",
-                "not_applicable": "Say why no data protection, research ethics or sector rule applies to this project; the platform makes no judgement of your statement."
+                "not_applicable": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement."
               },
               "practiceSameAs": [
                 "5.1.0"
@@ -2535,7 +2535,7 @@
                 "done": "Give how often you review, who takes part, by role, and the last review's date and decision; link its minutes.",
                 "partly": "Say what your reviews cover so far, how often they happen, and what is missing.",
                 "not_yet": "Say when the first review will be and who will take part, by role.",
-                "not_applicable": "Say why no regular review applies to this project."
+                "not_applicable": "Say why no regular review applies to this project; this prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -2567,7 +2567,7 @@
                 "done": "Name the groups checked, what you found and changed, and where it is recorded.",
                 "partly": "Name the groups checked so far, what you found, and those still to check.",
                 "not_yet": "Say which groups you plan to check and when, or what is blocking it.",
-                "not_applicable": "Say why no access check applies to this project."
+                "not_applicable": "Say why no access check applies here; it prints in the mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",

@@ -137,9 +137,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no comparison applies; this is unusual here.",
+    "to": "Say why no comparison applies, which is unusual; it prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no comparison applies; this is unusual here."
+    "final": "Say why no comparison applies, which is unusual; it prints in the mitigation plan."
   },
   {
     "row": "Q-PP-01.practiceSameAs",
@@ -295,9 +295,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why this system needs no problem statement; this prints in the data card and model card.",
+    "to": "Say why this system needs no problem statement; this prints in the data card, model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why this system needs no problem statement; this prints in the data card and model card."
+    "final": "Say why this system needs no problem statement; this prints in the data card, model card and mitigation plan."
   },
   {
     "row": "Q-PP-02.practiceSameAs",
@@ -453,9 +453,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no list of those affected applies to this project; this prints in the model card.",
+    "to": "Say why no list of those affected applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no list of those affected applies to this project; this prints in the model card."
+    "final": "Say why no list of those affected applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PP-03.practiceSameAs",
@@ -589,9 +589,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no group assessment applies to this project.",
+    "to": "Say why no group assessment applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no group assessment applies to this project."
+    "final": "Say why no group assessment applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PP-04.practiceSameAs",
@@ -725,9 +725,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no rights assessment applies, not even a short note.",
+    "to": "Say why no rights assessment applies, not even a short note; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no rights assessment applies, not even a short note."
+    "final": "Say why no rights assessment applies, not even a short note; this prints in the mitigation plan."
   },
   {
     "row": "Q-PP-05.practiceSameAs",
@@ -851,9 +851,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why checking for missing perspectives does not apply to this problem.",
+    "to": "Say why checking for missing perspectives does not apply to this problem; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why checking for missing perspectives does not apply to this problem."
+    "final": "Say why checking for missing perspectives does not apply to this problem; this prints in the mitigation plan."
   },
   {
     "row": "Q-PP-24.practiceSameAs",
@@ -987,9 +987,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system needs no estimate of computing or energy; this prints in the model card.",
+    "to": "Say why the system needs no estimate of computing or energy; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the system needs no estimate of computing or energy; this prints in the model card."
+    "final": "Say why the system needs no estimate of computing or energy; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PP-07.practiceSameAs",
@@ -1123,9 +1123,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the project uses no data source; this prints in the data card.",
+    "to": "Say why the project uses no data source; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the project uses no data source; this prints in the data card."
+    "final": "Say why the project uses no data source; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-08.practiceSameAs",
@@ -1259,9 +1259,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no population comparison applies; this prints in the data card and model card.",
+    "to": "Say why no population comparison applies; this prints in the data card, model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no population comparison applies; this prints in the data card and model card."
+    "final": "Say why no population comparison applies; this prints in the data card, model card and mitigation plan."
   },
   {
     "row": "Q-PP-09.practiceSameAs",
@@ -1395,9 +1395,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card.",
+    "to": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card."
+    "final": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PP-11.practiceSameAs",
@@ -1531,9 +1531,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data has no labels to check; this prints in the data card.",
+    "to": "Say why the data has no labels to check; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the data has no labels to check; this prints in the data card."
+    "final": "Say why the data has no labels to check; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-12.practiceSameAs",
@@ -1715,9 +1715,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data needs neither consent nor a waiver; this prints in the data card.",
+    "to": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the data needs neither consent nor a waiver; this prints in the data card."
+    "final": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-13.practiceSameAs",
@@ -1841,9 +1841,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data needs no de-identification; this prints in the data card.",
+    "to": "Say why the data needs no de-identification; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the data needs no de-identification; this prints in the data card."
+    "final": "Say why the data needs no de-identification; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-14.practiceSameAs",
@@ -1967,9 +1967,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data quality check applies to your data; this prints in the data card.",
+    "to": "Say why no data quality check applies to your data; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no data quality check applies to your data; this prints in the data card."
+    "final": "Say why no data quality check applies to your data; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-16.practiceSameAs",
@@ -2093,9 +2093,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no bias type applies to your data; this prints in the data card.",
+    "to": "Say why no bias type applies to your data; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no bias type applies to your data; this prints in the data card."
+    "final": "Say why no bias type applies to your data; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-17.practiceSameAs",
@@ -2229,9 +2229,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no selection-bias check applies to this project; this prints in the data card.",
+    "to": "Say why no selection-bias check applies to this project; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no selection-bias check applies to this project; this prints in the data card."
+    "final": "Say why no selection-bias check applies to this project; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-18.practiceSameAs",
@@ -2365,9 +2365,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data holds no past decisions about people; this prints in the data card.",
+    "to": "Say why the data holds no past decisions about people; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the data holds no past decisions about people; this prints in the data card."
+    "final": "Say why the data holds no past decisions about people; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-19.practiceSameAs",
@@ -2491,9 +2491,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card.",
+    "to": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card."
+    "final": "Give the data's period and say why its age does not matter here; it prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-20.practiceSameAs",
@@ -2617,9 +2617,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the project holds no data to govern; this prints in the data card.",
+    "to": "Say why the project holds no data to govern; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the project holds no data to govern; this prints in the data card."
+    "final": "Say why the project holds no data to govern; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-21.practiceSameAs",
@@ -2733,9 +2733,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no rare-case check applies to this project; this prints in the data card and model card.",
+    "to": "Say why no rare-case check applies to this project; this prints in the data card, model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no rare-case check applies to this project; this prints in the data card and model card."
+    "final": "Say why no rare-case check applies to this project; this prints in the data card, model card and mitigation plan."
   },
   {
     "row": "Q-PP-22.practiceSameAs",
@@ -2869,9 +2869,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no domain expertise applies to this data; this prints in the data card.",
+    "to": "Say why no domain expertise applies to this data; this prints in the data card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no domain expertise applies to this data; this prints in the data card."
+    "final": "Say why no domain expertise applies to this data; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-23.practiceSameAs",
@@ -3005,9 +3005,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no choice of model type applies to this project; this prints in the model card.",
+    "to": "Say why no choice of model type applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no choice of model type applies to this project; this prints in the model card."
+    "final": "Say why no choice of model type applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-01.practiceSameAs",
@@ -3141,9 +3141,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data split applies to this project; this prints in the model card.",
+    "to": "Say why no data split applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no data split applies to this project; this prints in the model card."
+    "final": "Say why no data split applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-02.practiceSameAs",
@@ -3299,9 +3299,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no error measurement applies to this project; this prints in the model card.",
+    "to": "Say why no error measurement applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no error measurement applies to this project; this prints in the model card."
+    "final": "Say why no error measurement applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-03.practiceSameAs",
@@ -3454,9 +3454,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no measurement by group applies to this project; this prints in the model card.",
+    "to": "Say why no measurement by group applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no measurement by group applies to this project; this prints in the model card."
+    "final": "Say why no measurement by group applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-04.practiceSameAs",
@@ -3590,9 +3590,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no fairness measure applies to this project; this prints in the model card.",
+    "to": "Say why no fairness measure applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no fairness measure applies to this project; this prints in the model card."
+    "final": "Say why no fairness measure applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-06.practiceSameAs",
@@ -3726,9 +3726,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no explanation method applies to this project.",
+    "to": "Say why no explanation method applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no explanation method applies to this project."
+    "final": "Say why no explanation method applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-07.practiceSameAs",
@@ -3862,9 +3862,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no test on other inputs applies to this project; this prints in the model card.",
+    "to": "Say why no test on other inputs applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no test on other inputs applies to this project; this prints in the model card."
+    "final": "Say why no test on other inputs applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-08.practiceSameAs",
@@ -3998,9 +3998,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no simple baseline applies to this project.",
+    "to": "Say why no simple baseline applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no simple baseline applies to this project."
+    "final": "Say why no simple baseline applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-16.practiceSameAs",
@@ -4134,9 +4134,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no shortcut check applies to this project.",
+    "to": "Say why no shortcut check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no shortcut check applies to this project."
+    "final": "Say why no shortcut check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-17.practiceSameAs",
@@ -4260,9 +4260,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no confidence check applies to this project.",
+    "to": "Say why no confidence check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no confidence check applies to this project."
+    "final": "Say why no confidence check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-18.practiceSameAs",
@@ -4386,9 +4386,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no simplest-model choice applies to this project.",
+    "to": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no simplest-model choice applies to this project."
+    "final": "Say why no simplest-model choice applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-09.practiceSameAs",
@@ -4522,9 +4522,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no training record applies to this project.",
+    "to": "Say why no training record applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no training record applies to this project."
+    "final": "Say why no training record applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-10.practiceSameAs",
@@ -4658,9 +4658,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no pipeline check applies to this project.",
+    "to": "Say why no pipeline check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no pipeline check applies to this project."
+    "final": "Say why no pipeline check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-11.practiceSameAs",
@@ -4784,9 +4784,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no model card applies to this project; this prints in the model card.",
+    "to": "Say why no model card applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no model card applies to this project; this prints in the model card."
+    "final": "Say why no model card applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-12.practiceSameAs",
@@ -4920,9 +4920,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no other evaluation method applies to this project; this prints in the model card.",
+    "to": "Say why no other evaluation method applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no other evaluation method applies to this project; this prints in the model card."
+    "final": "Say why no other evaluation method applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-13.practiceSameAs",
@@ -5056,9 +5056,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no pooling check applies to this project.",
+    "to": "Say why no pooling check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no pooling check applies to this project."
+    "final": "Say why no pooling check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-14.practiceSameAs",
@@ -5192,9 +5192,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no tuning check applies to this project; this prints in the model card.",
+    "to": "Say why no tuning check applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no tuning check applies to this project; this prints in the model card."
+    "final": "Say why no tuning check applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-15.practiceSameAs",
@@ -5328,9 +5328,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no harm-by-group assessment applies to this project; this prints in the model card.",
+    "to": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no harm-by-group assessment applies to this project; this prints in the model card."
+    "final": "Say why no harm-by-group assessment applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-19.practiceSameAs",
@@ -5454,9 +5454,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no record of limits applies to this project; this prints in the model card.",
+    "to": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no record of limits applies to this project; this prints in the model card."
+    "final": "Say why no record of limits applies to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-IP-20.practiceSameAs",
@@ -5580,9 +5580,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no version control applies to this project.",
+    "to": "Say why no version control applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no version control applies to this project."
+    "final": "Say why no version control applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-21.practiceSameAs",
@@ -5706,9 +5706,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no manipulation check applies to this project.",
+    "to": "Say why no manipulation check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no manipulation check applies to this project."
+    "final": "Say why no manipulation check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-22.practiceSameAs",
@@ -5842,9 +5842,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no test on later data applies to this project.",
+    "to": "Say why no test on later data applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no test on later data applies to this project."
+    "final": "Say why no test on later data applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-IP-24.practiceSameAs",
@@ -5978,9 +5978,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system will never be used outside the study; this prints in the model card.",
+    "to": "Say why the system will never be used outside the study; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why the system will never be used outside the study; this prints in the model card."
+    "final": "Say why the system will never be used outside the study; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PO-01.practiceSameAs",
@@ -6114,9 +6114,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no retraining procedure will ever apply to this project; this prints in the model card.",
+    "to": "Say why no retraining procedure will ever apply to this project; this prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Say why no retraining procedure will ever apply to this project; this prints in the model card."
+    "final": "Say why no retraining procedure will ever apply to this project; this prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PO-02.practiceSameAs",
@@ -6250,9 +6250,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no review by a person applies to this project.",
+    "to": "Say why no review by a person applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no review by a person applies to this project."
+    "final": "Say why no review by a person applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-03.practiceSameAs",
@@ -6386,9 +6386,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no accountability matrix applies to this project.",
+    "to": "Say why no accountability matrix applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no accountability matrix applies to this project."
+    "final": "Say why no accountability matrix applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-04.practiceSameAs",
@@ -6522,9 +6522,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no incident plan applies to this project.",
+    "to": "Say why no incident plan applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no incident plan applies to this project."
+    "final": "Say why no incident plan applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-05.practiceSameAs",
@@ -6658,9 +6658,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no user training or guidance applies to this project.",
+    "to": "Say why no user training or guidance applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no user training or guidance applies to this project."
+    "final": "Say why no user training or guidance applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-06.practiceSameAs",
@@ -6794,9 +6794,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no display of outputs applies to this project.",
+    "to": "Say why no display of outputs applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no display of outputs applies to this project."
+    "final": "Say why no display of outputs applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-07.practiceSameAs",
@@ -6928,9 +6928,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no staged start applies to this project.",
+    "to": "Say why no staged start applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no staged start applies to this project."
+    "final": "Say why no staged start applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-16.practiceSameAs",
@@ -7064,9 +7064,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no monitoring by group will ever apply to this project.",
+    "to": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no monitoring by group will ever apply to this project."
+    "final": "Say why no monitoring by group will ever apply here; it prints in the mitigation plan."
   },
   {
     "row": "Q-PO-17.practiceSameAs",
@@ -7200,9 +7200,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no flag or stop threshold applies to this project.",
+    "to": "Say why no flag or stop threshold applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no flag or stop threshold applies to this project."
+    "final": "Say why no flag or stop threshold applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-18.practiceSameAs",
@@ -7336,9 +7336,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no feedback channel applies to this project.",
+    "to": "Say why no feedback channel applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no feedback channel applies to this project."
+    "final": "Say why no feedback channel applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-08.practiceSameAs",
@@ -7472,9 +7472,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no way to ask for a review applies to this project.",
+    "to": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no way to ask for a review applies to this project."
+    "final": "Say why no way to ask for a review applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-09.practiceSameAs",
@@ -7608,9 +7608,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no system documentation applies to this project.",
+    "to": "Say why no system documentation applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no system documentation applies to this project."
+    "final": "Say why no system documentation applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-10.practiceSameAs",
@@ -7744,9 +7744,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no governance measure applies to this project.",
+    "to": "Say why no governance measure applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no governance measure applies to this project."
+    "final": "Say why no governance measure applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-11.practiceSameAs",
@@ -7880,9 +7880,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no check by setting applies to this project.",
+    "to": "Say why no check by setting applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no check by setting applies to this project."
+    "final": "Say why no check by setting applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-12.practiceSameAs",
@@ -8016,9 +8016,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no retirement plan applies to this project.",
+    "to": "Say why no retirement plan applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no retirement plan applies to this project."
+    "final": "Say why no retirement plan applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-13.practiceSameAs",
@@ -8152,9 +8152,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no unusual-input handling applies to this project.",
+    "to": "Say why no unusual-input handling applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no unusual-input handling applies to this project."
+    "final": "Say why no unusual-input handling applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-14.practiceSameAs",
@@ -8288,9 +8288,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Give the intended use and main limits first, then say why no briefing on use and limits applies to this project; this prints in the model card.",
+    "to": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan.",
     "decision": "pending",
-    "final": "Give the intended use and main limits first, then say why no briefing on use and limits applies to this project; this prints in the model card."
+    "final": "Give the intended use and main limits first, then say why no briefing on use and limits applies here; it prints in the model card and mitigation plan."
   },
   {
     "row": "Q-PO-15.practiceSameAs",
@@ -8422,9 +8422,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no community input applies to this project.",
+    "to": "Say why no community input applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no community input applies to this project."
+    "final": "Say why no community input applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-20.practiceSameAs",
@@ -8558,9 +8558,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no workflow check applies to this project.",
+    "to": "Say why no workflow check applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no workflow check applies to this project."
+    "final": "Say why no workflow check applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-21.practiceSameAs",
@@ -8694,9 +8694,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data protection, research ethics or sector rule applies to this project; the platform makes no judgement of your statement.",
+    "to": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement.",
     "decision": "pending",
-    "final": "Say why no data protection, research ethics or sector rule applies to this project; the platform makes no judgement of your statement."
+    "final": "Say why no data protection, research ethics or sector rule applies here; it prints in the mitigation plan and the platform does not judge your statement."
   },
   {
     "row": "Q-PO-22.practiceSameAs",
@@ -8828,9 +8828,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no regular review applies to this project.",
+    "to": "Say why no regular review applies to this project; this prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no regular review applies to this project."
+    "final": "Say why no regular review applies to this project; this prints in the mitigation plan."
   },
   {
     "row": "Q-PO-23.practiceSameAs",
@@ -8964,9 +8964,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no access check applies to this project.",
+    "to": "Say why no access check applies here; it prints in the mitigation plan.",
     "decision": "pending",
-    "final": "Say why no access check applies to this project."
+    "final": "Say why no access check applies here; it prints in the mitigation plan."
   },
   {
     "row": "Q-PO-24.practiceSameAs",
