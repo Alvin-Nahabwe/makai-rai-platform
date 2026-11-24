@@ -1,8 +1,8 @@
 {
   "Q-PP-01": {
-    "text": "Have you compared AI with simpler options?",
-    "expectedPractice": "Before building, you compare AI with at least one simpler method and one non-computational option on performance, cost, upkeep and risk to the people affected, and record your choice and why.",
-    "whyAsked": "AI that a simpler option could match still costs money, power and upkeep.",
+    "text": "Have you compared AI with simpler options such as a statistical model, rules or a manual process?",
+    "expectedPractice": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and and risks to the people affected, and record your choice and why.",
+    "whyAsked": "AI that rules or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves.",
     "evidenceExamples": [
       "a C-01 alternatives analysis, filled in",
       "the protocol section with the comparison",
@@ -12,51 +12,51 @@
       "done": "Yes, we compared them",
       "partly": "Partly, some options so far",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No comparison applies here"
     },
     "answerPrompts": {
-      "done": "Name the options you compared and what decided it.",
-      "partly": "Name the options compared so far and those left.",
-      "not_yet": "Say when you will compare, or what blocks it.",
-      "not_applicable": "Say why no comparison applies; this is rare here."
+      "done": "Name the options compared, what decided it and where the choice is recorded.",
+      "partly": "Name the options compared so far and those still to compare.",
+      "not_yet": "Say when you plan to compare, or what is blocking it.",
+      "not_applicable": "Say why no comparison applies; this is unusual here."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-02": {
-    "text": "Have you defined the problem and your success measures?",
-    "expectedPractice": "You write down who has the problem, the decision or task the system supports, and a checkable success measure with a target and a minimum.",
-    "whyAsked": "Without it, nobody can tell later whether the system helped.",
+    "text": "Have you defined the problem, its objectives and its success criteria?",
+    "expectedPractice": "Your problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
+    "whyAsked": "Without a written problem statement, nobody can later tell whether the system helped, and work drifts towards whatever the data allows.",
     "evidenceExamples": [
       "the problem statement in the protocol or concept note",
       "a one-page project brief with objectives and success measures",
       "minutes of the meeting where you agreed the objectives"
     ],
     "answerLabels": {
-      "done": "Yes, both are written down",
+      "done": "Yes, it is written down",
       "partly": "Partly, some of it is defined",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "A problem statement does not apply"
     },
     "answerPrompts": {
-      "done": "State the problem and your success measures; it prints in the data card and model card.",
-      "partly": "State the problem and the measures so far; it prints in the data card and model card.",
-      "not_yet": "State the problem as you see it; it prints in the data card and model card.",
-      "not_applicable": "Say why no problem statement applies; it prints in the data card and model card."
+      "done": "State the problem, who it affects, your success measures and where the full statement is kept; it prints in the data card and model card.",
+      "partly": "State the problem and the measures defined so far, then what is still open; it prints in the data card and model card.",
+      "not_yet": "State the problem as you see it now and when you will define it; it prints in the data card and model card.",
+      "not_applicable": "Say why this system needs no problem statement; it prints in the data card and model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-03": {
-    "text": "Have you identified everyone the system affects?",
-    "expectedPractice": "You list each group the system affects and how: its users, the people its outputs are about, people whose data trains it, and others bearing its costs or benefits.",
-    "whyAsked": "Nobody plans for harms to groups left off this list.",
+    "text": "Have you identified everyone the system affects, directly or indirectly?",
+    "expectedPractice": "You list the groups the system affects and how: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
+    "whyAsked": "Nobody plans for harms to groups left off the list, and later questions on groups, consent and consultation build on it.",
     "evidenceExamples": [
       "a stakeholder list or map in the protocol",
       "a C-07 stakeholder impact map, filled in",
@@ -66,24 +66,24 @@
       "done": "Yes, we listed them",
       "partly": "Partly, some groups so far",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No one is affected"
     },
     "answerPrompts": {
-      "done": "Name the groups by role, users first; it prints in the model card.",
-      "partly": "Name the groups so far by role, users first; it prints in the model card.",
-      "not_yet": "Name the users you expect, by role; it prints in the model card.",
+      "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; it prints in the model card.",
+      "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; it prints in the model card.",
+      "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; it prints in the model card.",
       "not_applicable": "Say why the system affects no one; it prints in the model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-04": {
-    "text": "Have you assessed effects on protected or vulnerable groups?",
-    "expectedPractice": "You name who could be harmed or left out where the system is used, including locally marginalised groups, with each group's effect and your planned checks or changes.",
-    "whyAsked": "Harms fall most on disadvantaged groups least present in the data.",
+    "text": "Have you assessed effects on protected or vulnerable groups, for example by gender, age, ethnicity, disability or income?",
+    "expectedPractice": "You name who could be harmed or left out where the system is used, including locally marginalised groups, and record for each the likely effect and what you will check or change.",
+    "whyAsked": "AI harms fall most often on groups already disadvantaged and least present in the data, and which groups depends on the setting.",
     "evidenceExamples": [
       "the group effects section of the protocol or C-02 assessment",
       "notes from a consultation with group representatives",
@@ -93,24 +93,24 @@
       "done": "Yes, we assessed them",
       "partly": "Partly, some groups so far",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No group could be affected differently"
     },
     "answerPrompts": {
-      "done": "Name each group, never individuals, its effect and your response.",
-      "partly": "Name the groups assessed and those left, never individuals.",
-      "not_yet": "Say when you will assess this, or what blocks it.",
+      "done": "Name each group, its main effect, your response to the largest risk and where it is recorded. Describe groups, never individuals; upload no records about them.",
+      "partly": "Name the groups assessed and those still to assess. Describe groups, never individuals, and upload no records about them.",
+      "not_yet": "Say when you will assess this, or what is blocking it.",
       "not_applicable": "Say why no group could be affected differently."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-05": {
-    "text": "Have you assessed the system's effects on human rights?",
-    "expectedPractice": "In proportion to the risk, you assess effects on rights such as privacy, fair treatment, access to services and appeal: a short note for low stakes, more where the system decides about people.",
-    "whyAsked": "Some harms fall on everyone the system touches; another question covers particular groups.",
+    "text": "Have you assessed the system's impact on human rights?",
+    "expectedPractice": "In proportion to the risk, you assess how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision: a short written note for a low-stakes tool, a fuller assessment for a system that decides about people.",
+    "whyAsked": "Some harms, such as a lost chance to appeal or a withheld service, fall on everyone the system touches; this question asks about those rights, and a separate question asks about particular groups.",
     "evidenceExamples": [
       "the rights assessment, or its section of the C-02 assessment",
       "an ethics committee's comments on rights",
@@ -120,24 +120,24 @@
       "done": "Yes, as far as the risk needs",
       "partly": "Partly, some rights so far",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No rights assessment applies"
     },
     "answerPrompts": {
-      "done": "Name the rights assessed and what changed; for a short note, why the risk is low.",
-      "partly": "Name the rights assessed so far and those left.",
-      "not_yet": "Say when you will assess this, or what blocks it.",
+      "done": "Name the rights you assessed, what you found and changed, any reviewer by role and where it is recorded; for a short note, say why the risk is low.",
+      "partly": "Name the rights assessed so far and those still to assess.",
+      "not_yet": "Say when you will assess this, or what is blocking it.",
       "not_applicable": "Say why no rights assessment applies, not even a short note."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-24": {
-    "text": "Have you brought in the perspectives your team lacks?",
-    "expectedPractice": "You compare the perspectives the problem needs (disciplines, lived experience, and the gender, language and culture of those affected) with your team and fill the gaps, recording by role who fills each and how.",
-    "whyAsked": "A team from one background misses the same things; multi-stakeholder consultation can fill the gaps.",
+    "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of those affected) and brought in those your team lacks?",
+    "expectedPractice": "You list the perspectives the problem needs, compare them with your team and fill the gaps, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
+    "whyAsked": "A team whose members share one background misses the same things, so it needs to know which perspectives are missing and bring them in, for example through multi-stakeholder consultation.",
     "evidenceExamples": [
       "the perspectives list",
       "terms of reference for an advisory group",
@@ -147,54 +147,53 @@
       "done": "Yes, we checked and filled any gaps",
       "partly": "Partly, some gaps filled",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "Checking perspectives does not apply"
     },
     "answerPrompts": {
-      "done": "Name any missing perspectives and who provides them, by role, without personal details.",
-      "partly": "Name the gaps filled, by role, and those still open.",
-      "not_yet": "Name the perspectives you lack and how you will find them.",
+      "done": "Name any missing perspectives, who now provides each by role, and where the list is kept. Record no one's gender, nationality or other personal details.",
+      "partly": "Name the gaps filled, by role, and those still open. Record no one's personal details.",
+      "not_yet": "Name the perspectives you lack and how you plan to bring them in.",
       "not_applicable": "Say why checking for missing perspectives does not apply to this problem."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-07": {
     "text": "Have you estimated the system's energy use and carbon cost?",
-    "expectedPractice": "Before building, you estimate the computing and energy for training and running, weigh them against the benefit, and record the estimate, method and choice.",
-    "whyAsked": "Energy costs fall hard on small projects and weak grids.",
+    "expectedPractice": "Before building, you estimate the computing and energy that training and running need, for example from hardware hours times power draw or with CodeCarbon, weigh them against the expected benefit, and record the estimate and your choice.",
+    "whyAsked": "Large models use energy and money that small projects and unreliable grids can ill afford; an early estimate leaves time to choose a lighter method.",
     "evidenceExamples": [
       "the estimate in the protocol or C-02 assessment",
       "a CodeCarbon summary file",
-      "hardware hours times power draw, in a note",
       "a note comparing the energy use of two candidate methods"
     ],
     "answerLabels": {
       "done": "Yes, we estimated it",
       "partly": "Partly, for some of the work",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No estimate is needed"
     },
     "answerPrompts": {
-      "done": "Give computing hours, energy, method and choice; it prints in the model card.",
-      "partly": "Give what you have estimated and what is missing; it prints in the model card.",
-      "not_yet": "Give the computing you expect, if known; it prints in the model card.",
-      "not_applicable": "Say why no estimate is needed; it prints in the model card."
+      "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; it prints in the model card.",
+      "partly": "Give what you have estimated so far and what is still missing; it prints in the model card.",
+      "not_yet": "Give the computing you expect and when you will estimate it; it prints in the model card.",
+      "not_applicable": "Say why the system needs no estimate of computing or energy; it prints in the model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-08": {
     "text": "Have you recorded your data's sources, how they were collected and why you chose them?",
-    "expectedPractice": "For each source, you record who collected the data, how, when, where and why you chose it, and keep the record with the data so outsiders can judge its fit.",
-    "whyAsked": "Without it, nobody can judge the fit or limits of the data, or repeat the work.",
+    "expectedPractice": "For each source, you record where the data came from, who collected it, how and when, and why you chose it, and keep the record with the data, such as a datasheet, so an outsider could judge its fit for the use.",
+    "whyAsked": "Without a record of how the data was gathered, nobody can judge its fit, repeat the work or see its limits.",
     "evidenceExamples": [
-      "a datasheet for the dataset (C-19), linked, never the data itself",
+      "a datasheet for the dataset (C-19)",
       "an issued data card from this platform",
       "the data collection section of the protocol",
       "a link to the data-access agreement"
@@ -203,24 +202,24 @@
       "done": "Yes, for every source",
       "partly": "Partly, for some sources",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No data source is used"
     },
     "answerPrompts": {
-      "done": "Say why the data was gathered, then sources, methods, period and setting; it prints in the data card.",
-      "partly": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card.",
-      "not_yet": "Say why the data is gathered and its sources so far; it prints in the data card.",
+      "done": "Say why the data was gathered, then its sources, methods, period and setting; it prints in the data card. Link the datasheet, never the data itself.",
+      "partly": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card. Never upload the data itself.",
+      "not_yet": "Say why the data is being gathered and what you know of its sources; it prints in the data card.",
       "not_applicable": "Say why no data source needs a record; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-09": {
-    "text": "Have you checked your data represents the people it serves?",
-    "expectedPractice": "You compare your data with the population served, group by group, using census, clinic or similar figures, and record under-represented groups and what you did.",
-    "whyAsked": "Groups thin in the data get worse results.",
+    "text": "Have you checked your data represents the population the system will serve?",
+    "expectedPractice": "You compare your data's make-up with the population it will serve, group by group (such as sex, age, district, language, rural or urban), using a source such as census or clinic figures, and record under-represented groups and what you did.",
+    "whyAsked": "A model learns the population in its data, not the one it serves, so thin groups get worse results nobody notices without a comparison.",
     "evidenceExamples": [
       "the summary file from the C-05 notebook",
       "a table comparing the data and the population by group",
@@ -230,24 +229,24 @@
       "done": "Yes, group by group",
       "partly": "Partly, for some groups",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No population to compare with"
     },
     "answerPrompts": {
-      "done": "Give counts by group and place, and the gaps; it prints in the data card and model card.",
-      "partly": "Give counts checked so far and groups left; it prints in the data card and model card.",
-      "not_yet": "Give what you know of the make-up; it prints in the data card and model card.",
+      "done": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; it prints in the data card and model card.",
+      "partly": "Give the make-up checked so far and the groups still to check, in counts; it prints in the data card and model card.",
+      "not_yet": "Give what you know of the make-up so far, in counts, and your plan; it prints in the data card and model card.",
       "not_applicable": "Say why no population comparison applies; it prints in the data card and model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-11": {
-    "text": "Have you checked which inputs could stand in for a sensitive attribute, and decided what to do?",
-    "expectedPractice": "You check which inputs could stand in for a sensitive attribute in your setting, such as village for ethnicity, test the links where data allows, and record each choice: keep, remove or monitor.",
-    "whyAsked": "Dropping a sensitive attribute does not help when another input, such as place or name, carries it.",
+    "text": "Have you checked whether any input could stand in for a sensitive attribute (for example, village for ethnicity), and decided what to do?",
+    "expectedPractice": "You check which inputs could stand in for a sensitive attribute in your setting, such as village for ethnicity or phone type for income, test how strongly they are linked where you have the data, and record for each whether you keep, remove or monitor it.",
+    "whyAsked": "Removing a sensitive attribute does not stop a model using it when another input, such as place, language or name, carries the same information.",
     "evidenceExamples": [
       "the output of a check on links between variables",
       "a decision note listing possible stand-in variables and choices",
@@ -260,21 +259,21 @@
       "not_applicable": "Does not apply to this project"
     },
     "answerPrompts": {
-      "done": "Say if the model uses or predicts a sensitive attribute, then your choices; it prints in the model card.",
-      "partly": "Say if the model uses or predicts a sensitive attribute, then the checks done and left; it prints in the model card.",
-      "not_yet": "Say if the model uses or predicts a sensitive attribute; it prints in the model card.",
-      "not_applicable": "Say why no input can stand in for a sensitive attribute, so the model cannot use one; it prints in the model card."
+      "done": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; it prints in the model card.",
+      "partly": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; it prints in the model card. Record no one's attributes.",
+      "not_yet": "Say whether the model uses or predicts a sensitive attribute, and your plan; it prints in the model card. Record no one's attributes.",
+      "not_applicable": "Say why no input can stand in for a sensitive attribute; it prints in the model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-12": {
-    "text": "Have you checked your labels are correct and consistent?",
-    "expectedPractice": "You write labelling guidelines, label a share twice, measure agreement, settle or record disagreements, check routine-record labels against the source, and set the share and agreement you accept.",
-    "whyAsked": "A model is no better than its labels.",
+    "text": "Have you checked that labels are correct and consistent?",
+    "expectedPractice": "You write labelling guidelines, have a share of items labelled twice, measure how often labellers agree, and resolve or record disagreements; for labels from routine records, you check a sample against the source. You set and record the share and the agreement you accept.",
+    "whyAsked": "A model is no better than its labels, and when one site or language is labelled differently, its people bear the errors.",
     "evidenceExamples": [
       "the labelling guidelines",
       "the agreement summary from the C-04 notebook",
@@ -284,36 +283,41 @@
       "done": "Yes, we checked them",
       "partly": "Partly, some checks done",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "Our data has no labels"
     },
     "answerPrompts": {
-      "done": "Say how labels were assigned and by whom, by role; it prints in the data card.",
-      "partly": "Say who assigned labels and how, and which checks remain; it prints in the data card.",
-      "not_yet": "Say how labels are assigned and by whom, by role; it prints in the data card.",
-      "not_applicable": "Say why the data has no labels; it prints in the data card."
+      "done": "Say how labels were assigned and by whom, by role; it prints in the data card. Attach the agreement results.",
+      "partly": "Say how labels were assigned and by whom, by role, and which checks remain; it prints in the data card.",
+      "not_yet": "Say how labels are assigned and by whom, by role, and when you will check them; it prints in the data card.",
+      "not_applicable": "Say why the data has no labels to check; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-GATE-SENSITIVE": {
-    "text": "Could your data identify a person, or does it hold other sensitive personal information?",
-    "expectedPractice": "You check every field and file you will hold, including free text, images and audio, for anything that identifies a person alone or combined with other data, and record the answer.",
-    "whyAsked": "Personal data brings duties of consent and protection, and a combination such as a village, an age and a rare condition can identify a person.",
+    "text": "Does your data contain information that could identify a person, or other sensitive personal information?",
+    "expectedPractice": "You check every field and file you will hold, including free text, images and audio, for anything that could identify a person directly or in combination with other data, and record the answer.",
+    "whyAsked": "Personal data brings duties of consent and protection, and data can identify a person through a combination, such as a village, an age and a rare condition.",
     "evidenceExamples": [
       "a data inventory saying for each field whether it can identify a person",
       "the data protection section of the protocol"
     ],
-    "reasonPrompt": "Say which data you checked and what you found, by kind of data, never copying personal data. Your answer prints in the data card and model card; if not sure, say what is left to check."
+    "reasonPrompt": "Say which data you checked, field by field or file by file, and what you found, describing kinds of data and never copying personal data. Your answer prints in the data card and model card; if you answer not sure, say what you still need to check.",
+    "practiceSameAs": [
+      "5.0.0",
+      "5.1.0"
+    ],
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-13": {
-    "text": "Have you obtained informed consent to collect and use the data?",
-    "expectedPractice": "You tell the people whose data you use, in a language and form they understand, its purpose, including AI, who uses it, how long it is kept and how to withdraw, and they agree to the planned uses. Where others collected the data or an ethics committee waived consent, you hold that record.",
-    "whyAsked": "Consent for one purpose does not cover training a model, and going beyond it can stop the work and lose people's trust.",
+    "text": "Have you obtained proper informed consent to collect and use the data?",
+    "expectedPractice": "You tell the people whose data you use, in a language and form they understand, what it is for, that it may be used to build an AI system, who will use it, how long it is kept and how to withdraw, and they agree to the uses now planned. Where others collected the data or an ethics committee waived consent, you hold the record of that.",
+    "whyAsked": "Consent for one purpose does not automatically cover training a model, and uses beyond it can stop the work and lose the trust of those who shared the data.",
     "evidenceExamples": [
-      "a blank consent form and information sheet, never signed forms",
+      "a blank consent form and information sheet",
       "the ethics approval letter, or the waiver, or its reference",
       "the consent clause of a data-access agreement"
     ],
@@ -321,24 +325,24 @@
       "done": "Yes, consent or a waiver covers it",
       "partly": "Partly, not for every use or person",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No consent or waiver is needed"
     },
     "answerPrompts": {
-      "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or who waived it; it prints in the data card.",
-      "partly": "Say how consent was obtained and what it does not cover; it prints in the data card.",
-      "not_yet": "Say how you plan to obtain consent; it prints in the data card.",
+      "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; it prints in the data card. Attach the blank form, never signed ones.",
+      "partly": "Say how consent was obtained and which uses or people it does not yet cover; it prints in the data card. Attach the blank form, never signed ones.",
+      "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; it prints in the data card.",
       "not_applicable": "Say why the data needs neither consent nor a waiver; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-14": {
-    "text": "Have you removed or replaced details that could identify a person?",
-    "expectedPractice": "Before analysis, you remove or replace direct identifiers, coarsen details that identify in combination, such as exact dates, small villages or rare conditions, and check no one can be singled out. You keep any linking key apart, open only to set roles.",
-    "whyAsked": "Removing names is not enough when a few details together point to one person.",
+    "text": "Have you removed or replaced the details in your data that could identify a person (anonymisation or pseudonymisation)?",
+    "expectedPractice": "Before analysis, you remove or replace direct identifiers and coarsen details that could identify a person in combination, such as exact dates, small villages or rare conditions, then check for anyone who could still be singled out. You keep any key linking codes to people apart from the data, open only to set roles.",
+    "whyAsked": "Removing names is not enough when a few details together point to one person, and if the data leaks or is shared, no one in it should be recognisable.",
     "evidenceExamples": [
       "the de-identification steps in the data management plan",
       "the summary file from the C-10 notebook",
@@ -351,21 +355,21 @@
       "not_applicable": "Does not apply to this project"
     },
     "answerPrompts": {
-      "done": "Say what you removed or coarsened, how you checked, and who holds any key, by role; it prints in the data card.",
-      "partly": "Say what you removed or coarsened so far and what remains; it prints in the data card.",
-      "not_yet": "Say how you plan to de-identify the data; it prints in the data card.",
-      "not_applicable": "Say why the data holds nothing to de-identify; it prints in the data card."
+      "done": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; it prints in the data card. Say who holds any linking key, by role, never the key itself.",
+      "partly": "Say what you have removed, replaced or coarsened so far and what remains; it prints in the data card.",
+      "not_yet": "Say how and when you plan to de-identify the data; it prints in the data card.",
+      "not_applicable": "Say why the data needs no de-identification; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-16": {
-    "text": "Which data quality checks have you run?",
-    "expectedPractice": "Before training, you run the quality checks your data needs and record what each found: for most tabular data, all eight; for images, text or audio, the ones that fit, saying what you did instead.",
-    "whyAsked": "Data problems are harder to trace after training.",
+    "text": "Which listed data quality checks have you run?",
+    "expectedPractice": "Before training, you run the checks your data needs and record what each found: all eight for most tabular data; for images, text or audio, which do not fit and what you did instead.",
+    "whyAsked": "Quality problems found after training are far harder to trace; most common are records missing for some places or periods.",
     "evidenceExamples": [
       "the summary file from the C-03 notebook",
       "a data-quality report"
@@ -374,24 +378,24 @@
       "done": "Every check our data needs",
       "partly": "Some of the checks our data needs",
       "not_yet": "None yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No quality check applies"
     },
     "answerPrompts": {
-      "done": "Say what they found and why unticked ones do not fit.",
-      "partly": "Say which needed checks remain and why others do not fit.",
-      "not_yet": "Say when you will run them, or what blocks it.",
-      "not_applicable": "Say why no quality check applies to your data."
+      "done": "Say what the checks found, where it is recorded and why any unticked check does not fit.",
+      "partly": "Say which needed checks are still to do, and why any others do not fit your data.",
+      "not_yet": "Say when you will run the checks, or what is blocking them.",
+      "not_applicable": "Say why no data quality check applies to your data."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-17": {
-    "text": "Which bias types have you assessed your data for?",
-    "expectedPractice": "You assess each bias type that fits how your data was made and record what you found: usually historical, population, sampling, measurement and exclusion; labelling where people assigned labels; survey and survivorship where they apply. You explain each unticked type as not relevant.",
-    "whyAsked": "Each bias type enters data its own way, so each needs its own check.",
+    "text": "Which listed bias types have you assessed your data for?",
+    "expectedPractice": "You assess your data for each bias type that fits how it was made and record what you found: for most projects historical, population, sampling, measurement and exclusion; labelling where people assigned labels; survey and survivorship where they apply. You explain each unticked type as not relevant.",
+    "whyAsked": "Each bias type enters data in its own way, so each needs its own check.",
     "evidenceExamples": [
       "the bias assessment notes",
       "the summary file from the C-04 notebook",
@@ -401,24 +405,24 @@
       "done": "Every type that fits our data",
       "partly": "Some of the types that fit",
       "not_yet": "None yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No bias type applies"
     },
     "answerPrompts": {
-      "done": "Say what you found and why any unticked type does not fit.",
-      "partly": "Say which fitting types remain and why others do not fit.",
-      "not_yet": "Say when you will assess bias, or what blocks it.",
+      "done": "Say what you found, where it is recorded and why any unticked type does not fit.",
+      "partly": "Say which fitting types are still to assess, and why any others do not fit.",
+      "not_yet": "Say when you will assess bias, or what is blocking it.",
       "not_applicable": "Say why no bias type applies to your data."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-18": {
-    "text": "Have you assessed your data collection for selection bias?",
-    "expectedPractice": "You describe how people or records entered the data, who could be missing and how you measured or corrected for it.",
-    "whyAsked": "People missing from the data get the worst results.",
+    "text": "Have you assessed whether your data collection could introduce selection bias?",
+    "expectedPractice": "You describe how people or records came into the data and who could be missing, such as people without phones, those who do not attend clinics or areas without coverage, and record how you measured or corrected for it.",
+    "whyAsked": "Data gathered only from people easy to reach leaves out the rest, so the model works least well for those hardest to serve.",
     "evidenceExamples": [
       "the sampling section of the protocol",
       "a comparison of who is in the data with who was eligible",
@@ -428,24 +432,24 @@
       "done": "Yes, we assessed it",
       "partly": "Partly, for some sources",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "Selection bias cannot arise here"
     },
     "answerPrompts": {
-      "done": "Say whether it is a sample or full collection, and who is missed; it prints in the data card.",
-      "partly": "Say whether it is a sample or full collection, and what is assessed; it prints in the data card.",
-      "not_yet": "Say whether it is a sample or full collection; it prints in the data card.",
+      "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; it prints in the data card.",
+      "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; it prints in the data card.",
+      "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; it prints in the data card.",
       "not_applicable": "Say why no one could be missing from the data; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-19": {
-    "text": "Have you checked your data for past discrimination or inequity?",
-    "expectedPractice": "You check whether past decisions in the data, such as referrals, were unfair to some groups, and record what you found and any change to labels, features or use.",
-    "whyAsked": "Models repeat past decisions, unfair ones included.",
+    "text": "Have you checked whether past patterns in your data reflect discrimination or systemic inequity?",
+    "expectedPractice": "You check whether past decisions in the data, such as who was referred, treated or given credit, were unfair to some groups, and record what you found and any change to the labels, features or use of the model.",
+    "whyAsked": "A model trained on past decisions repeats them, unfair ones included, and records of who received a service often show access, not need.",
     "evidenceExamples": [
       "a written analysis of past patterns by group",
       "notes from a review with domain experts",
@@ -455,24 +459,24 @@
       "done": "Yes, we checked",
       "partly": "Partly, some patterns so far",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "The data holds no past decisions"
     },
     "answerPrompts": {
-      "done": "Say what past patterns showed and what you changed; it prints in the data card.",
-      "partly": "Say which past patterns you examined and which remain; it prints in the data card.",
-      "not_yet": "Say which past patterns you plan to examine; it prints in the data card.",
-      "not_applicable": "Say why the data holds no past decisions; it prints in the data card."
+      "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; it prints in the data card.",
+      "partly": "Say which past patterns you have examined and which remain; it prints in the data card.",
+      "not_yet": "Say which past patterns you plan to examine, and when; it prints in the data card.",
+      "not_applicable": "Say why the data holds no past decisions about people; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-20": {
-    "text": "Have you checked your data is recent enough for its use?",
-    "expectedPractice": "You record the period your data covers, check what has changed since, such as policies, seasons, prices or devices, and record whether it still fits.",
-    "whyAsked": "Old data can describe a situation that no longer exists.",
+    "text": "Have you checked your data is recent enough for when the system will be used?",
+    "expectedPractice": "You record the period your data covers, check what has changed since, such as policies, seasons, outbreaks, prices or devices, and record whether the data still fits the period of use.",
+    "whyAsked": "Data describes the time it was collected, so a model built on old data may serve a situation that no longer exists.",
     "evidenceExamples": [
       "the data description with dates",
       "a note on changes since collection",
@@ -482,24 +486,24 @@
       "done": "Yes, we checked",
       "partly": "Partly, some changes checked",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "The data's age does not matter"
     },
     "answerPrompts": {
-      "done": "Give the period covered and changes since; it prints in the data card.",
-      "partly": "Give the period covered and changes still to check; it prints in the data card.",
-      "not_yet": "Give the period the data covers; it prints in the data card.",
-      "not_applicable": "Say why the period does not matter; it prints in the data card."
+      "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; it prints in the data card.",
+      "partly": "Give the period the data covers, the changes checked and those still to check; it prints in the data card.",
+      "not_yet": "Give the period the data covers and when you will check for changes; it prints in the data card.",
+      "not_applicable": "Say why the period of the data does not matter for this use; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-21": {
-    "text": "Have you set rules for data access, sharing and retention?",
-    "expectedPractice": "In proportion to the risk, you write down, by role, who may use the data and how, sharing conditions, storage, retention, deletion and who decides; a data management plan section can do.",
-    "whyAsked": "Ungoverned data drifts into copies outside the protections people were promised.",
+    "text": "Have you set data governance rules covering access, sharing and retention?",
+    "expectedPractice": "You write down who may use the data and how, the conditions for sharing it with partners, where it is stored, how long it is kept, how it is deleted and who decides, by role. In proportion to the risk, this can be a section of the data management plan.",
+    "whyAsked": "Data that nobody governs drifts into copies on laptops and shared drives, outside the protections the people in it were promised and the project's agreements.",
     "evidenceExamples": [
       "the data management plan",
       "a data-sharing or data-access agreement",
@@ -509,24 +513,24 @@
       "done": "Yes, they are written down",
       "partly": "Partly, some rules are set",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "We hold no data to govern"
     },
     "answerPrompts": {
-      "done": "Say who may use the data, by role, where it is stored, the sharing terms and how long it is kept; it prints in the data card.",
-      "partly": "Say which rules are set and which are open; it prints in the data card.",
-      "not_yet": "Say where the data is stored and who can use it; it prints in the data card.",
+      "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; it prints in the data card. Name people by role, never by name.",
+      "partly": "Say which rules are set and which are still open; it prints in the data card. Name people by role, never by name.",
+      "not_yet": "Say where the data is stored now, who can use it and your plan; it prints in the data card. Name people by role, never by name.",
       "not_applicable": "Say why the project holds no data to govern; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-22": {
-    "text": "Have you checked your data has enough rare cases?",
-    "expectedPractice": "You list the rare cases the system will meet, count each in the data, and record which are too few to learn from and how you handled them.",
-    "whyAsked": "Rare cases often carry the most at stake.",
+    "text": "Have you checked whether your data has enough examples of rare cases and conditions?",
+    "expectedPractice": "You list the rare cases and conditions the system will meet in use, count each in the data, and record which are too few to learn from and how you handled them, such as collecting more, grouping them or stating them as a limit.",
+    "whyAsked": "Rare cases, such as a severe illness or an unusual pest, often have the most at stake, and a model that has seen too few of them handles them badly.",
     "evidenceExamples": [
       "a count of rare cases in the data",
       "the summary file from a data profiling notebook",
@@ -536,24 +540,24 @@
       "done": "Yes, we counted them",
       "partly": "Partly, some rare cases",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No rare cases apply"
     },
     "answerPrompts": {
-      "done": "Name the rare cases and their counts; it prints in the data card and model card.",
-      "partly": "Name the cases counted and those left; it prints in the data card and model card.",
-      "not_yet": "Name the rare cases you expect; it prints in the data card and model card.",
-      "not_applicable": "Say why no rare cases apply; it prints in the data card and model card."
+      "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; it prints in the data card and model card.",
+      "partly": "Name the rare cases counted so far and those still to count; it prints in the data card and model card.",
+      "not_yet": "Name the rare cases you expect the system to meet and when you will count them; it prints in the data card and model card.",
+      "not_applicable": "Say why the system will meet no rare cases; it prints in the data card and model card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PP-23": {
     "text": "Have domain experts reviewed your data's quality and relevance?",
-    "expectedPractice": "People who know the field, such as clinicians or agronomists, review a sample of data and labels for errors and lost meaning, and you record what they found and what you changed.",
-    "whyAsked": "Experts catch errors that automated checks miss, such as a diagnosis code used differently at one clinic.",
+    "expectedPractice": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and changed.",
+    "whyAsked": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, often most cheaply.",
     "evidenceExamples": [
       "notes from the expert review",
       "a list of corrections made after the review",
@@ -563,18 +567,18 @@
       "done": "Yes, experts reviewed it",
       "partly": "Partly, some of the data",
       "not_yet": "No, not yet",
-      "not_applicable": "Does not apply to this project"
+      "not_applicable": "No domain expertise applies"
     },
     "answerPrompts": {
-      "done": "Say who reviewed it, by role, what they found and what changed; it prints in the data card.",
-      "partly": "Say who reviewed which part, by role, and what remains; it prints in the data card.",
-      "not_yet": "Say which experts you plan to involve, by role; it prints in the data card.",
-      "not_applicable": "Say why no domain expertise applies; it prints in the data card."
+      "done": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; it prints in the data card.",
+      "partly": "Say who reviewed which part, by role, and what is still to review; it prints in the data card.",
+      "not_yet": "Say which experts you plan to involve, by role, and when; it prints in the data card.",
+      "not_applicable": "Say why no domain expertise applies to this data; it prints in the data card."
     },
     "practiceSameAs": [
       "5.0.0",
       "5.1.0"
     ],
-    "practiceSameAsReason": "Keeps 5.1.0's practice in fewer words; 5.1.0's expectedPractice equals 5.0.0's."
+    "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   }
 }
