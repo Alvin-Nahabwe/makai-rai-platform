@@ -81,9 +81,9 @@
     "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PO-04": {
-    "text": "Have you agreed who is responsible for each part of your system's outcomes?",
+    "text": "Have you agreed who is responsible for each part of your system's outcomes (accountability matrix)?",
     "expectedPractice": "You record who is responsible, by role and organisation, for each part of the system's outcomes, including deciding to deploy it, monitoring, responding to harm, fixing errors and deciding to stop it, and each role holder agreed.",
-    "whyAsked": "When organisations share a system, harms go unaddressed if each thinks another is responsible; named roles say who acts.",
+    "whyAsked": "If organisations sharing a system each think another is responsible, harms go unaddressed; named roles say who acts.",
     "evidenceExamples": [
       "a governance and accountability matrix (C-26)",
       "a memorandum of understanding naming the roles",
@@ -96,7 +96,7 @@
       "not_applicable": "Assigning roles does not apply"
     },
     "answerPrompts": {
-      "done": "List who holds each responsibility, by role and organisation, never by name, and how they agreed; link the matrix.",
+      "done": "List each responsibility's holder, by role and organisation, never by name, and how they agreed; link the matrix.",
       "partly": "List the responsibilities agreed so far, by role and organisation, never by name, and those still open.",
       "not_yet": "Say when you will agree the roles, and with which organisations.",
       "not_applicable": "Say why no responsibility for outcomes needs assigning."
@@ -188,7 +188,7 @@
     "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person. Not 5.0.0: its last sentence named the other question by code, which 5.1.0 replaced with \"a separate question\"."
   },
   "Q-PO-16": {
-    "text": "Have you introduced your system in stages before using it everywhere?",
+    "text": "Have you introduced your system in stages, such as one site first, before using it everywhere?",
     "expectedPractice": "You introduce the system in stages, such as at one site or with one group first, compare outcomes with existing practice before expanding, and record the measures and the result needed to go further.",
     "whyAsked": "Real use shows problems that testing missed; starting small limits who is affected while you find them.",
     "evidenceExamples": [
@@ -203,7 +203,7 @@
       "not_applicable": "A staged start does not apply"
     },
     "answerPrompts": {
-      "done": "Give the stages, sites by type, what you compared, the result set for expanding, whether it was reached and where it is recorded.",
+      "done": "Give the stages, sites by type, comparison and result set for expanding, whether it was reached and where it is recorded.",
       "partly": "Say which stages are done and what is compared so far, then what is still open.",
       "not_yet": "Say how you plan to stage the start and when.",
       "not_applicable": "Say why a staged start does not apply to your system."
@@ -233,7 +233,7 @@
       "done": "Give the groups, measures, thresholds and schedule, who acts, by role, and where it is recorded.",
       "partly": "Say which groups and measures are checked so far and which are still open.",
       "not_yet": "Say which groups you plan to check and when.",
-      "not_applicable": "Say why results by group do not apply; a system not yet in use is Not yet."
+      "not_applicable": "Say why group results do not apply; for a system not yet in use, pick No, not yet."
     },
     "practiceSameAs": [
       "5.0.0",
@@ -269,7 +269,7 @@
     "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PO-08": {
-    "text": "Can users and the people affected report problems to your team?",
+    "text": "Can users and the people affected report problems or concerns to your team?",
     "expectedPractice": "Users and the people affected can report problems or concerns in a way suited to them, such as a phone line, SMS or community meeting, to a person in a set role, and you record what you did.",
     "whyAsked": "People affected often see problems first; a channel they can use, with visible action on what they say, keeps the system honest.",
     "evidenceExamples": [
@@ -323,9 +323,9 @@
     "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PO-10": {
-    "text": "Have you fully documented your deployed system?",
-    "expectedPractice": "Your documentation, enough for someone else to run the deployed system, covers what it does, its parts and data flows, how to install and update it, the infrastructure it needs, such as power, connectivity and devices, its other dependencies and known limits.",
-    "whyAsked": "Documentation keeps a system running safely after its builder leaves; in low-resource settings, systems often stop over an unwritten dependency.",
+    "text": "Have you fully documented your deployed system (codebook, deployment specs)?",
+    "expectedPractice": "Your documentation, enough for someone else to run the system, covers what it does, its parts and data flows, how to install and update it, the infrastructure it needs, such as power, connectivity and devices, its other dependencies and known limits.",
+    "whyAsked": "Documentation keeps a system running safely after its builder leaves; in low-resource settings, an unwritten dependency often stops it.",
     "evidenceExamples": [
       "the codebook and deployment document (C-28)",
       "a link to the documentation in the repository"
@@ -376,7 +376,7 @@
     "practiceSameAsReason": "Every element, condition and example of 5.1.0's practice is kept, reworded in the second person; 5.1.0's expectedPractice equals 5.0.0's."
   },
   "Q-PO-12": {
-    "text": "Have you checked your system's results for each place, language and kind of user?",
+    "text": "Have you checked your system's results for each place, language, culture and kind of user?",
     "expectedPractice": "You check results for each place, language and kind of user the system serves, such as districts, dialects, devices or literacy, and record where it works less well and what you did.",
     "whyAsked": "A system tested in one place or language often works worse in another; users there carry the cost unless someone checks.",
     "evidenceExamples": [
