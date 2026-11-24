@@ -15,9 +15,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "Before building, the team compared the AI approach with at least one simpler method and one non-computational option for the same problem. The comparison covers expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected. The team wrote down its choice and why.",
-    "to": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and and risks to the people affected, and record your choice and why.",
+    "to": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected, and record your choice and why.",
     "decision": "pending",
-    "final": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and and risks to the people affected, and record your choice and why."
+    "final": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected, and record your choice and why."
   },
   {
     "row": "Q-PP-01.whyAsked",
@@ -173,9 +173,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team wrote a problem statement that names who has the problem, what decision or task the system will support, and what success looks like. Success is stated in terms the team can check later: the measure, the target the team set for itself, and what would count as not good enough.",
-    "to": "Your problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
+    "to": "Your written problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
     "decision": "pending",
-    "final": "Your problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough."
+    "final": "Your written problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough."
   },
   {
     "row": "Q-PP-02.whyAsked",
@@ -255,9 +255,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "A problem statement does not apply",
+    "to": "No problem statement applies",
     "decision": "pending",
-    "final": "A problem statement does not apply"
+    "final": "No problem statement applies"
   },
   {
     "row": "Q-PP-02.answerPrompts.done",
@@ -265,9 +265,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "State the problem, who it affects, your success measures and where the full statement is kept; it prints in the data card and model card.",
+    "to": "State the problem, who it affects, your success measures and where the full statement is kept; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "State the problem, who it affects, your success measures and where the full statement is kept; it prints in the data card and model card."
+    "final": "State the problem, who it affects, your success measures and where the full statement is kept; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-02.answerPrompts.partly",
@@ -275,9 +275,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "State the problem and the measures defined so far, then what is still open; it prints in the data card and model card.",
+    "to": "State the problem and the measures defined so far, then what is still open; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "State the problem and the measures defined so far, then what is still open; it prints in the data card and model card."
+    "final": "State the problem and the measures defined so far, then what is still open; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-02.answerPrompts.not_yet",
@@ -285,9 +285,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "State the problem as you see it now and when you will define it; it prints in the data card and model card.",
+    "to": "State the problem as you see it now and when you will define it; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "State the problem as you see it now and when you will define it; it prints in the data card and model card."
+    "final": "State the problem as you see it now and when you will define it; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-02.answerPrompts.not_applicable",
@@ -295,9 +295,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why this system needs no problem statement; it prints in the data card and model card.",
+    "to": "Say why this system needs no problem statement; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Say why this system needs no problem statement; it prints in the data card and model card."
+    "final": "Say why this system needs no problem statement; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-02.practiceSameAs",
@@ -331,9 +331,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team listed the groups the system affects. These include the people who use its outputs, the people the outputs are about, the people whose data trains it, and others who carry its costs or benefits. For each group the list says how the system affects it.",
-    "to": "You list the groups the system affects and how: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
+    "to": "You list the groups the system affects and how it affects each: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
     "decision": "pending",
-    "final": "You list the groups the system affects and how: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits."
+    "final": "You list the groups the system affects and how it affects each: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits."
   },
   {
     "row": "Q-PP-03.whyAsked",
@@ -413,9 +413,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No one is affected",
+    "to": "No list of those affected applies",
     "decision": "pending",
-    "final": "No one is affected"
+    "final": "No list of those affected applies"
   },
   {
     "row": "Q-PP-03.answerPrompts.done",
@@ -423,9 +423,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; it prints in the model card.",
+    "to": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; this prints in the model card.",
     "decision": "pending",
-    "final": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; it prints in the model card."
+    "final": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; this prints in the model card."
   },
   {
     "row": "Q-PP-03.answerPrompts.partly",
@@ -433,9 +433,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Users first, name the groups listed so far by role, never as individuals, and those still missing; it prints in the model card.",
+    "to": "Users first, name the groups listed so far by role, never as individuals, and those still missing; this prints in the model card.",
     "decision": "pending",
-    "final": "Users first, name the groups listed so far by role, never as individuals, and those still missing; it prints in the model card."
+    "final": "Users first, name the groups listed so far by role, never as individuals, and those still missing; this prints in the model card."
   },
   {
     "row": "Q-PP-03.answerPrompts.not_yet",
@@ -443,9 +443,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Name the users you expect, by role, never as individuals, and when you will list the rest; it prints in the model card.",
+    "to": "Name the users you expect, by role, never as individuals, and when you will list the rest; this prints in the model card.",
     "decision": "pending",
-    "final": "Name the users you expect, by role, never as individuals, and when you will list the rest; it prints in the model card."
+    "final": "Name the users you expect, by role, never as individuals, and when you will list the rest; this prints in the model card."
   },
   {
     "row": "Q-PP-03.answerPrompts.not_applicable",
@@ -453,9 +453,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system affects no one; it prints in the model card.",
+    "to": "Say why the system affects no one; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why the system affects no one; it prints in the model card."
+    "final": "Say why the system affects no one; this prints in the model card."
   },
   {
     "row": "Q-PP-03.practiceSameAs",
@@ -489,9 +489,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "The team named the groups who could be harmed or left out where the system will be used, including groups marginalised locally. For each, it wrote down how the system could affect it and what the team will check or change because of it.",
-    "to": "You name who could be harmed or left out where the system is used, including locally marginalised groups, and record for each the likely effect and what you will check or change.",
+    "to": "You name the groups who could be harmed or left out where the system is used, including locally marginalised groups, and record for each how the system could affect it and what you will check or change.",
     "decision": "pending",
-    "final": "You name who could be harmed or left out where the system is used, including locally marginalised groups, and record for each the likely effect and what you will check or change."
+    "final": "You name the groups who could be harmed or left out where the system is used, including locally marginalised groups, and record for each how the system could affect it and what you will check or change."
   },
   {
     "row": "Q-PP-04.whyAsked",
@@ -549,9 +549,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No group could be affected differently",
+    "to": "No group assessment applies",
     "decision": "pending",
-    "final": "No group could be affected differently"
+    "final": "No group assessment applies"
   },
   {
     "row": "Q-PP-04.answerPrompts.done",
@@ -655,9 +655,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.done",
     "from": null,
-    "to": "Yes, as far as the risk needs",
+    "to": "Yes, we assessed it",
     "decision": "pending",
-    "final": "Yes, as far as the risk needs"
+    "final": "Yes, we assessed it"
   },
   {
     "row": "Q-PP-05.answerLabels.partly",
@@ -811,9 +811,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Checking perspectives does not apply",
+    "to": "No perspectives check applies",
     "decision": "pending",
-    "final": "Checking perspectives does not apply"
+    "final": "No perspectives check applies"
   },
   {
     "row": "Q-PP-24.answerPrompts.done",
@@ -841,9 +841,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Name the perspectives you lack and how you plan to bring them in.",
+    "to": "Name the perspectives you lack and how you plan to bring them in. Record no one's personal details.",
     "decision": "pending",
-    "final": "Name the perspectives you lack and how you plan to bring them in."
+    "final": "Name the perspectives you lack and how you plan to bring them in. Record no one's personal details."
   },
   {
     "row": "Q-PP-24.answerPrompts.not_applicable",
@@ -957,9 +957,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Give the computing hours and energy, the method, your choice and where the estimate is kept; it prints in the model card.",
+    "to": "Give the computing hours and energy, the method, your choice and where the estimate is kept; this prints in the model card.",
     "decision": "pending",
-    "final": "Give the computing hours and energy, the method, your choice and where the estimate is kept; it prints in the model card."
+    "final": "Give the computing hours and energy, the method, your choice and where the estimate is kept; this prints in the model card."
   },
   {
     "row": "Q-PP-07.answerPrompts.partly",
@@ -967,9 +967,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Give what you have estimated so far and what is still missing; it prints in the model card.",
+    "to": "Give what you have estimated so far and what is still missing; this prints in the model card.",
     "decision": "pending",
-    "final": "Give what you have estimated so far and what is still missing; it prints in the model card."
+    "final": "Give what you have estimated so far and what is still missing; this prints in the model card."
   },
   {
     "row": "Q-PP-07.answerPrompts.not_yet",
@@ -977,9 +977,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Give the computing you expect and when you will estimate it; it prints in the model card.",
+    "to": "Give the computing you expect and when you will estimate it; this prints in the model card.",
     "decision": "pending",
-    "final": "Give the computing you expect and when you will estimate it; it prints in the model card."
+    "final": "Give the computing you expect and when you will estimate it; this prints in the model card."
   },
   {
     "row": "Q-PP-07.answerPrompts.not_applicable",
@@ -987,9 +987,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system needs no estimate of computing or energy; it prints in the model card.",
+    "to": "Say why the system needs no estimate of computing or energy; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why the system needs no estimate of computing or energy; it prints in the model card."
+    "final": "Say why the system needs no estimate of computing or energy; this prints in the model card."
   },
   {
     "row": "Q-PP-07.practiceSameAs",
@@ -1093,9 +1093,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say why the data was gathered, then its sources, methods, period and setting; it prints in the data card. Link the datasheet, never the data itself.",
+    "to": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself.",
     "decision": "pending",
-    "final": "Say why the data was gathered, then its sources, methods, period and setting; it prints in the data card. Link the datasheet, never the data itself."
+    "final": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself."
   },
   {
     "row": "Q-PP-08.answerPrompts.partly",
@@ -1103,9 +1103,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card. Never upload the data itself.",
+    "to": "Say why the data was gathered, what is recorded so far and what is not; this prints in the data card. Never upload the data itself.",
     "decision": "pending",
-    "final": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card. Never upload the data itself."
+    "final": "Say why the data was gathered, what is recorded so far and what is not; this prints in the data card. Never upload the data itself."
   },
   {
     "row": "Q-PP-08.answerPrompts.not_yet",
@@ -1113,9 +1113,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say why the data is being gathered and what you know of its sources; it prints in the data card.",
+    "to": "Say why the data is being gathered, what you know of its sources and when you will record them; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the data is being gathered and what you know of its sources; it prints in the data card."
+    "final": "Say why the data is being gathered, what you know of its sources and when you will record them; this prints in the data card."
   },
   {
     "row": "Q-PP-08.answerPrompts.not_applicable",
@@ -1123,9 +1123,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data source needs a record; it prints in the data card.",
+    "to": "Say why the project uses no data source; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no data source needs a record; it prints in the data card."
+    "final": "Say why the project uses no data source; this prints in the data card."
   },
   {
     "row": "Q-PP-08.practiceSameAs",
@@ -1149,9 +1149,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you assessed whether your training data is representative of the target population?",
-    "to": "Have you checked your data represents the population the system will serve?",
+    "to": "Have you checked whether your data represents the population the system will serve?",
     "decision": "pending",
-    "final": "Have you checked your data represents the population the system will serve?"
+    "final": "Have you checked whether your data represents the population the system will serve?"
   },
   {
     "row": "Q-PP-09.expectedPractice",
@@ -1219,9 +1219,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No population to compare with",
+    "to": "No population check applies",
     "decision": "pending",
-    "final": "No population to compare with"
+    "final": "No population check applies"
   },
   {
     "row": "Q-PP-09.answerPrompts.done",
@@ -1229,9 +1229,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; it prints in the data card and model card.",
+    "to": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; it prints in the data card and model card."
+    "final": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-09.answerPrompts.partly",
@@ -1239,9 +1239,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Give the make-up checked so far and the groups still to check, in counts; it prints in the data card and model card.",
+    "to": "Give the make-up checked so far and the groups still to check, in counts, never records; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Give the make-up checked so far and the groups still to check, in counts; it prints in the data card and model card."
+    "final": "Give the make-up checked so far and the groups still to check, in counts, never records; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-09.answerPrompts.not_yet",
@@ -1249,9 +1249,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Give what you know of the make-up so far, in counts, and your plan; it prints in the data card and model card.",
+    "to": "Give what you know of the make-up so far, in counts, never records, and your plan; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Give what you know of the make-up so far, in counts, and your plan; it prints in the data card and model card."
+    "final": "Give what you know of the make-up so far, in counts, never records, and your plan; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-09.answerPrompts.not_applicable",
@@ -1259,9 +1259,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no population comparison applies; it prints in the data card and model card.",
+    "to": "Say why no population comparison applies; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Say why no population comparison applies; it prints in the data card and model card."
+    "final": "Say why no population comparison applies; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-09.practiceSameAs",
@@ -1355,9 +1355,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Does not apply to this project",
+    "to": "No stand-in check applies",
     "decision": "pending",
-    "final": "Does not apply to this project"
+    "final": "No stand-in check applies"
   },
   {
     "row": "Q-PP-11.answerPrompts.done",
@@ -1365,9 +1365,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; it prints in the model card.",
+    "to": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; this prints in the model card. Record no one's attributes.",
     "decision": "pending",
-    "final": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; it prints in the model card."
+    "final": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; this prints in the model card. Record no one's attributes."
   },
   {
     "row": "Q-PP-11.answerPrompts.partly",
@@ -1375,9 +1375,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; it prints in the model card. Record no one's attributes.",
+    "to": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; this prints in the model card. Record no one's attributes.",
     "decision": "pending",
-    "final": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; it prints in the model card. Record no one's attributes."
+    "final": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; this prints in the model card. Record no one's attributes."
   },
   {
     "row": "Q-PP-11.answerPrompts.not_yet",
@@ -1385,9 +1385,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say whether the model uses or predicts a sensitive attribute, and your plan; it prints in the model card. Record no one's attributes.",
+    "to": "Say whether the model uses or predicts a sensitive attribute, and your plan; this prints in the model card. Record no one's attributes.",
     "decision": "pending",
-    "final": "Say whether the model uses or predicts a sensitive attribute, and your plan; it prints in the model card. Record no one's attributes."
+    "final": "Say whether the model uses or predicts a sensitive attribute, and your plan; this prints in the model card. Record no one's attributes."
   },
   {
     "row": "Q-PP-11.answerPrompts.not_applicable",
@@ -1395,9 +1395,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no input can stand in for a sensitive attribute; it prints in the model card.",
+    "to": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card.",
     "decision": "pending",
-    "final": "Say why no input can stand in for a sensitive attribute; it prints in the model card."
+    "final": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card."
   },
   {
     "row": "Q-PP-11.practiceSameAs",
@@ -1501,9 +1501,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say how labels were assigned and by whom, by role; it prints in the data card. Attach the agreement results.",
+    "to": "Say how labels were assigned and by whom, by role; this prints in the data card. Attach the agreement results.",
     "decision": "pending",
-    "final": "Say how labels were assigned and by whom, by role; it prints in the data card. Attach the agreement results."
+    "final": "Say how labels were assigned and by whom, by role; this prints in the data card. Attach the agreement results."
   },
   {
     "row": "Q-PP-12.answerPrompts.partly",
@@ -1511,9 +1511,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say how labels were assigned and by whom, by role, and which checks remain; it prints in the data card.",
+    "to": "Say how labels were assigned and by whom, by role, which checks are done and which remain; this prints in the data card.",
     "decision": "pending",
-    "final": "Say how labels were assigned and by whom, by role, and which checks remain; it prints in the data card."
+    "final": "Say how labels were assigned and by whom, by role, which checks are done and which remain; this prints in the data card."
   },
   {
     "row": "Q-PP-12.answerPrompts.not_yet",
@@ -1521,9 +1521,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say how labels are assigned and by whom, by role, and when you will check them; it prints in the data card.",
+    "to": "Say how labels are assigned and by whom, by role, and when you will check them; this prints in the data card.",
     "decision": "pending",
-    "final": "Say how labels are assigned and by whom, by role, and when you will check them; it prints in the data card."
+    "final": "Say how labels are assigned and by whom, by role, and when you will check them; this prints in the data card."
   },
   {
     "row": "Q-PP-12.answerPrompts.not_applicable",
@@ -1531,9 +1531,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data has no labels to check; it prints in the data card.",
+    "to": "Say why the data has no labels to check; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the data has no labels to check; it prints in the data card."
+    "final": "Say why the data has no labels to check; this prints in the data card."
   },
   {
     "row": "Q-PP-12.practiceSameAs",
@@ -1685,9 +1685,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; it prints in the data card. Attach the blank form, never signed ones.",
+    "to": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones.",
     "decision": "pending",
-    "final": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; it prints in the data card. Attach the blank form, never signed ones."
+    "final": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones."
   },
   {
     "row": "Q-PP-13.answerPrompts.partly",
@@ -1695,9 +1695,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say how consent was obtained and which uses or people it does not yet cover; it prints in the data card. Attach the blank form, never signed ones.",
+    "to": "Say how consent was obtained and which uses or people it does not yet cover; this prints in the data card. Attach the blank form, never signed ones.",
     "decision": "pending",
-    "final": "Say how consent was obtained and which uses or people it does not yet cover; it prints in the data card. Attach the blank form, never signed ones."
+    "final": "Say how consent was obtained and which uses or people it does not yet cover; this prints in the data card. Attach the blank form, never signed ones."
   },
   {
     "row": "Q-PP-13.answerPrompts.not_yet",
@@ -1705,9 +1705,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; it prints in the data card.",
+    "to": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; this prints in the data card.",
     "decision": "pending",
-    "final": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; it prints in the data card."
+    "final": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; this prints in the data card."
   },
   {
     "row": "Q-PP-13.answerPrompts.not_applicable",
@@ -1715,9 +1715,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data needs neither consent nor a waiver; it prints in the data card.",
+    "to": "Say why the data needs neither consent nor a waiver; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the data needs neither consent nor a waiver; it prints in the data card."
+    "final": "Say why the data needs neither consent nor a waiver; this prints in the data card."
   },
   {
     "row": "Q-PP-13.practiceSameAs",
@@ -1801,9 +1801,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Does not apply to this project",
+    "to": "No de-identification step applies",
     "decision": "pending",
-    "final": "Does not apply to this project"
+    "final": "No de-identification step applies"
   },
   {
     "row": "Q-PP-14.answerPrompts.done",
@@ -1811,9 +1811,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; it prints in the data card. Say who holds any linking key, by role, never the key itself.",
+    "to": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; this prints in the data card. Say who holds any linking key, by role, never the key itself.",
     "decision": "pending",
-    "final": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; it prints in the data card. Say who holds any linking key, by role, never the key itself."
+    "final": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; this prints in the data card. Say who holds any linking key, by role, never the key itself."
   },
   {
     "row": "Q-PP-14.answerPrompts.partly",
@@ -1821,9 +1821,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say what you have removed, replaced or coarsened so far and what remains; it prints in the data card.",
+    "to": "Say what you have removed, replaced or coarsened so far and what remains; this prints in the data card.",
     "decision": "pending",
-    "final": "Say what you have removed, replaced or coarsened so far and what remains; it prints in the data card."
+    "final": "Say what you have removed, replaced or coarsened so far and what remains; this prints in the data card."
   },
   {
     "row": "Q-PP-14.answerPrompts.not_yet",
@@ -1831,9 +1831,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say how and when you plan to de-identify the data; it prints in the data card.",
+    "to": "Say how and when you plan to de-identify the data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say how and when you plan to de-identify the data; it prints in the data card."
+    "final": "Say how and when you plan to de-identify the data; this prints in the data card."
   },
   {
     "row": "Q-PP-14.answerPrompts.not_applicable",
@@ -1841,9 +1841,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data needs no de-identification; it prints in the data card.",
+    "to": "Say why the data needs no de-identification; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the data needs no de-identification; it prints in the data card."
+    "final": "Say why the data needs no de-identification; this prints in the data card."
   },
   {
     "row": "Q-PP-14.practiceSameAs",
@@ -1937,9 +1937,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say what the checks found, where it is recorded and why any unticked check does not fit.",
+    "to": "Say what the checks found, where it is recorded and why any unticked check does not fit; this prints in the data card.",
     "decision": "pending",
-    "final": "Say what the checks found, where it is recorded and why any unticked check does not fit."
+    "final": "Say what the checks found, where it is recorded and why any unticked check does not fit; this prints in the data card."
   },
   {
     "row": "Q-PP-16.answerPrompts.partly",
@@ -1947,9 +1947,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which needed checks are still to do, and why any others do not fit your data.",
+    "to": "Say which needed checks are still to do, and why any others do not fit your data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which needed checks are still to do, and why any others do not fit your data."
+    "final": "Say which needed checks are still to do, and why any others do not fit your data; this prints in the data card."
   },
   {
     "row": "Q-PP-16.answerPrompts.not_yet",
@@ -1957,9 +1957,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say when you will run the checks, or what is blocking them.",
+    "to": "Say when you will run the checks, or what is blocking them; this prints in the data card.",
     "decision": "pending",
-    "final": "Say when you will run the checks, or what is blocking them."
+    "final": "Say when you will run the checks, or what is blocking them; this prints in the data card."
   },
   {
     "row": "Q-PP-16.answerPrompts.not_applicable",
@@ -1967,9 +1967,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no data quality check applies to your data.",
+    "to": "Say why no data quality check applies to your data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no data quality check applies to your data."
+    "final": "Say why no data quality check applies to your data; this prints in the data card."
   },
   {
     "row": "Q-PP-16.practiceSameAs",
@@ -2063,9 +2063,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say what you found, where it is recorded and why any unticked type does not fit.",
+    "to": "Say what you found, where it is recorded and why any unticked type does not fit; this prints in the data card.",
     "decision": "pending",
-    "final": "Say what you found, where it is recorded and why any unticked type does not fit."
+    "final": "Say what you found, where it is recorded and why any unticked type does not fit; this prints in the data card."
   },
   {
     "row": "Q-PP-17.answerPrompts.partly",
@@ -2073,9 +2073,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which fitting types are still to assess, and why any others do not fit.",
+    "to": "Say which fitting types are still to assess, and why any others do not fit; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which fitting types are still to assess, and why any others do not fit."
+    "final": "Say which fitting types are still to assess, and why any others do not fit; this prints in the data card."
   },
   {
     "row": "Q-PP-17.answerPrompts.not_yet",
@@ -2083,9 +2083,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say when you will assess bias, or what is blocking it.",
+    "to": "Say when you will assess bias, or what is blocking it; this prints in the data card.",
     "decision": "pending",
-    "final": "Say when you will assess bias, or what is blocking it."
+    "final": "Say when you will assess bias, or what is blocking it; this prints in the data card."
   },
   {
     "row": "Q-PP-17.answerPrompts.not_applicable",
@@ -2093,9 +2093,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no bias type applies to your data.",
+    "to": "Say why no bias type applies to your data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no bias type applies to your data."
+    "final": "Say why no bias type applies to your data; this prints in the data card."
   },
   {
     "row": "Q-PP-17.practiceSameAs",
@@ -2189,9 +2189,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "Selection bias cannot arise here",
+    "to": "No selection-bias check applies",
     "decision": "pending",
-    "final": "Selection bias cannot arise here"
+    "final": "No selection-bias check applies"
   },
   {
     "row": "Q-PP-18.answerPrompts.done",
@@ -2199,9 +2199,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; it prints in the data card.",
+    "to": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; this prints in the data card.",
     "decision": "pending",
-    "final": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; it prints in the data card."
+    "final": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; this prints in the data card."
   },
   {
     "row": "Q-PP-18.answerPrompts.partly",
@@ -2209,9 +2209,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say whether it is a sample or a full collection, what you have assessed and what is still open; it prints in the data card.",
+    "to": "Say whether it is a sample or a full collection, what you have assessed and what is still open; this prints in the data card.",
     "decision": "pending",
-    "final": "Say whether it is a sample or a full collection, what you have assessed and what is still open; it prints in the data card."
+    "final": "Say whether it is a sample or a full collection, what you have assessed and what is still open; this prints in the data card."
   },
   {
     "row": "Q-PP-18.answerPrompts.not_yet",
@@ -2219,9 +2219,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say whether it is a sample or a full collection, how it is gathered and your plan; it prints in the data card.",
+    "to": "Say whether it is a sample or a full collection, how it is gathered and your plan; this prints in the data card.",
     "decision": "pending",
-    "final": "Say whether it is a sample or a full collection, how it is gathered and your plan; it prints in the data card."
+    "final": "Say whether it is a sample or a full collection, how it is gathered and your plan; this prints in the data card."
   },
   {
     "row": "Q-PP-18.answerPrompts.not_applicable",
@@ -2229,9 +2229,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no one could be missing from the data; it prints in the data card.",
+    "to": "Say why no one could be missing from the data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no one could be missing from the data; it prints in the data card."
+    "final": "Say why no one could be missing from the data; this prints in the data card."
   },
   {
     "row": "Q-PP-18.practiceSameAs",
@@ -2335,9 +2335,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say which past patterns you examined, what you found and changed, and where it is recorded; it prints in the data card.",
+    "to": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which past patterns you examined, what you found and changed, and where it is recorded; it prints in the data card."
+    "final": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card."
   },
   {
     "row": "Q-PP-19.answerPrompts.partly",
@@ -2345,9 +2345,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which past patterns you have examined and which remain; it prints in the data card.",
+    "to": "Say which past patterns you have examined and which remain; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which past patterns you have examined and which remain; it prints in the data card."
+    "final": "Say which past patterns you have examined and which remain; this prints in the data card."
   },
   {
     "row": "Q-PP-19.answerPrompts.not_yet",
@@ -2355,9 +2355,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which past patterns you plan to examine, and when; it prints in the data card.",
+    "to": "Say which past patterns you plan to examine, and when; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which past patterns you plan to examine, and when; it prints in the data card."
+    "final": "Say which past patterns you plan to examine, and when; this prints in the data card."
   },
   {
     "row": "Q-PP-19.answerPrompts.not_applicable",
@@ -2365,9 +2365,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the data holds no past decisions about people; it prints in the data card.",
+    "to": "Say why the data holds no past decisions about people; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the data holds no past decisions about people; it prints in the data card."
+    "final": "Say why the data holds no past decisions about people; this prints in the data card."
   },
   {
     "row": "Q-PP-19.practiceSameAs",
@@ -2391,9 +2391,9 @@
     "file": "questionBank.json",
     "field": "text",
     "from": "Have you checked whether your training data is recent enough for the time the system will be used?",
-    "to": "Have you checked your data is recent enough for when the system will be used?",
+    "to": "Have you checked whether your data is recent enough for when the system will be used?",
     "decision": "pending",
-    "final": "Have you checked your data is recent enough for when the system will be used?"
+    "final": "Have you checked whether your data is recent enough for when the system will be used?"
   },
   {
     "row": "Q-PP-20.expectedPractice",
@@ -2451,9 +2451,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "The data's age does not matter",
+    "to": "No recency check applies",
     "decision": "pending",
-    "final": "The data's age does not matter"
+    "final": "No recency check applies"
   },
   {
     "row": "Q-PP-20.answerPrompts.done",
@@ -2461,9 +2461,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Give the period covered, the changes since that matter, what you did and where it is recorded; it prints in the data card.",
+    "to": "Give the period covered, the changes since that matter, what you did and where it is recorded; this prints in the data card.",
     "decision": "pending",
-    "final": "Give the period covered, the changes since that matter, what you did and where it is recorded; it prints in the data card."
+    "final": "Give the period covered, the changes since that matter, what you did and where it is recorded; this prints in the data card."
   },
   {
     "row": "Q-PP-20.answerPrompts.partly",
@@ -2471,9 +2471,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Give the period the data covers, the changes checked and those still to check; it prints in the data card.",
+    "to": "Give the period the data covers, the changes checked and those still to check; this prints in the data card.",
     "decision": "pending",
-    "final": "Give the period the data covers, the changes checked and those still to check; it prints in the data card."
+    "final": "Give the period the data covers, the changes checked and those still to check; this prints in the data card."
   },
   {
     "row": "Q-PP-20.answerPrompts.not_yet",
@@ -2481,9 +2481,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Give the period the data covers and when you will check for changes; it prints in the data card.",
+    "to": "Give the period the data covers and when you will check for changes; this prints in the data card.",
     "decision": "pending",
-    "final": "Give the period the data covers and when you will check for changes; it prints in the data card."
+    "final": "Give the period the data covers and when you will check for changes; this prints in the data card."
   },
   {
     "row": "Q-PP-20.answerPrompts.not_applicable",
@@ -2491,9 +2491,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the period of the data does not matter for this use; it prints in the data card.",
+    "to": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the period of the data does not matter for this use; it prints in the data card."
+    "final": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card."
   },
   {
     "row": "Q-PP-20.practiceSameAs",
@@ -2587,9 +2587,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; it prints in the data card. Name people by role, never by name.",
+    "to": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; this prints in the data card. Name people by role, never by name.",
     "decision": "pending",
-    "final": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; it prints in the data card. Name people by role, never by name."
+    "final": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; this prints in the data card. Name people by role, never by name."
   },
   {
     "row": "Q-PP-21.answerPrompts.partly",
@@ -2597,9 +2597,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say which rules are set and which are still open; it prints in the data card. Name people by role, never by name.",
+    "to": "Say which rules are set and which are still open; this prints in the data card. Name people by role, never by name.",
     "decision": "pending",
-    "final": "Say which rules are set and which are still open; it prints in the data card. Name people by role, never by name."
+    "final": "Say which rules are set and which are still open; this prints in the data card. Name people by role, never by name."
   },
   {
     "row": "Q-PP-21.answerPrompts.not_yet",
@@ -2607,9 +2607,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say where the data is stored now, who can use it and your plan; it prints in the data card. Name people by role, never by name.",
+    "to": "Say where the data is stored now, who can use it and your plan; this prints in the data card. Name people by role, never by name.",
     "decision": "pending",
-    "final": "Say where the data is stored now, who can use it and your plan; it prints in the data card. Name people by role, never by name."
+    "final": "Say where the data is stored now, who can use it and your plan; this prints in the data card. Name people by role, never by name."
   },
   {
     "row": "Q-PP-21.answerPrompts.not_applicable",
@@ -2617,9 +2617,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the project holds no data to govern; it prints in the data card.",
+    "to": "Say why the project holds no data to govern; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why the project holds no data to govern; it prints in the data card."
+    "final": "Say why the project holds no data to govern; this prints in the data card."
   },
   {
     "row": "Q-PP-21.practiceSameAs",
@@ -2693,9 +2693,9 @@
     "file": "questionBank.json",
     "field": "answerLabels.not_applicable",
     "from": null,
-    "to": "No rare cases apply",
+    "to": "No rare-case check applies",
     "decision": "pending",
-    "final": "No rare cases apply"
+    "final": "No rare-case check applies"
   },
   {
     "row": "Q-PP-22.answerPrompts.done",
@@ -2703,9 +2703,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; it prints in the data card and model card.",
+    "to": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; it prints in the data card and model card."
+    "final": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-22.answerPrompts.partly",
@@ -2713,9 +2713,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Name the rare cases counted so far and those still to count; it prints in the data card and model card.",
+    "to": "Name the rare cases counted so far and those still to count; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Name the rare cases counted so far and those still to count; it prints in the data card and model card."
+    "final": "Name the rare cases counted so far and those still to count; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-22.answerPrompts.not_yet",
@@ -2723,9 +2723,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Name the rare cases you expect the system to meet and when you will count them; it prints in the data card and model card.",
+    "to": "Name the rare cases you expect the system to meet and when you will count them; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Name the rare cases you expect the system to meet and when you will count them; it prints in the data card and model card."
+    "final": "Name the rare cases you expect the system to meet and when you will count them; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-22.answerPrompts.not_applicable",
@@ -2733,9 +2733,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why the system will meet no rare cases; it prints in the data card and model card.",
+    "to": "Say why the system will meet no rare cases; this prints in the data card and model card.",
     "decision": "pending",
-    "final": "Say why the system will meet no rare cases; it prints in the data card and model card."
+    "final": "Say why the system will meet no rare cases; this prints in the data card and model card."
   },
   {
     "row": "Q-PP-22.practiceSameAs",
@@ -2769,9 +2769,9 @@
     "file": "questionBank.json",
     "field": "expectedPractice",
     "from": "People who know the field the data comes from, such as clinicians, agronomists or teachers, reviewed a sample of the data and its labels. They looked for errors and for meaning lost in recording, and the team wrote down what they found and what it changed.",
-    "to": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and changed.",
+    "to": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and what you changed.",
     "decision": "pending",
-    "final": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and changed."
+    "final": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and what you changed."
   },
   {
     "row": "Q-PP-23.whyAsked",
@@ -2779,9 +2779,9 @@
     "file": "questionBank.json",
     "field": "whyAsked",
     "from": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic, and their review is often the cheapest way to find them.",
-    "to": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, often most cheaply.",
+    "to": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, and often find them most cheaply.",
     "decision": "pending",
-    "final": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, often most cheaply."
+    "final": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, and often find them most cheaply."
   },
   {
     "row": "Q-PP-23.reasonPrompt",
@@ -2839,9 +2839,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.done",
     "from": null,
-    "to": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; it prints in the data card.",
+    "to": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; this prints in the data card.",
     "decision": "pending",
-    "final": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; it prints in the data card."
+    "final": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; this prints in the data card."
   },
   {
     "row": "Q-PP-23.answerPrompts.partly",
@@ -2849,9 +2849,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.partly",
     "from": null,
-    "to": "Say who reviewed which part, by role, and what is still to review; it prints in the data card.",
+    "to": "Say who reviewed which part, by role, and what is still to review; this prints in the data card.",
     "decision": "pending",
-    "final": "Say who reviewed which part, by role, and what is still to review; it prints in the data card."
+    "final": "Say who reviewed which part, by role, and what is still to review; this prints in the data card."
   },
   {
     "row": "Q-PP-23.answerPrompts.not_yet",
@@ -2859,9 +2859,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_yet",
     "from": null,
-    "to": "Say which experts you plan to involve, by role, and when; it prints in the data card.",
+    "to": "Say which experts you plan to involve, by role, and when; this prints in the data card.",
     "decision": "pending",
-    "final": "Say which experts you plan to involve, by role, and when; it prints in the data card."
+    "final": "Say which experts you plan to involve, by role, and when; this prints in the data card."
   },
   {
     "row": "Q-PP-23.answerPrompts.not_applicable",
@@ -2869,9 +2869,9 @@
     "file": "questionBank.json",
     "field": "answerPrompts.not_applicable",
     "from": null,
-    "to": "Say why no domain expertise applies to this data; it prints in the data card.",
+    "to": "Say why no domain expertise applies to this data; this prints in the data card.",
     "decision": "pending",
-    "final": "Say why no domain expertise applies to this data; it prints in the data card."
+    "final": "Say why no domain expertise applies to this data; this prints in the data card."
   },
   {
     "row": "Q-PP-23.practiceSameAs",

@@ -24,7 +24,7 @@
               "gaps": [
                 "PP-01"
               ],
-              "expectedPractice": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and and risks to the people affected, and record your choice and why.",
+              "expectedPractice": "Before building, you compare AI with at least one simpler method and one non-computational option on expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected, and record your choice and why.",
               "whyAsked": "AI that rules or a manual process could match still costs money, power and upkeep, and its errors fall on the people it serves.",
               "evidenceExamples": [
                 "a C-01 alternatives analysis, filled in",
@@ -56,7 +56,7 @@
               "gaps": [
                 "PP-01"
               ],
-              "expectedPractice": "Your problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
+              "expectedPractice": "Your written problem statement names who has the problem, the decision or task the system will support, and checkable success: the measure, your target and what would count as not good enough.",
               "whyAsked": "Without a written problem statement, nobody can later tell whether the system helped, and work drifts towards whatever the data allows.",
               "evidenceExamples": [
                 "the problem statement in the protocol or concept note",
@@ -67,13 +67,13 @@
                 "done": "Yes, it is written down",
                 "partly": "Partly, some of it is defined",
                 "not_yet": "No, not yet",
-                "not_applicable": "A problem statement does not apply"
+                "not_applicable": "No problem statement applies"
               },
               "answerPrompts": {
-                "done": "State the problem, who it affects, your success measures and where the full statement is kept; it prints in the data card and model card.",
-                "partly": "State the problem and the measures defined so far, then what is still open; it prints in the data card and model card.",
-                "not_yet": "State the problem as you see it now and when you will define it; it prints in the data card and model card.",
-                "not_applicable": "Say why this system needs no problem statement; it prints in the data card and model card."
+                "done": "State the problem, who it affects, your success measures and where the full statement is kept; this prints in the data card and model card.",
+                "partly": "State the problem and the measures defined so far, then what is still open; this prints in the data card and model card.",
+                "not_yet": "State the problem as you see it now and when you will define it; this prints in the data card and model card.",
+                "not_applicable": "Say why this system needs no problem statement; this prints in the data card and model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -88,7 +88,7 @@
               "gaps": [
                 "PP-04"
               ],
-              "expectedPractice": "You list the groups the system affects and how: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
+              "expectedPractice": "You list the groups the system affects and how it affects each: those who use its outputs, those the outputs are about, those whose data trains it, and others who carry its costs or benefits.",
               "whyAsked": "Nobody plans for harms to groups left off the list, and later questions on groups, consent and consultation build on it.",
               "evidenceExamples": [
                 "a stakeholder list or map in the protocol",
@@ -99,13 +99,13 @@
                 "done": "Yes, we listed them",
                 "partly": "Partly, some groups so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "No one is affected"
+                "not_applicable": "No list of those affected applies"
               },
               "answerPrompts": {
-                "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; it prints in the model card.",
-                "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; it prints in the model card.",
-                "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; it prints in the model card.",
-                "not_applicable": "Say why the system affects no one; it prints in the model card."
+                "done": "Users first, name each group by role or category, never as individuals, how it is affected and where the list is kept; this prints in the model card.",
+                "partly": "Users first, name the groups listed so far by role, never as individuals, and those still missing; this prints in the model card.",
+                "not_yet": "Name the users you expect, by role, never as individuals, and when you will list the rest; this prints in the model card.",
+                "not_applicable": "Say why the system affects no one; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -121,7 +121,7 @@
                 "PP-03",
                 "PP-04"
               ],
-              "expectedPractice": "You name who could be harmed or left out where the system is used, including locally marginalised groups, and record for each the likely effect and what you will check or change.",
+              "expectedPractice": "You name the groups who could be harmed or left out where the system is used, including locally marginalised groups, and record for each how the system could affect it and what you will check or change.",
               "whyAsked": "AI harms fall most often on groups already disadvantaged and least present in the data, and which groups depends on the setting.",
               "evidenceExamples": [
                 "the group effects section of the protocol or C-02 assessment",
@@ -132,7 +132,7 @@
                 "done": "Yes, we assessed them",
                 "partly": "Partly, some groups so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "No group could be affected differently"
+                "not_applicable": "No group assessment applies"
               },
               "answerPrompts": {
                 "done": "Name each group, its main effect, your response to the largest risk and where it is recorded. Describe groups, never individuals; upload no records about them.",
@@ -162,7 +162,7 @@
                 "the decision note on changes made"
               ],
               "answerLabels": {
-                "done": "Yes, as far as the risk needs",
+                "done": "Yes, we assessed it",
                 "partly": "Partly, some rights so far",
                 "not_yet": "No, not yet",
                 "not_applicable": "No rights assessment applies"
@@ -198,12 +198,12 @@
                 "done": "Yes, we checked and filled any gaps",
                 "partly": "Partly, some gaps filled",
                 "not_yet": "No, not yet",
-                "not_applicable": "Checking perspectives does not apply"
+                "not_applicable": "No perspectives check applies"
               },
               "answerPrompts": {
                 "done": "Name any missing perspectives, who now provides each by role, and where the list is kept. Record no one's gender, nationality or other personal details.",
                 "partly": "Name the gaps filled, by role, and those still open. Record no one's personal details.",
-                "not_yet": "Name the perspectives you lack and how you plan to bring them in.",
+                "not_yet": "Name the perspectives you lack and how you plan to bring them in. Record no one's personal details.",
                 "not_applicable": "Say why checking for missing perspectives does not apply to this problem."
               },
               "practiceSameAs": [
@@ -233,10 +233,10 @@
                 "not_applicable": "No estimate is needed"
               },
               "answerPrompts": {
-                "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; it prints in the model card.",
-                "partly": "Give what you have estimated so far and what is still missing; it prints in the model card.",
-                "not_yet": "Give the computing you expect and when you will estimate it; it prints in the model card.",
-                "not_applicable": "Say why the system needs no estimate of computing or energy; it prints in the model card."
+                "done": "Give the computing hours and energy, the method, your choice and where the estimate is kept; this prints in the model card.",
+                "partly": "Give what you have estimated so far and what is still missing; this prints in the model card.",
+                "not_yet": "Give the computing you expect and when you will estimate it; this prints in the model card.",
+                "not_applicable": "Say why the system needs no estimate of computing or energy; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -281,10 +281,10 @@
                 "not_applicable": "No data source is used"
               },
               "answerPrompts": {
-                "done": "Say why the data was gathered, then its sources, methods, period and setting; it prints in the data card. Link the datasheet, never the data itself.",
-                "partly": "Say why the data was gathered, what is recorded so far and what is not; it prints in the data card. Never upload the data itself.",
-                "not_yet": "Say why the data is being gathered and what you know of its sources; it prints in the data card.",
-                "not_applicable": "Say why no data source needs a record; it prints in the data card."
+                "done": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself.",
+                "partly": "Say why the data was gathered, what is recorded so far and what is not; this prints in the data card. Never upload the data itself.",
+                "not_yet": "Say why the data is being gathered, what you know of its sources and when you will record them; this prints in the data card.",
+                "not_applicable": "Say why the project uses no data source; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -293,7 +293,7 @@
             },
             {
               "id": "Q-PP-09",
-              "text": "Have you checked your data represents the population the system will serve?",
+              "text": "Have you checked whether your data represents the population the system will serve?",
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
@@ -312,13 +312,13 @@
                 "done": "Yes, group by group",
                 "partly": "Partly, for some groups",
                 "not_yet": "No, not yet",
-                "not_applicable": "No population to compare with"
+                "not_applicable": "No population check applies"
               },
               "answerPrompts": {
-                "done": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; it prints in the data card and model card.",
-                "partly": "Give the make-up checked so far and the groups still to check, in counts; it prints in the data card and model card.",
-                "not_yet": "Give what you know of the make-up so far, in counts, and your plan; it prints in the data card and model card.",
-                "not_applicable": "Say why no population comparison applies; it prints in the data card and model card."
+                "done": "Give the make-up by group and place in counts, never records, then the gaps, what you did and where it is kept; this prints in the data card and model card.",
+                "partly": "Give the make-up checked so far and the groups still to check, in counts, never records; this prints in the data card and model card.",
+                "not_yet": "Give what you know of the make-up so far, in counts, never records, and your plan; this prints in the data card and model card.",
+                "not_applicable": "Say why no population comparison applies; this prints in the data card and model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -344,13 +344,13 @@
                 "done": "Yes, we checked and decided",
                 "partly": "Partly, some inputs so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "Does not apply to this project"
+                "not_applicable": "No stand-in check applies"
               },
               "answerPrompts": {
-                "done": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; it prints in the model card.",
-                "partly": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; it prints in the model card. Record no one's attributes.",
-                "not_yet": "Say whether the model uses or predicts a sensitive attribute, and your plan; it prints in the model card. Record no one's attributes.",
-                "not_applicable": "Say why no input can stand in for a sensitive attribute; it prints in the model card."
+                "done": "Say first whether the model uses or predicts a sensitive attribute, then the inputs checked, how, your choices and where they are recorded; this prints in the model card. Record no one's attributes.",
+                "partly": "Say whether the model uses or predicts a sensitive attribute, then the checks done and still to do; this prints in the model card. Record no one's attributes.",
+                "not_yet": "Say whether the model uses or predicts a sensitive attribute, and your plan; this prints in the model card. Record no one's attributes.",
+                "not_applicable": "Say whether the model uses or predicts a sensitive attribute, and why no check for stand-ins applies; this prints in the model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -379,10 +379,10 @@
                 "not_applicable": "Our data has no labels"
               },
               "answerPrompts": {
-                "done": "Say how labels were assigned and by whom, by role; it prints in the data card. Attach the agreement results.",
-                "partly": "Say how labels were assigned and by whom, by role, and which checks remain; it prints in the data card.",
-                "not_yet": "Say how labels are assigned and by whom, by role, and when you will check them; it prints in the data card.",
-                "not_applicable": "Say why the data has no labels to check; it prints in the data card."
+                "done": "Say how labels were assigned and by whom, by role; this prints in the data card. Attach the agreement results.",
+                "partly": "Say how labels were assigned and by whom, by role, which checks are done and which remain; this prints in the data card.",
+                "not_yet": "Say how labels are assigned and by whom, by role, and when you will check them; this prints in the data card.",
+                "not_applicable": "Say why the data has no labels to check; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -433,10 +433,10 @@
                 "not_applicable": "No consent or waiver is needed"
               },
               "answerPrompts": {
-                "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; it prints in the data card. Attach the blank form, never signed ones.",
-                "partly": "Say how consent was obtained and which uses or people it does not yet cover; it prints in the data card. Attach the blank form, never signed ones.",
-                "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; it prints in the data card.",
-                "not_applicable": "Say why the data needs neither consent nor a waiver; it prints in the data card."
+                "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones.",
+                "partly": "Say how consent was obtained and which uses or people it does not yet cover; this prints in the data card. Attach the blank form, never signed ones.",
+                "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; this prints in the data card.",
+                "not_applicable": "Say why the data needs neither consent nor a waiver; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -466,13 +466,13 @@
                 "done": "Yes, we de-identified it",
                 "partly": "Partly, some details remain",
                 "not_yet": "No, not yet",
-                "not_applicable": "Does not apply to this project"
+                "not_applicable": "No de-identification step applies"
               },
               "answerPrompts": {
-                "done": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; it prints in the data card. Say who holds any linking key, by role, never the key itself.",
-                "partly": "Say what you have removed, replaced or coarsened so far and what remains; it prints in the data card.",
-                "not_yet": "Say how and when you plan to de-identify the data; it prints in the data card.",
-                "not_applicable": "Say why the data needs no de-identification; it prints in the data card."
+                "done": "Say what you removed, replaced or coarsened, how you checked and where it is recorded; this prints in the data card. Say who holds any linking key, by role, never the key itself.",
+                "partly": "Say what you have removed, replaced or coarsened so far and what remains; this prints in the data card.",
+                "not_yet": "Say how and when you plan to de-identify the data; this prints in the data card.",
+                "not_applicable": "Say why the data needs no de-identification; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -566,10 +566,10 @@
                 "not_applicable": "No quality check applies"
               },
               "answerPrompts": {
-                "done": "Say what the checks found, where it is recorded and why any unticked check does not fit.",
-                "partly": "Say which needed checks are still to do, and why any others do not fit your data.",
-                "not_yet": "Say when you will run the checks, or what is blocking them.",
-                "not_applicable": "Say why no data quality check applies to your data."
+                "done": "Say what the checks found, where it is recorded and why any unticked check does not fit; this prints in the data card.",
+                "partly": "Say which needed checks are still to do, and why any others do not fit your data; this prints in the data card.",
+                "not_yet": "Say when you will run the checks, or what is blocking them; this prints in the data card.",
+                "not_applicable": "Say why no data quality check applies to your data; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -656,10 +656,10 @@
                 "not_applicable": "No bias type applies"
               },
               "answerPrompts": {
-                "done": "Say what you found, where it is recorded and why any unticked type does not fit.",
-                "partly": "Say which fitting types are still to assess, and why any others do not fit.",
-                "not_yet": "Say when you will assess bias, or what is blocking it.",
-                "not_applicable": "Say why no bias type applies to your data."
+                "done": "Say what you found, where it is recorded and why any unticked type does not fit; this prints in the data card.",
+                "partly": "Say which fitting types are still to assess, and why any others do not fit; this prints in the data card.",
+                "not_yet": "Say when you will assess bias, or what is blocking it; this prints in the data card.",
+                "not_applicable": "Say why no bias type applies to your data; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -686,13 +686,13 @@
                 "done": "Yes, we assessed it",
                 "partly": "Partly, for some sources",
                 "not_yet": "No, not yet",
-                "not_applicable": "Selection bias cannot arise here"
+                "not_applicable": "No selection-bias check applies"
               },
               "answerPrompts": {
-                "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; it prints in the data card.",
-                "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; it prints in the data card.",
-                "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; it prints in the data card.",
-                "not_applicable": "Say why no one could be missing from the data; it prints in the data card."
+                "done": "Say if it is a sample or a full collection, how it was gathered, who could be missed, what you did and where it is recorded; this prints in the data card.",
+                "partly": "Say whether it is a sample or a full collection, what you have assessed and what is still open; this prints in the data card.",
+                "not_yet": "Say whether it is a sample or a full collection, how it is gathered and your plan; this prints in the data card.",
+                "not_applicable": "Say why no one could be missing from the data; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -721,10 +721,10 @@
                 "not_applicable": "The data holds no past decisions"
               },
               "answerPrompts": {
-                "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; it prints in the data card.",
-                "partly": "Say which past patterns you have examined and which remain; it prints in the data card.",
-                "not_yet": "Say which past patterns you plan to examine, and when; it prints in the data card.",
-                "not_applicable": "Say why the data holds no past decisions about people; it prints in the data card."
+                "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card.",
+                "partly": "Say which past patterns you have examined and which remain; this prints in the data card.",
+                "not_yet": "Say which past patterns you plan to examine, and when; this prints in the data card.",
+                "not_applicable": "Say why the data holds no past decisions about people; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -733,7 +733,7 @@
             },
             {
               "id": "Q-PP-20",
-              "text": "Have you checked your data is recent enough for when the system will be used?",
+              "text": "Have you checked whether your data is recent enough for when the system will be used?",
               "type": "likert-5",
               "principle": "Reproducibility & Accountability",
               "gaps": [
@@ -751,13 +751,13 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some changes checked",
                 "not_yet": "No, not yet",
-                "not_applicable": "The data's age does not matter"
+                "not_applicable": "No recency check applies"
               },
               "answerPrompts": {
-                "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; it prints in the data card.",
-                "partly": "Give the period the data covers, the changes checked and those still to check; it prints in the data card.",
-                "not_yet": "Give the period the data covers and when you will check for changes; it prints in the data card.",
-                "not_applicable": "Say why the period of the data does not matter for this use; it prints in the data card."
+                "done": "Give the period covered, the changes since that matter, what you did and where it is recorded; this prints in the data card.",
+                "partly": "Give the period the data covers, the changes checked and those still to check; this prints in the data card.",
+                "not_yet": "Give the period the data covers and when you will check for changes; this prints in the data card.",
+                "not_applicable": "Give the period the data covers and say why its age does not matter for this use; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -787,10 +787,10 @@
                 "not_applicable": "We hold no data to govern"
               },
               "answerPrompts": {
-                "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; it prints in the data card. Name people by role, never by name.",
-                "partly": "Say which rules are set and which are still open; it prints in the data card. Name people by role, never by name.",
-                "not_yet": "Say where the data is stored now, who can use it and your plan; it prints in the data card. Name people by role, never by name.",
-                "not_applicable": "Say why the project holds no data to govern; it prints in the data card."
+                "done": "Say who can use the data, where it is stored, the sharing conditions, how long it is kept and where the rules are written; this prints in the data card. Name people by role, never by name.",
+                "partly": "Say which rules are set and which are still open; this prints in the data card. Name people by role, never by name.",
+                "not_yet": "Say where the data is stored now, who can use it and your plan; this prints in the data card. Name people by role, never by name.",
+                "not_applicable": "Say why the project holds no data to govern; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -817,13 +817,13 @@
                 "done": "Yes, we counted them",
                 "partly": "Partly, some rare cases",
                 "not_yet": "No, not yet",
-                "not_applicable": "No rare cases apply"
+                "not_applicable": "No rare-case check applies"
               },
               "answerPrompts": {
-                "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; it prints in the data card and model card.",
-                "partly": "Name the rare cases counted so far and those still to count; it prints in the data card and model card.",
-                "not_yet": "Name the rare cases you expect the system to meet and when you will count them; it prints in the data card and model card.",
-                "not_applicable": "Say why the system will meet no rare cases; it prints in the data card and model card."
+                "done": "Name the rare cases, how many of each the data holds, what you did about those too few and where it is recorded; this prints in the data card and model card.",
+                "partly": "Name the rare cases counted so far and those still to count; this prints in the data card and model card.",
+                "not_yet": "Name the rare cases you expect the system to meet and when you will count them; this prints in the data card and model card.",
+                "not_applicable": "Say why the system will meet no rare cases; this prints in the data card and model card."
               },
               "practiceSameAs": [
                 "5.0.0",
@@ -839,8 +839,8 @@
                 "PP-07",
                 "IP-02"
               ],
-              "expectedPractice": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and changed.",
-              "whyAsked": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, often most cheaply.",
+              "expectedPractice": "People who know the field, such as clinicians, agronomists or teachers, review a sample of the data and labels for errors and meaning lost in recording, and you record what they found and what you changed.",
+              "whyAsked": "Domain experts notice errors that code checks miss, such as a diagnosis code used differently at one clinic, and often find them most cheaply.",
               "evidenceExamples": [
                 "notes from the expert review",
                 "a list of corrections made after the review",
@@ -853,10 +853,10 @@
                 "not_applicable": "No domain expertise applies"
               },
               "answerPrompts": {
-                "done": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; it prints in the data card.",
-                "partly": "Say who reviewed which part, by role, and what is still to review; it prints in the data card.",
-                "not_yet": "Say which experts you plan to involve, by role, and when; it prints in the data card.",
-                "not_applicable": "Say why no domain expertise applies to this data; it prints in the data card."
+                "done": "Say who reviewed the data, by role, what they looked at and found, what changed and where it is recorded; this prints in the data card.",
+                "partly": "Say who reviewed which part, by role, and what is still to review; this prints in the data card.",
+                "not_yet": "Say which experts you plan to involve, by role, and when; this prints in the data card.",
+                "not_applicable": "Say why no domain expertise applies to this data; this prints in the data card."
               },
               "practiceSameAs": [
                 "5.0.0",

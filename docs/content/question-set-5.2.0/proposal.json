@@ -66,7 +66,7 @@
       "action": "reword",
       "id": "Q-PP-09",
       "originalText": "Have you assessed whether your training data is representative of the target population?",
-      "text": "Have you checked your data represents the population the system will serve?",
+      "text": "Have you checked whether your data represents the population the system will serve?",
       "reason": "Survivor of Q-PP-10: judging representativeness needs the subgroup distribution Q-PP-10 asked for. Feeds DC-23, MC-16 and, after the re-point, MC-15."
     },
     {
@@ -150,7 +150,7 @@
       "action": "reword",
       "id": "Q-PP-20",
       "originalText": "Have you assessed the temporal relevance of your training data?",
-      "text": "Have you checked your data is recent enough for when the system will be used?",
+      "text": "Have you checked whether your data is recent enough for when the system will be used?",
       "reason": "The only pre-processing question on whether the data is still current; feeds DC-13."
     },
     {
