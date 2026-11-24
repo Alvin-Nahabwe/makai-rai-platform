@@ -334,12 +334,12 @@ const CONTENT_EXCLUSIONS: ContentExclusions = {
  * reasonMustSay (code and status are signed too, and excluded above as codes). Only the message uses it.
  */
 const SIGNED_KEYS: SignedKeys = {
-  'questionBank.json': ['text', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'helpText', 'example'],
+  'questionBank.json': ['text', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'helpText', 'example', 'answerLabels', 'answerPrompts'],
   'documentHelp.json': '*',
   'reasonCodes.json': ['code', 'status', 'label', 'useWhen', 'reasonMustSay'],
 };
 /** Signed keys that no 5.1.0 question carries: allowed to be absent, scanned and signed when they appear. */
-const SIGNED_KEYS_MAY_BE_ABSENT = ['helpText', 'example'];
+const SIGNED_KEYS_MAY_BE_ABSENT = ['helpText', 'example', 'reasonPrompt', 'answerLabels', 'answerPrompts', 'practiceSameAs'];
 /**
  * The strings scope (2) reads, per running version. Tolerance 0: content changes only by a new, signed content
  * version, and that change is the moment to record its count here; a field that vanishes or a key newly excluded

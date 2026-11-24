@@ -7,7 +7,7 @@ import {
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
-import { TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION } from '@/lib/vocabulary/terms';
+import { TERM_STATUS, TERM_DONE, TERM_NOT_APPLICABLE, TERM_NOT_YET, TERM_PARTLY, TERM_PERSONAL_DATA_QUESTION_SCOPE_QUESTION } from '@/lib/vocabulary/terms';
 
 const ME = 'user-me';
 
@@ -34,6 +34,10 @@ describe('lib/decision/copy.ts', () => {
     // plan line 926: the help sentences are the vocabulary's own definitions, character for character
     expect(STATUS_OPTIONS.map((o) => o.help)).toEqual([TERM_DONE, TERM_PARTLY, TERM_NOT_YET, TERM_NOT_APPLICABLE].map((t) => t.definition));
     expect(FINDING_NOTE).toBe('If you choose Partly or Not yet, a finding is raised for this question (or stays open).');
+  });
+
+  it("TERM_STATUS's definition says each question names the answers in its own words", () => {
+    expect(TERM_STATUS.definition).toBe("Your team's answer to a question, in that question's words. It counts as Done, Partly, Not yet or Not applicable.");
   });
 
   it('countsAs names the generic word an answer counts as', () => {

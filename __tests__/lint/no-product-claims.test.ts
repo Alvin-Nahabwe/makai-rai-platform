@@ -278,7 +278,7 @@ type Allow = { ids: ReadonlySet<string>; paths: readonly PathEntry[] };
 const SOURCE_ENTRY_PATH = /^(app|components)\/(?!.*\.\.)[^#]+\.tsx?$/;
 const isSourceEntry = (e: AllowEntry): e is PathEntry => 'path' in e && SOURCE_ENTRY_PATH.test(e.path);
 
-const QUESTION_FIELDS = ['text', 'helpText', 'example', 'options', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'principle'];
+const QUESTION_FIELDS = ['text', 'helpText', 'example', 'options', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'principle', 'answerLabels', 'answerPrompts'];
 
 /**
  * A string of a content file: where it is (`file`, JSON `path`), how a failure names it (`where`), the ids of
@@ -1033,6 +1033,25 @@ describe('no product claims', () => {
         'projectConfig.json#description',
         'questionBank.json#stages.pre-processing.modules[0].questions[0].options[0].text',
         'questionBank.json#stages.pre-processing.modules[0].questions[0].principle',
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the claims scan reads answerLabels and answerPrompts', () => {
+    const dir = plantedBundle({
+      questions: [{
+        id: 'Q-PO-30', text: 'Fine.',
+        answerLabels: { done: 'Fine', partly: 'Audit-ready', not_yet: 'Not yet', not_applicable: 'Not applicable' },
+        answerPrompts: { done: 'Fine.', partly: 'Do you check your compliance with the law?' },
+      }],
+    });
+    try {
+      const r = scanContent(dir, allowFrom([]));
+      expect(r.hits.map((h) => h.path).sort()).toEqual([
+        'stages.pre-processing.modules[0].questions[0].answerLabels.partly',
+        'stages.pre-processing.modules[0].questions[0].answerPrompts.partly',
       ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

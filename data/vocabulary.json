@@ -709,7 +709,7 @@
       "group": "Recording a decision",
       "concept": "Status",
       "term": "status",
-      "definition": "Your team's short answer to a question: Done, Partly, Not yet or Not applicable.",
+      "definition": "Your team's answer to a question, in that question's words. It counts as Done, Partly, Not yet or Not applicable.",
       "ownerDecision": false,
       "defineOnFirstUse": false,
       "retired": [

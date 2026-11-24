@@ -54,6 +54,7 @@
     "emergency-access": "How MAK-AI's server staff reach the server when the normal way does not work. Owners and Admins are emailed.",
     "organisation-agreement-record-of-signing": null,
     "dashboard": "Your starting page in this organisation: your next step and what is open.",
+    "status": "Your team's answer to a question, in that question's words. It counts as Done, Partly, Not yet or Not applicable.",
     "owner": "Can do everything, including making other members Owners and downloading all records."
   },
   "retired": {
