@@ -555,6 +555,24 @@ test.describe('RadioCards', () => {
     await inside('320 px');
     await page.setViewportSize({ width: 160, height: 640 });   // 200% zoom of a 320 px window
     await inside('200% zoom (160 CSS px)');
+
+    // The auto-fit rule itself, where DecisionFields.css's "narrower than 360 px" rule does not apply: a 400 px viewport with the
+    // grid's container held to 300 px, under two 10rem cards and the gap (328 px), gives one column; wide gives two.
+    const columns = async () => page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('#kit-long-label-wrap .ui-radio-card')).map((c) => c.getBoundingClientRect());
+      return { sameRow: Math.abs(cards[0].top - cards[1].top) < 1, stacked: cards[1].top >= cards[0].bottom - 0.5, width: cards[0].width };
+    });
+    await page.setViewportSize({ width: 400, height: 640 });
+    expect(await page.evaluate(() => matchMedia('(max-width: 359px)').matches), 'the narrow-phone rule does not apply').toBe(false);
+    await page.evaluate(() => { document.getElementById('kit-long-label-wrap')!.style.maxInlineSize = '300px'; });
+    const narrow = await columns();
+    expect(narrow.stacked, `one column at a 300 px container (card ${narrow.width}px)`).toBe(true);
+    await inside('400 px viewport, 300 px container');
+    await page.evaluate(() => { document.getElementById('kit-long-label-wrap')!.style.maxInlineSize = ''; });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const wide = await columns();
+    expect(wide.sameRow, `two columns at desktop width (card ${wide.width}px)`).toBe(true);
+    await inside('desktop');
   });
 });
 
