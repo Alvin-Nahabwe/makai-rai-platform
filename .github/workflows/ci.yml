@@ -512,8 +512,18 @@ jobs:
             --title 'chore: renew the security.txt Expires date' \
             --body 'The Expires date in public/.well-known/security.txt had fewer than 30 days left. This moves it out by a year (scripts/renew-security-txt.mjs). This pull request was opened with GITHUB_TOKEN, so no checks have started: close it and reopen it to run them.'
 
+  # D-422: the chromium suite is split across the shards below, each a job with its own Postgres service, its own build
+  # and its own fixture, so the check no longer waits on one worker for the whole suite (~53 of the job's ~60 minutes
+  # in run 45168146610). Playwright is given strategy.job-total, so changing the matrix cannot drop a slice of the
+  # specs. With fullyParallel off Playwright shards whole spec files by test count, so the shards are uneven; five was
+  # the best split measured on that run's per-file times (longest shard ~14 min of specs, set by
+  # e2e/no-score-crawl.spec.ts alone at ~10 min). The `e2e` job after this one keeps the check name D-203 requires.
   test-e2e:
-    name: e2e
+    name: e2e (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     # `verify` (above) budgets 15 min for lint+typecheck+test+build against
     # no browser and no server. This job does all of that PLUS installs a
@@ -534,7 +544,9 @@ jobs:
     # 120 covers the documented worst case: up to 35 min of browser install,
     # ~3.5 min of setup, ~62 min of suite, then the three follow-on steps.
     # Sharding the suite across jobs is the lasting fix (D-422).
-    timeout-minutes: 120
+    # Lowered from 120 to 60 on 2026-11-24 with the shards (D-422): up to 35 min of browser install, ~4 min of setup,
+    # ~14 min for the longest shard and ~4 min for the follow-on steps one shard runs.
+    timeout-minutes: 60
 
     # Mirrors `unit`'s env block above (job-level env is not inherited
     # across jobs in GitHub Actions, so this cannot simply reference it) plus
@@ -772,7 +784,8 @@ jobs:
         # a test that only passes on a retry still reports the RUN as
         # green, measured elsewhere at 96.3% green with a flake fully alive.
         # "Green" here means zero retries consumed.
-        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
+        # --shard (D-422): this job runs its own slice of the chromium specs; the matrix above says how many slices.
+        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       # NFR-AVL-04's fault harness: stops the Postgres service container, checks
       # that pages and writes answer with a support reference and that the log
@@ -792,6 +805,7 @@ jobs:
       # (__tests__/unit/e2e-port.test.ts) and starts its database again before it ends. About four minutes: the spec waits
       # for the session cookie to expire.
       - name: Run the idle sign-out test (RF-3)
+        if: matrix.shard == 2
         run: MAKRAI_TEST_IDLE_SECONDS=180 npx playwright test --project=chromium --no-deps --fail-on-flaky-tests e2e/decision-idle-signout.spec.ts
 
       # SRS NFR-SEC-06 is verified with the production nginx configuration in front of the production build: 61
@@ -801,10 +815,16 @@ jobs:
       # (next start, from the build above) and nginx (scripts/nginx-test/up.sh 0, which uses the image pulled here by
       # digest and --pull=never) and stops all three; this step starts no server of its own. No secret is added: the
       # app is given RESEND_API_KEY=re_test_local and talks to the catcher only.
+      # D-422: these three steps and the idle sign-out step above run once, on shard 2, the shortest shard in run
+      # 45168146610 (~7 min of specs against ~14 for the longest), so the ~4 minutes they take do not lengthen the check.
+      # The outage step stays on every shard: it takes 8 s, and its place straight after the suite with no condition is
+      # pinned by __tests__/unit/e2e-port.test.ts.
       - name: Pull the nginx image the nginx-in-front run pins
+        if: matrix.shard == 2
         run: docker pull nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
 
       - name: Run the sign-in specs with nginx in front
+        if: matrix.shard == 2
         run: E2E_NGINX_URL=https://127.0.0.1:8440 npx playwright test -c playwright.nginx.config.ts --fail-on-flaky-tests
 
       # The web server's output goes to test-results/server.log and no longer
@@ -816,11 +836,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/server.log
           retention-days: 7
+
+  # D-422: the check named `e2e` (required on `main` since D-203; see the comment below) is this job, now that the
+  # suite runs in the shards above. It runs whatever they did and passes only when every shard passed: a failed,
+  # cancelled or skipped shard makes it fail. The result reaches the script through env, not interpolated into it.
+  e2e:
+    name: e2e
+    needs: [test-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every e2e shard passed
+        env:
+          RESULT: ${{ needs.test-e2e.result }}
+        run: |
+          echo "e2e shards: $RESULT"
+          [ "$RESULT" = success ]
 
 # THIS JOB IS A REQUIRED STATUS CHECK on `main`, as of 2026-08-12 (D-203).
 # Branch protection requires both `lint, typecheck, test, build` and `e2e`,
