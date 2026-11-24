@@ -249,7 +249,7 @@ The route is the stage drawn as one line, a mark per question.
 
 `<SavedMark>` (`components/ui/SavedMark.tsx`, `SavedMark.css`) confirms a save: by default the outline `circle-check` icon in `--color-saved` (a `shape` prop replaces it), the title "Saved as version n", the decided and saved dates labelled apart, and the line saying the decision is on the platform with the earlier version kept in the history. The panel is `--color-saved-tint` with a 1 px `--color-saved` border; the words stay in ink and `--color-heading`. It is always mounted. Empty, it draws nothing but keeps its place as a polite, atomic status region, so the words are announced when they arrive. A caller that server-renders it filled passes `live` as false.
 
-On the question page the decision card passes its own shape (`components/decision/DecisionCard.tsx`, `DecisionCard.css`; design N4): a filled disc in `--color-saved` with a check in `--color-surface`, 16 px in the card's corner and 24 px in the phone's saved block. That is the same drawing as the Done mark, so on that page the two look alike. They are told apart by their words and place: Done is a status of a question, shown in the route and the tally, and the saved mark is the result of a save, shown with "Saved as version n". The outline icon is the kit default; outside the decision card, its only callers are the `/dev/ui-kit` demos.
+On the question page the decision card passes its own shape (`<SavedShape>`, exported from `SavedMark.tsx`, painted in `SavedMark.css`; critique P1 4): a page with a folded corner and two lines, in strokes of `--color-saved` on `--color-saved-tint`, 16 px in the card's corner and 24 px in the phone's saved block. It has no disc and no check, so "Saved" is never mistaken for the Done mark; in forced colours it is the system text colour. The outline `circle-check` icon is the kit default; outside the decision card, its only callers are the `/dev/ui-kit` demos.
 
 ## Components
 
@@ -276,7 +276,7 @@ States the kit draws (from the sheets named): hover and active change colours on
 | `<TextInput>` | `TextInputProps` | One line of text. Label, hint above, error below. |
 | `<TextArea>` | `TextAreaProps` | Longer text with a count, measured in code points; past the limit the count takes its `.ui-count--over` state. |
 | `<Select>` | `SelectProps` | One choice from a list; a styled closed control with a chevron. |
-| `<RadioCards>` | `RadioCardsProps` | One choice as cards. The whole card selects; the choice is a 2 px border in `--color-selected` plus the mark. |
+| `<RadioCards>` | `RadioCardsProps` | One choice as cards. The whole card selects; the choice is a 2 px border in `--color-selected` plus the mark. Each card draws one control: an empty ring until chosen, then its option's mark (Done's green check only on a chosen Done card). The native radio is a transparent hit area over it. |
 | `<Checkbox>` | `CheckboxProps` | One yes or no, in a 44 px row. |
 | `<CheckboxGroup>` | `CheckboxGroupProps` | Several checkboxes under one legend. |
 | `<DateField>` | `DateFieldProps` | A date as Day, Month and Year boxes with "Today". |

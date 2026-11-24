@@ -1,5 +1,5 @@
 /* Radio cards (plan 1A Task 4, spec 7.5): a choice of one where the whole card selects. The selection is a 2 px border
-   in --color-selected plus the mark beside the label, never a background alone.
+   in --color-selected plus the mark beside the label, never a background alone. The mark is drawn on the chosen card only.
 
    Forced colours repaint every author border, a transparent resting one included (RouteRow.css found this), so only the
    selected card has a border. A resting card's outline is an inset box-shadow, which forced colours drop: there, the
@@ -63,8 +63,8 @@
   color: var(--color-ink-muted);
 }
 
-/* The label holds the radio, the mark and the words; its ::after stretches over the whole card, so a click anywhere on
-   the card, the help sentence included, selects the radio. */
+/* The label holds the control and the words; its ::after stretches over the whole card, so a click anywhere on the card,
+   the help sentence included, selects the radio. */
 .ui-radio-card__label {
   display: flex;
   align-items: center;
@@ -87,33 +87,33 @@
   cursor: not-allowed;
 }
 
+/* The card's one drawn control, 20 px: the ring while the card is not chosen, the option's mark once it is. It is drawn over
+   the native radio, which comes first in the label, so the label's words stay beside the mark in the markup. */
+.ui-radio-card__label > .ui-mark__shape,
+.ui-radio-card__ring {
+  flex: none;
+  margin-inline-start: calc(-20px - var(--space-2));
+}
+
 .ui-radio-card__label > .ui-mark__shape {
   color: var(--color-mark);
 }
 
-/* The radio, drawn in currentColor so forced colours keep it: a 2 px ring, and when checked a disc made of a border
-   (a background would be dropped in forced colours). */
-.ui-radio-card__input {
-  appearance: none;
+/* The ring, drawn in currentColor so forced colours keep it: a 2 px circle, and for a chosen card whose option has no mark a
+   disc made of a border (a background would be dropped in forced colours). */
+.ui-radio-card__ring {
   box-sizing: border-box;
   display: grid;
-  flex: none;
   place-content: center;
   inline-size: 20px;
   block-size: 20px;
-  margin: 0;
   border: 2px solid currentColor;
   border-radius: var(--radius-pill);
   background-color: var(--color-surface);
   color: var(--color-ink);
-  cursor: inherit;
-  /* Above the label's stretched ::after, so a pointer on the radio itself reaches the radio (a browser test's check()
-     clicks its centre, e2e/helpers/session.ts:147). */
-  position: relative;
-  z-index: 1;
 }
 
-.ui-radio-card__input::before {
+.ui-radio-card__ring::before {
   content: '';
   box-sizing: border-box;
   inline-size: 10px;
@@ -122,12 +122,30 @@
   border-radius: var(--radius-pill);
 }
 
-.ui-radio-card__input:checked::before {
+.ui-radio-card__ring[data-on='true']::before {
   border-width: 5px;
 }
 
-.ui-radio-card__input:disabled {
+.ui-radio-card:has(:disabled) .ui-radio-card__ring {
   color: var(--color-ink-muted);
+}
+
+/* The native radio is not drawn: a transparent 20 px hit area where the control is drawn, above it and above the label's
+   stretched ::after, so a pointer on it reaches the radio itself (a browser test's check() clicks its centre,
+   e2e/helpers/session.ts:147). It keeps the page's focus ring, which is what shows keyboard focus. */
+.ui-radio-card__input {
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 20px;
+  block-size: 20px;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  cursor: inherit;
 }
 
 .ui-radio-card__help {

@@ -180,7 +180,7 @@ describe('the status choice (R3) and the done mark (R8)', () => {
       expect(radio).toContain(`aria-describedby="decision-status-${o.value}-help"`);
       // T3c item 10a (lane 6's first-use rule): the word is the status's term, and its sentence the status's definition
       const term = { done: 'done', partly: 'partly', not_yet: 'not-yet', not_applicable: 'not-applicable' }[o.value];
-      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg><span data-term="${term}">${esc(o.label)}</span></label>`));
+      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}(?:<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg>|<span class="ui-radio-card__ring"[^>]*aria-hidden="true"></span>)<span data-term="${term}">${esc(o.label)}</span></label>`));
       expect(h).toContain(`<p class="ui-radio-card__help" id="decision-status-${o.value}-help" data-definition="${term}">${o.help}</p>`);
     }
     // the guiding line moved from the legend to the consequence line
@@ -460,15 +460,11 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     expect(rule).toMatch(/color:\s*var\(--color-ink\)/);
   });
 
-  it('m4: the corner\'s saved shape is Done\'s mark (the filled green disc with its check), not the outline check', () => {
+  it('m4 (critique P1 4): the corner\'s saved shape is the saved shape of its own, not Done\'s green check and not the outline check', () => {
     const head = card({ current: V2, historyCount: 2 }).match(/<div class="decision-card__head">[\s\S]*?<\/div><\/div>/)![0];
-    // The kit's done geometry, in classes of its own: a saved shape, not a status mark the no-score checks would hold to ink.
-    expect(head).toMatch(/<svg class="decision-card__saved-svg"[^>]*aria-hidden="true"[^>]*><circle class="decision-card__saved-disc" cx="12" cy="12" r="9"><\/circle><path class="decision-card__saved-check" d="M8 12.5l2.7 2.7L16 9.8"/);
-    expect(head).not.toContain('ui-mark__shape');
-    const css = readFileSync('components/decision/DecisionCard.css', 'utf8');
-    expect(css).toMatch(/\.decision-card__saved-disc\s*\{\s*fill:\s*var\(--color-saved\);/);
-    expect(css).toMatch(/\.decision-card__saved-check\s*\{\s*stroke:\s*var\(--color-surface\);/);
-    expect(head).not.toContain('class="ui-icon"');
+    expect(head).toMatch(/<svg class="ui-saved__svg" data-saved-shape="true"[^>]*aria-hidden="true"/);
+    expect(head).not.toMatch(/<circle|M8 12\.5l2\.7|ui-mark__shape|class="ui-icon"/);
+    expect(card({ current: V2, historyCount: 2 }).match(/data-saved-shape/g)).toHaveLength(2); // the corner's and the phone's block
     expect(words(head)).toBe(`${F.card.heading}${F.card.savedAs(2)}12 Oct 2026 UTC`);
   });
 
@@ -761,11 +757,11 @@ describe('T5: the last fix round before the hand-in', () => {
     expect(link![0]).toContain('data-held-on-save=""');
   });
 
-  it('design N4: the phone\'s saved block draws the filled Done mark, as the wide corner does', () => {
+  it('design N4 (critique P1 4): the phone\'s saved block draws the saved shape, as the wide corner does, not Done\'s mark', () => {
     const h = card({ current: V2, historyCount: 2 });
     const block = /<div class="decision-card__saved-block">([\s\S]*?)<form/.exec(h)![1];
-    expect(block).toContain('class="decision-card__saved-disc"');
-    expect(block).not.toContain('class="ui-icon"');
+    expect(block).toContain('data-saved-shape="true"');
+    expect(block).not.toMatch(/<circle|ui-mark__shape|class="ui-icon"/);
   });
 
   it('A3c-2: the kit\'s SavedMark takes the caller\'s history link (additive); without it the mark is as before', async () => {

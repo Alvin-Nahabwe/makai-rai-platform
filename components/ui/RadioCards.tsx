@@ -1,4 +1,6 @@
-import type { ReactElement, ReactNode } from 'react';
+'use client';
+
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import { MarkShape } from '@/components/ui/StatusMark';
 import { describedBy, FieldError, given } from '@/components/ui/TextInput';
@@ -46,8 +48,10 @@ export type RadioCardsProps = {
 
 /**
  * A choice of one, as cards (plan 1A Task 4, spec 7.5): the whole card selects, and the selection is a thicker border
- * in the selected colour plus the mark. The native radio stays for its semantics and its arrow keys, drawn in
- * currentColor.
+ * in the selected colour plus the mark. Each card draws one control (critique P1 4): an empty ring while it is not chosen,
+ * and its option's mark once it is (a ring with a dot where the option has no mark). The mark is drawn only on the chosen
+ * card, so no unchosen answer shows Done's green check. The native radio stays for its semantics and its arrow keys as a
+ * transparent hit area over that control; its focus ring is the page's.
  *
  * The radio's accessible name is exactly its option's `label`: the `<label>` holds only the radio, the mark (hidden from
  * assistive technology) and the label's words. The `help` sentence sits outside the label and describes the radio
@@ -58,6 +62,9 @@ export function RadioCards({
   name, legend, legendHint, options, value, defaultValue, onChange, error, required = false, columns = 1, disabled = false,
   'aria-describedby': callerDescribedBy, helpBelow = false,
 }: RadioCardsProps): ReactElement {
+  // The chosen value, so the one drawn mark follows the choice whether the group is controlled or not.
+  const [own, setOwn] = useState(defaultValue);
+  const chosen = value ?? own;
   const helpIdOf = (o: RadioCardsProps['options'][number]) => (o.help === undefined ? undefined : `${o.id ?? `${name}-${o.value}`}-help`);
   type Option = RadioCardsProps['options'][number];
   // An option whose label is the question's own and which names the shared word it counts as (`helpWord` in `help`, with the
@@ -112,10 +119,12 @@ export function RadioCards({
                   type="radio" className="ui-radio-card__input" id={inputId} name={name} value={o.value} required={required}
                   checked={value === undefined ? undefined : value === o.value}
                   defaultChecked={value === undefined ? defaultValue === o.value : undefined}
-                  onChange={onChange === undefined ? undefined : () => onChange(o.value)}
+                  onChange={() => { setOwn(o.value); onChange?.(o.value); }}
                   aria-describedby={describedOf(o)}
                 />
-                {o.mark === undefined ? null : <MarkShape kind={o.mark} size={20} />}
+                {chosen === o.value && o.mark !== undefined
+                  ? <MarkShape kind={o.mark} size={20} />
+                  : <span className="ui-radio-card__ring" data-on={chosen === o.value ? 'true' : undefined} aria-hidden="true" />}
                 {labelOf(o)}
               </label>
               {helpId === undefined || helpBelow ? null : helpOf(o, helpId)}

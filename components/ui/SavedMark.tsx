@@ -6,6 +6,22 @@ import { UI_COPY } from '@/lib/ui/copy';
 import type { DeclaredDate, UtcInstant } from '@/types/record';
 import './SavedMark.css';
 
+/**
+ * The shape of "Saved" (critique P1 4): a record page with its corner folded and two lines on it, drawn in strokes. It has
+ * no disc and no check, so it is not Done's filled green check (R8) and is not read as an answer. It is not a status mark
+ * (no `ui-mark__shape`), so the no-score checks leave it to the saved rules; SavedMark.css paints it, in forced colours
+ * as the system text colour. Hidden: the words beside it say what it means.
+ */
+export function SavedShape({ size = 24 }: { size?: 16 | 24 }): ReactElement {
+  return (
+    <svg className="ui-saved__svg" data-saved-shape width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path className="ui-saved__page" d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" strokeWidth={2} strokeLinejoin="round" />
+      <path className="ui-saved__fold" d="M14 3v5h5" fill="none" strokeWidth={2} strokeLinejoin="round" />
+      <path className="ui-saved__lines" d="M9.5 13h5M9.5 17h5" fill="none" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export type SavedMarkProps = {
   saved: { version: number; savedAt: UtcInstant; decidedOn: DeclaredDate | null } | null;
   historyHref?: string;

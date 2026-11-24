@@ -23,6 +23,33 @@
   color: var(--color-saved);
 }
 
+/* The saved shape (SavedShape): a page in strokes, the saved green on the saved tint; forced colours repaint it system text. */
+.ui-saved__svg {
+  display: block;
+}
+
+.ui-saved__page {
+  fill: var(--color-saved-tint);
+  stroke: var(--color-saved);
+}
+
+.ui-saved__fold,
+.ui-saved__lines {
+  stroke: var(--color-saved);
+}
+
+@media (forced-colors: active) {
+  .ui-saved__page {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .ui-saved__fold,
+  .ui-saved__lines {
+    stroke: CanvasText;
+  }
+}
+
 .ui-saved__title {
   margin: 0;
   font-size: var(--font-size-h3);
