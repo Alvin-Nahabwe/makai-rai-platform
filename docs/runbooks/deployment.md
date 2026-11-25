@@ -1998,9 +1998,10 @@ of the wider failures is inferred, not traced.
   the same check): the project page (it holds a sealed review), the review page, the review's
   documents page and the seal page; the working report page, and its download, which answered 503;
   the pre-processing stage page (sealed); and the question pages in the sealed stage, Q-PP-01 and
-  Q-PP-18, whose answers are 5.1.0's. The question page of Q-PO-01, unanswered, in the
-  post-processing stage, also answered 500, with a code that was not captured; 9.4's count stayed
-  at 0.
+  Q-PP-18, whose answers are 5.1.0's.
+- **A page whose code was not captured:** the question page of Q-PO-01, unanswered, in the
+  post-processing stage (which holds a 5.2.0 answer), answered 500. 9.4's count stayed at 0, so
+  its first line was one of the two codes above.
 - **Pages that answered 500 `unknown_content_version`:** a page that must load the wording of a
   5.2.0 answer. The post-processing stage page (it holds Q-PO-22's second version, saved under
   5.2.0), and the question pages of Q-PP-20 and Q-PO-22 (their current answer is under 5.2.0). The
@@ -2021,8 +2022,10 @@ of the wider failures is inferred, not traced.
 The same refusals apply in the deploy itself: between 8.3 step 4 and step 5 the app still serving
 is the old one, and it refuses the three actions for that short interval (8.3 says so). In the
 rehearsal that interval and the swap together took 7.39 s from the start of step 4, and nobody saved
-in it. The second point applies then, for the pages that read a sealed review, as 8.3 says. The
-third does not, because nothing has yet been saved under 5.2.0.
+in it. The second point applies then: the pages that read a sealed review fail, including the question
+pages of a sealed stage. That is wider than 8.3's sentence that a single question's page still
+opens, which was written for v0.6.0 and does not hold for v0.10.1. The third does not, because
+nothing has yet been saved under 5.2.0.
 
 **The rule: fix forward with a later v0.11.x.** An application rollback to v0.10.1 (9.2) is an
 emergency stop only. After it, people can sign in and read the pages that still answered 200
