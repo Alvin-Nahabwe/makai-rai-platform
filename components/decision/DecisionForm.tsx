@@ -653,7 +653,18 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     }
     if (next.next === 'conflict') {
       const current = conflictCurrent(outcome);
-      if (current !== null) setConflict(current);
+      if (current !== null) {
+        setConflict(current);
+        // The field now holds an answer the current version lacks, whether or not anything was typed (an answer sent as it opened
+        // can be refused too): marked so, the new version that the refresh below brings never replaces it, even when the view
+        // is closed before the refresh lands ("A new current version arrived", above).
+        setTypedSinceCurrent(true);
+        // The owner's "Refresh the card" (25 Nov 2026): the card, its foot and the More menu are drawn on the server from the version
+        // this page opened with, which the conflict shows is no longer current. Refreshed, they describe the current version, also
+        // once the view closes (a refused "Save my version", "Edit my version"); e2e/decision-conflict-saved-claims.spec.ts
+        // proves the person's answer and reason stay.
+        router.refresh();
+      }
     }
     setStatus(next);
   }, [data, key, keep, router, leaveHeldLink, stageHref]);
@@ -763,8 +774,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const held = waiting || saving || moving;
   return (
     <SaveHeldContext.Provider value={held}>
-    {/* UI review I2: the phone's saved block says the version the person started from is saved; beside the conflict view's "Not
-        saved" it contradicts it, and the conflict view names the newer saved version, so the block is not drawn while it shows. */}
+    {/* The phone's saved block is not drawn while the conflict view is shown: a "saved" claim beside its "Not saved" reads as a
+        contradiction, and the view itself names the saved version. */}
     {conflict === null ? lead : null}
     {/* SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
         into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
