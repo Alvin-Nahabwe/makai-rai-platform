@@ -4,6 +4,7 @@ import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectMovedOn, fillValid, fixtureOrgSlug, newProject, openQuestion, saveViaApi, seatRequest } from './helpers/session';
+import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { QUESTION_COPY } from '../lib/question/copy';
 import { UI_COPY } from '../lib/ui/copy';
 
@@ -279,9 +280,11 @@ for (const [width, height] of [[1280, 900], [375, 812]] as const) {
     // A clean save moves on to the next unanswered question (answer cost), whose card carries the Next link measured here.
     await expectMovedOn(page, Q);
     await expect(page.locator('#question-heading + .question-frame__code')).toHaveText(/^Q-PP-02 \u00b7 /);
-    // The way on is the merged card's "Next: <question>" link in its Save row (lane 2); the old foot is gone.
+    // The way on is the merged card's "Next: <question>" link in its Save row (lane 2); the old foot is gone. On a phone the link
+    // reads, and is named, "Next question" (the owner's "'Next question', no cut", 25 Nov 2026).
     await expect(wayOn(page)).toHaveCount(0);
-    const next = page.locator('.decision-save-bar').getByRole('link', { name: /^Next: / });
+    const label = width >= 769 ? DECISION_FORM_COPY.card.next('') : DECISION_FORM_COPY.card.nextQuestion;
+    const next = page.locator('.decision-save-bar').getByRole('link', { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) });
     await expect(next).toHaveCount(1);
     expect(await next.evaluate((el, f) => f.contains(el), await form(page).elementHandle()), 'the link is inside the decision card').toBe(true);
     await next.evaluate((el) => el.scrollIntoView({ block: 'end', behavior: 'instant' }));
