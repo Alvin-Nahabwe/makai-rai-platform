@@ -116,4 +116,15 @@ describe('RadioCards', () => {
     expect(css).toMatch(/\.ui-radio-card:has\(:checked\)\s*\{[^}]*border:\s*2px solid var\(--color-selected\)/);
     expect(css).toMatch(/\.ui-radio-card__input\s*\{[^}]*appearance:\s*none/);
   });
+
+  it('a label that holds the shared word among other words is one wrapper element, so the flex label draws one item (no gap)', () => {
+    const html = render({
+      options: [{ value: 'partly', label: 'Partly, some of it in place', help: 'Counts as Partly.', term: 'partly', helpWord: 'Partly', definition: 'Some of it is in place.' }],
+    });
+    const label = /<label class="ui-radio-card__label"[^>]*>([\s\S]*?)<\/label>/.exec(html)![1];
+    // Everything after the input and the ring is inside one element: the term span is not a flex item of its own.
+    const rest = label.replace(/<input[^>]*>/, '').replace(/<span class="ui-radio-card__ring"[^>]*><\/span>/, '');
+    expect(rest).toMatch(/^<span class="ui-radio-card__text">[\s\S]*<span data-term="partly">Partly<\/span>, some of it in place<\/span>$/);
+    expect(textOf(rest)).toBe('Partly, some of it in place');
+  });
 });

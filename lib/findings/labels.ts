@@ -42,8 +42,9 @@ export function findingStateLabel(state: FindingState, accepted: Pick<AcceptedRi
 }
 
 /**
- * The decision status as 7.5.6 words it: the question's own word for it when the caller passes the running question
- * (D4: the findings pages read the running content), else the shared word. Withdrawn and no status have one wording.
+ * The decision status as 7.5.6 words it: the question's own word for it when the caller passes the question
+ * (D4: the caller passes the question of the version the decision was made under, its own version, not the running one),
+ * else the shared word. Withdrawn and no status have one wording.
  */
 export function decisionStatusWord(status: StoredDecisionStatus | null, question?: Pick<ContentQuestion, 'answerLabels'>): string {
   if (status === 'withdrawn') return FINDINGS_COPY.labels.withdrawn;

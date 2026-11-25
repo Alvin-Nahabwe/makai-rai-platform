@@ -190,6 +190,14 @@ export default async function UiKitPage(): Promise<ReactElement> {
               { value: 'not_compared', label: 'No.', help: 'You did not.', mark: 'not_yet' },
             ]} />
         </div>
+        {/* A question's own labels that begin with the shared word (per-question wording): the term and the words after it read as one run. */}
+        <div id="kit-term-label-wrap" className="decision-fields__choice">
+          <RadioCards name="kit-term-label" legend="Own labels that start with the shared word" columns={2} helpBelow
+            options={[
+              { value: 'partly', label: 'Partly, some of it in place', help: 'Counts as Partly.', helpWord: 'Partly', definition: 'Some of the expected practice is in place.', term: 'partly', mark: 'partly' },
+              { value: 'not_yet', label: 'No, not yet', help: 'Counts as Not yet.', helpWord: 'No', definition: 'The expected practice is not in place.', term: 'not_yet', mark: 'not_yet' },
+            ]} />
+        </div>
         <RadioCards name="kit-status-disabled" legend="Status, while saving" disabled defaultValue="partly"
           options={[{ value: 'done', label: 'Done', mark: 'done' }, { value: 'partly', label: 'Partly', mark: 'partly' }]} />
       </KitSection>

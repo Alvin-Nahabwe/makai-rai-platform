@@ -125,7 +125,8 @@ export function RadioCards({
                 {chosen === o.value && o.mark !== undefined
                   ? <MarkShape kind={o.mark} size={20} />
                   : <span className="ui-radio-card__ring" data-on={chosen === o.value ? 'true' : undefined} aria-hidden="true" />}
-                {labelOf(o)}
+                {/* One element, so the label is one flex item: a term span beside loose text would be two, with the label's gap between. */}
+                <span className="ui-radio-card__text">{labelOf(o)}</span>
               </label>
               {helpId === undefined || helpBelow ? null : helpOf(o, helpId)}
             </div>
