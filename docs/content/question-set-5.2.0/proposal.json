@@ -4,7 +4,7 @@
     "file": "data/questionBank.json",
     "sha256": "18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009"
   },
-  "status": "checked",
+  "status": "approved",
   "actions": [
     {
       "action": "reword",
