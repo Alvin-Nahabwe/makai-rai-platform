@@ -763,7 +763,9 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const held = waiting || saving || moving;
   return (
     <SaveHeldContext.Provider value={held}>
-    {lead}
+    {/* UI review I2: the phone's saved block says the version the person started from is saved; beside the conflict view's "Not
+        saved" it contradicts it, and the conflict view names the newer saved version, so the block is not drawn while it shows. */}
+    {conflict === null ? lead : null}
     {/* SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
         into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
         text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
@@ -771,7 +773,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
         scroll lands first, and the browser's if-needed reveal then finds the caret already in view. When the error
         summary's first line takes focus, the whole summary is brought into view, so its list is not left under the bar.
         A control already wholly in view is left where it is (reveal). */}
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} data-conflict={conflict !== null ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}

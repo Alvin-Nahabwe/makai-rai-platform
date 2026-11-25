@@ -403,3 +403,11 @@
     background-color: CanvasText;
   }
 }
+
+/* UI review I2: while the conflict view is shown, the card's lines saying the version the person started from is saved (the
+   corner's "Saved as version N", or "No decision yet.", and the foot's saved lines) are not drawn beside "Not saved"; the conflict
+   view names the newer saved version. The card is rendered on the server and the conflict is the form's state, so the form marks
+   itself (data-conflict, DecisionForm.tsx) and the card's parts follow. The phone's saved block is not rendered at all then. */
+.decision-card:has(form[data-conflict]) :is(.decision-card__corner, .decision-card__saved-lines) {
+  display: none;
+}
