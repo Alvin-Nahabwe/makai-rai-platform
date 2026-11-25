@@ -345,7 +345,7 @@ const SIGNED_KEYS_MAY_BE_ABSENT = ['helpText', 'example', 'reasonPrompt', 'answe
  * version, and that change is the moment to record its count here; a field that vanishes or a key newly excluded
  * then shows as a different number, never as a quiet pass.
  */
-const CONTENT_STRINGS: Record<string, number> = { 'data/content/5.1.0': 977 };
+const CONTENT_STRINGS: Record<string, number> = { 'data/content/5.2.0': 1570 };
 
 /** Today's counts (13 Nov 2026), as floors: a scope that reads fewer strings has lost a file or a field. */
 const COPY_STRINGS_FLOOR = 206;

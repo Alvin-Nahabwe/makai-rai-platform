@@ -1,7 +1,7 @@
 /**
- * Content 5.2.0 is a draft for the owner's sittings (per-question wording): 5.1.0 plus the changes in
- * `docs/content/question-set-5.2.0/changes.json`, with `meta.version` 5.2.0. 5.1.0 stays the running version and nothing
- * here is signed (`data/content/5.2.0/signoffs.json` holds no record).
+ * Content 5.2.0 (per-question wording) is 5.1.0 plus the changes in `docs/content/question-set-5.2.0/changes.json`, with
+ * `meta.version` 5.2.0. The owner signed all seven batches (`data/content/5.2.0/signoffs.json`, 25 Nov 2026) and 5.2.0 is the
+ * running version.
  *
  * `changes.json` is the single source, in the row format of 5.1.0's: `{ row, id, file, field, from, to, decision, final }`.
  * A field may be a path inside the holder (`answerLabels.done`); `from` is the 5.1.0 value, or null where 5.1.0 has none;
@@ -123,15 +123,15 @@ describe('content 5.2.0, the draft for the owner', () => {
     expect(areas(NEW)).toEqual(areas(OLD));
   });
 
-  it('5.2.0 passes the content check with completeness through an approved copy of its proposal, apart from sign-off problems', () => {
+  it('with completeness on, all seven batches are signed and nothing is left to report', () => {
     // The validator reads a proposal only when its status is 'approved'; a draft's says 'checked' (draft-proposal.ts).
     const problems = withApprovedCopy(PROPOSAL_FILE, (file) => validateContentVersion(NEW, { baselineDir: 'data', proposalFile: file, completeness: true }));
-    expect(problems.filter((p) => !/sign-off/.test(p))).toEqual([]);
+    expect(problems).toEqual([]);
   });
 
-  it('index.json lists 5.2.0 and still runs 5.1.0', () => {
+  it('index.json runs 5.2.0 and still lists 5.0.0 and 5.1.0', () => {
     const index = JSON.parse(readFileSync('data/content/index.json', 'utf8')) as { running: string; versions: string[] };
-    expect(index.running).toBe('5.1.0');
+    expect(index.running).toBe('5.2.0');
     expect(index.versions).toEqual(['5.0.0', '5.1.0', '5.2.0']);
   });
 

@@ -3574,5 +3574,13 @@
     "property": "After the running content words Q-PP-01's expected practice differently, the panel holds both wordings (the answered-against question and the running one differ in expectedPractice) and isReworded is true for them; the contentSemver, version number and history count are asserted as before. isReworded now takes the answered content version's semver as a second argument (per-question wording, Task 2: a running question that lists that version in practiceSameAs is not reworded); the case passes the decision's own version, d.current!.content.semver.",
     "proof": "In this case the one isReworded call gains the argument d.current!.content.semver, 0.0.1-fixture here, which the running question does not list in practiceSameAs, and every expectation is unchanged (still toBe(true), same fixtures). __tests__/unit/question-reworded.test.ts::FR-CNT-08: a question counts as reworded only when the expected practice differs holds the signature directly (true on a changed practice, false on a changed text only) and the same file's practiceSameAs case holds the listed-version behaviour.",
     "task": "per-question wording 6b"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/revision-5.1.0.test.ts::index.json runs 5.1.0 and still lists 5.0.0",
+    "replacedBy": "__tests__/content/revision-5.1.0.test.ts::index.json still lists 5.0.0 and 5.1.0, and 5.2.0 runs",
+    "property": "data/content/index.json lists 5.0.0, 5.1.0 and 5.2.0. The old case pinned 5.1.0 as the running version; content 5.2.0 now runs (its registration, per-question wording task 10), so the same case pins 5.2.0 running and still lists the two older versions.",
+    "proof": "In revision-5.1.0.test.ts: index.json still lists 5.0.0 and 5.1.0, and 5.2.0 runs (running is 5.2.0, versions are 5.0.0, 5.1.0, 5.2.0); the same pin is held in revision-5.2.0.test.ts and content-bundle.test.ts.",
+    "task": "per-question wording 10"
   }
 ]
