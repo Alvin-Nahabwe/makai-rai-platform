@@ -158,4 +158,22 @@ describe('apply-revision and sign-off, on copies', () => {
     expect(() => buildQuestionSetRecord(c, proposal, 'post-processing', { approver: ' ', at: '2026-11-05T09:25:00Z' })).toThrow(/approver/);
     expect(() => buildQuestionSetRecord(c, proposal, 'post-processing', { approver: 'x', at: '2026-11-05T09:25:00' })).toThrow(/zone/);
   });
+
+  it('sign-off --from-proposal signs a bank whose questions carry practiceSameAs, with CNT\'s hash, and still refuses a stem mismatch', () => {
+    const c0 = loadContent('5.0.0');
+    const [first] = questionsInStage(c0, 'post-processing');
+    const questions = new Map(c0.questions);
+    questions.set(first.id, { ...first, practiceSameAs: ['5.0.0'] });
+    const c = { ...c0, questions };
+    const signer = { approver: 'Product owner, MAK-AI', at: '2026-11-05T09:25:00Z' };
+    const payload = signOffPayload(c, 'question-set:post-processing');
+    expect(payload.batch === 'question-set:post-processing' && payload.questions[0].practiceSameAs).toEqual(['5.0.0']);
+    const r = buildQuestionSetRecord(c, proposal, 'post-processing', signer);
+    expect(r.sha256).toBe(signOffHash(payload));
+    const changed = structuredClone(proposal);
+    const keep = changed.actions.find((a) => a.action === 'keep' && a.id.startsWith('Q-PO-'));
+    if (keep === undefined || keep.action !== 'keep') throw new Error('no kept post-processing question');
+    keep.originalText = `${keep.originalText} (changed)`;
+    expect(() => buildQuestionSetRecord(c, changed, 'post-processing', signer)).toThrow(/stem/);
+  });
 });

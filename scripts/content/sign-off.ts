@@ -75,7 +75,8 @@ export function buildQuestionSetRecord(c: LoadedContent, proposal: QuestionSetPr
     const stem = stems.get(q.id);
     if (stem === undefined) throw new Error(`sign-off: ${q.id} is in the bank, but the proposal approves no stem for it`);
     if (stem !== q.text) throw new Error(`sign-off: ${q.id}'s stem in the bank is not the stem the proposal approves`);
-    return { id: q.id, text: stem };
+    // As CNT's payload: practiceSameAs is copied only when the bank question has it, so 5.0.0 and 5.1.0 hash as before.
+    return { id: q.id, text: stem, ...(q.practiceSameAs !== undefined && { practiceSameAs: [...q.practiceSameAs] }) };
   });
   const prefix = { 'pre-processing': 'Q-PP-', 'in-processing': 'Q-IP-', 'post-processing': 'Q-PO-' }[stage];
   const banked = new Set(inBank.map((q) => q.id));
