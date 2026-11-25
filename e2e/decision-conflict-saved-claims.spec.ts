@@ -118,6 +118,29 @@ async function withdrawActsOnVersion2(page: Page): Promise<void> {
   await expect.poll(() => base).toBe(2);
 }
 
+/**
+ * "Discard my version" pressed while no reload has brought version 2 to the page: the form shows version 2's answer at once, the
+ * card still says nothing about version 1, and a Save pressed in that window never sends the discarded answer. Every save request
+ * is recorded; the Save is answered (a refusal of the form, a status, or a move to the next question) before the check.
+ */
+async function saveInDiscardWindow(page: Page): Promise<void> {
+  const sent: Array<{ reason?: unknown }> = [];
+  await page.route('**/decisions', async (route) => {
+    if (isSavePost(route.request().method(), route.request().url())) sent.push(route.request().postDataJSON() as { reason?: unknown });
+    await route.fallback();
+  });
+  await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.discardMine }).click();
+  await expect(reasonBox(page)).toHaveValue('Owner saved first');
+  await cardDataStillVersion1(page);
+  await nothingAboutVersion1(page);
+  const answered = page.locator('[data-error-summary], [data-region="answer-form"] .save-status [role="status"]:not(:empty), [data-region="answer-form"] .save-status [role="alert"]:not(:empty)');
+  const before = page.url();
+  await page.getByRole('button', { name: DECISION_FORM_COPY.save }).click();
+  await expect.poll(async () => page.url() !== before || (await answered.filter({ visible: true }).count()) > 0, { timeout: 15_000 }).toBe(true);
+  expect(sent.map((b) => b.reason), 'no save sends the discarded answer').not.toContain(MINE);
+  await page.unroute('**/decisions');
+}
+
 for (const width of [1280, 375]) {
   test(`at ${width} px: while the conflict view shows, no saved claim sits beside "Not saved", before and after the reload lands`, async ({ page, baseURL }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -125,10 +148,13 @@ for (const width of [1280, 375]) {
     await expect(page.locator('[data-region="conflict"]').getByRole('heading', { name: DECISION_FORM_COPY.conflict.saved(2), exact: true })).toBeVisible();
     // The foot left visible beside the view describes the current version once the page's data has been refreshed.
     await expect(visible(page, QUESTION_COPY.reading.history(2)).first()).toBeVisible({ timeout: 15_000 });
-    // And after it, the saved lines stay hidden while the view is open.
+    // And after it, the saved lines stay hidden while the view is open. Version 2's line goes on after the platform sentence
+    // ("Version 1 is kept in the history."), so it is found by the sentence it holds, and it is on the page, only not drawn.
     await expect(visible(page, savedAs(1))).toHaveCount(0);
     await expect(visible(page, savedAs(2))).toHaveCount(0);
-    await expect(visible(page, UI_COPY.saved.onPlatform)).toHaveCount(0);
+    const onPlatform = page.locator('.decision-card__saved-lines').getByText(new RegExp(escapeRe(UI_COPY.saved.onPlatform)));
+    await expect(onPlatform).toHaveCount(1);
+    await expect(onPlatform).toBeHidden();
   });
 
   test(`at ${width} px: with the reload held, nothing about version 1 shows while the view is open, while "Save my version" is out, or after it is refused; then the card names version 2`, async ({ page, baseURL }) => {
@@ -251,6 +277,31 @@ test.describe('a browser that cannot keep drafts', () => {
     await expect(visible(page, QUESTION_COPY.reading.history(2)).first()).toBeVisible({ timeout: 15_000 });
     await expect(reasonBox(page)).toHaveValue('Owner saved first');
   });
+
+  test('in the window after "Discard my version", before its reload lands, a Save never stores the discarded answer', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    let refresh!: Awaited<ReturnType<typeof routeRefresh>>;
+    const { projectId } = await conflictOverSaved(page, baseURL!, async (id) => { refresh = await routeRefresh(page, questionPath(id, Q), 'hold'); });
+    await saveInDiscardWindow(page);
+    refresh.release();
+    // Whatever the Save did, the history holds no version with the discarded answer.
+    await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page);
+    await expect(page.getByText(MINE, { exact: true })).toHaveCount(0);
+    await expect(reasonBox(page)).not.toHaveValue(MINE);
+  });
+});
+
+test('"Discard my version" pressed before the conflict\'s own reload lands, with a draft kept: a Save in that window never stores the discarded answer', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  let refresh!: Awaited<ReturnType<typeof routeRefresh>>;
+  const { projectId } = await conflictOverSaved(page, baseURL!, async (id) => { refresh = await routeRefresh(page, questionPath(id, Q), 'hold'); });
+  // The conflict's reload is out and held: Discard is pressed before it lands.
+  await expect.poll(() => refresh.count()).toBeGreaterThan(0);
+  await saveInDiscardWindow(page);
+  refresh.release();
+  await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page);
+  await expect(page.getByText(MINE, { exact: true })).toHaveCount(0);
+  await expect(reasonBox(page)).not.toHaveValue(MINE);
 });
 
 test('"Save my version" succeeds while the reload is still held: the late reload does not move the form back, and the card never claims an older version than the status line', async ({ page, baseURL }) => {

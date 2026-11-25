@@ -415,15 +415,21 @@
    version N", or "No decision yet.") and the foot's saved lines are not drawn beside its "Not saved"; the view names the saved
    version. While the card is behind a version the form knows of (data-card-behind), the corner and the More menu are not drawn;
    the form itself leaves out the foot and the phone's saved block. The foot and the More menu follow the form in the card, so a
-   sibling selector reaches them; only the corner, which comes before it, needs :has(). */
-.decision-card:has(form:is([data-conflict], [data-card-behind])) .decision-card__corner,
+   sibling selector reaches them, in a rule of their own: a browser that cannot read :has() drops every rule that names it, and
+   these two must hold there too. Only the corner, which comes before the form, needs :has(). */
 form[data-conflict] ~ .decision-card__meta .decision-card__saved-lines,
 form[data-card-behind] ~ .decision-card__more {
   display: none;
 }
 
-/* Without :has() the corner cannot follow the form's state, so it is not drawn at all: it never states an older version. The
-   foot's saved lines say the same on a wide screen, and a phone shows the saved block in its place. */
+.decision-card:has(form:is([data-conflict], [data-card-behind])) .decision-card__corner {
+  display: none;
+}
+
+/* Without :has() the corner cannot follow the form's state, so it is not drawn at all, in every state and at every width: it
+   never states an older version, and it does not say "Saved as version N", "No decision yet." or that the decision was
+   withdrawn. Where there is a current decision the foot's saved lines still say it is saved, with its date, and the history link
+   counts its versions; a phone shows the saved block too. "No decision yet." and the withdrawn line have no other place. */
 @supports not selector(:has(*)) {
   .decision-card__corner {
     display: none;

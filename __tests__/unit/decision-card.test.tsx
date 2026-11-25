@@ -854,3 +854,24 @@ describe('T10 I5 (owner 19:30, "Empty, show last date"): a re-decision names the
     expect(h).not.toContain('id="decision-hint"');
   });
 });
+
+describe('the conflict hides in DecisionForm.css (fix round 3, I-2)', () => {
+  // A browser that cannot parse one selector of a list drops the whole rule (Selectors Level 4, "invalid selector list"), so a
+  // selector with :has() never shares a rule with one that works without it.
+  const rules = readFileSync('components/decision/DecisionForm.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('}').map((r) => r.split('{')).filter((p) => p.length === 2)
+    .map(([sel, body]) => ({ selectors: sel.trim().split(/,(?![^(]*\))/).map((s) => s.trim()), body: body.trim() }));
+
+  it('no rule lists a :has() selector beside one without it', () => {
+    for (const r of rules.filter((x) => x.selectors.some((s) => s.includes(':has(')))) {
+      expect(r.selectors.every((s) => s.includes(':has(')), r.selectors.join(', ')).toBe(true);
+    }
+  });
+
+  it('the saved lines and the More menu are hidden by a rule that needs no :has()', () => {
+    const hides = (selector: string) => rules.some((r) => r.selectors.includes(selector) && r.selectors.every((s) => !s.includes(':has('))
+      && /display:\s*none/.test(r.body));
+    expect(hides('form[data-conflict] ~ .decision-card__meta .decision-card__saved-lines')).toBe(true);
+    expect(hides('form[data-card-behind] ~ .decision-card__more')).toBe(true);
+  });
+});

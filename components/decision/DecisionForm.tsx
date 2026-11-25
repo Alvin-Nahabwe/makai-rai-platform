@@ -818,8 +818,13 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             requestAnimationFrame(() => document.getElementById(data.question.type === 'gate' ? FIELD_TARGET.scopeAnswer : 'decision-reason')?.focus());
           }}
           onDiscard={() => {
-            // The base moves to the saved version the view named, so the card stays hidden until the reload below brings that version.
-            store.current?.remove(key); setBase(conflict.versionNumber); setConflict(null); setStatus(null); setDraftSavedAt(null);
+            // The form is drawn at once from the saved version the view named, its answer and its base together, as "A new current
+            // version arrived" draws it: a Save before the reload below lands then sends that version's answer on its own base, never
+            // the discarded one, and the card stays hidden (base above the card's version) until the reload brings that version.
+            const from = { ...data, current: conflict };
+            store.current?.remove(key); setValue(draftFromCurrent(from, today)); setBase(conflict.versionNumber); setRetry(NO_RETRY);
+            setEvidenceInitial(conflict.evidence); setEvidenceItems(conflict.evidence); setEvidenceKey(`${conflict.id}:open`); setExtraEvidenceIds([]);
+            setConflict(null); setStatus(null); setDraftSavedAt(null);
             setTypedSinceCurrent(false); setHeldOwnVersion(false); setSeenCurrentId('discarded'); router.refresh();
           }}
         />
