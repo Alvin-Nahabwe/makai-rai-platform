@@ -278,7 +278,7 @@
                 "done": "Yes, for every source",
                 "partly": "Partly, for some sources",
                 "not_yet": "No, not yet",
-                "not_applicable": "No source record applies"
+                "not_applicable": "No data source applies"
               },
               "answerPrompts": {
                 "done": "Say why the data was gathered, then its sources, methods, period and setting; this prints in the data card. Link the datasheet, never the data itself.",
@@ -430,7 +430,7 @@
                 "done": "Yes, consent or a waiver covers it",
                 "partly": "Partly, not for every use or person",
                 "not_yet": "No, not yet",
-                "not_applicable": "No consent or waiver is needed"
+                "not_applicable": "No consent step applies"
               },
               "answerPrompts": {
                 "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones.",
@@ -718,7 +718,7 @@
                 "done": "Yes, we checked",
                 "partly": "Partly, some patterns so far",
                 "not_yet": "No, not yet",
-                "not_applicable": "No past-decision check applies"
+                "not_applicable": "No check of past decisions applies"
               },
               "answerPrompts": {
                 "done": "Say which past patterns you examined, what you found and changed, and where it is recorded; this prints in the data card.",
@@ -1000,7 +1000,7 @@
                 "not_applicable": "No measurement by group applies"
               },
               "answerPrompts": {
-                "done": "Name the groups, why those, the smallest group's size and where the results are. Type them into the model card when you generate it; the platform does not compute them.",
+                "done": "Name the groups, why those, the smallest group's size and where results are; type them into the model card yourself. Collect no new sensitive attribute, such as ethnicity, without consent (Q-PP-13).",
                 "partly": "Name the groups measured so far and those still to do; the platform does not compute the results. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_yet": "Say which groups you plan and when. Collect no new sensitive attribute, such as ethnicity, just for this without consent (see Q-PP-13).",
                 "not_applicable": "Say why no measurement by group applies to this project; this prints in the model card and mitigation plan."
@@ -1690,7 +1690,7 @@
                 "a note on the safeguards chosen"
               ],
               "answerLabels": {
-                "done": "Yes, as far as the risk needs",
+                "done": "Yes, we checked",
                 "partly": "Partly, some ways so far",
                 "not_yet": "No, not yet",
                 "not_applicable": "No manipulation check applies"
@@ -1835,7 +1835,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, a person can override",
-                "partly": "Partly, for some outputs",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No review by a person applies"
               },
@@ -1932,7 +1932,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, training or guidance given",
-                "partly": "Partly, for some users",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No user training or guidance applies"
               },
@@ -1965,7 +1965,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, they can",
-                "partly": "Partly, for some outputs",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No display of outputs applies"
               },
@@ -2029,7 +2029,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, for each group",
-                "partly": "Partly, for some groups",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No monitoring by group ever applies"
               },
@@ -2299,7 +2299,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, for each setting",
-                "partly": "Partly, for some settings",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No check by setting applies"
               },
@@ -2364,7 +2364,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, it does",
-                "partly": "Partly, for some inputs",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No unusual-input handling applies"
               },
@@ -2397,7 +2397,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, we told them",
-                "partly": "Partly, some were told",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No briefing on use and limits applies"
               },
@@ -2559,7 +2559,7 @@
               ],
               "answerLabels": {
                 "done": "Yes, we checked access",
-                "partly": "Partly, for some groups",
+                "partly": "Partly, some of it in place",
                 "not_yet": "No, not yet",
                 "not_applicable": "No access check applies"
               },
