@@ -8,6 +8,7 @@ import { userRefs } from '@/lib/data/views';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
 import { closureOf, isClosingRecord, recordClosedFinding, reopenedAt, type Closure, type ClosureDecision, type ClosureMitigation } from '@/lib/findings/closure';
+import type { LoadedQuestion } from '@/types/content';
 import { groupFindings } from '@/lib/findings/groups';
 import { decisionStatusWord, findingSourceLabel, findingStateLabel, STAGE_NAMES, stageCountHeading } from '@/lib/findings/labels';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
@@ -76,6 +77,15 @@ async function versionsOf(tx: TenantTx, ids: readonly (string | null)[]): Promis
   return out;
 }
 
+/**
+ * The question in the content version the decision was answered against, whose own words name the answer on the findings
+ * pages: the same content the page's question text comes from, so one page never mixes voices (D4's rule). Undefined with
+ * no version or no such question; the caller then prints the shared word.
+ */
+function ownQuestionOf(questionId: string | null, version: VersionInfo | undefined): LoadedQuestion | undefined {
+  return questionId === null || version === undefined ? undefined : loadContent(version.contentSemver as never).questions.get(questionId);
+}
+
 /** A question's text in the content version a decision was answered against, or in the running content; the id when the content lacks it. */
 function questionTextOf(questionId: string, version: VersionInfo | undefined): string {
   const content = version === undefined ? runningContent() : loadContent(version.contentSemver as never);
@@ -97,7 +107,7 @@ function itemOf(
   return {
     id: f.id, stage: f.stage, title: titleOf(f, version), state: f.state,
     decisionVersionId: closing?.decisionVersionId ?? null, closeReason: closing?.reason ?? null,
-    sourceLabel: findingSourceLabel(f, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
+    sourceLabel: findingSourceLabel(f, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, question: ownQuestionOf(f.questionId, version) }),
     sourceStatus: f.source === 'shortfall' && version !== undefined ? version.status : null,
     stateLabel: closedByRecord ? FINDINGS_COPY.labels.closed : findingStateLabel(f.state, accepted),
     openMitigations: f.openMitigations, overdueMitigations: f.overdueMitigations, raisedAt: f.raisedAt,
@@ -313,6 +323,14 @@ function closeBlocked(detail: FindingDetailView, closureAvailable: boolean): boo
   return closureAvailable || detail.mitigations.some((m) => isClosingRecord(m) && m.current.findingSeq > r);
 }
 
+/** The decision version a finding would close on, with its question in the content version it was answered against (D4). */
+async function closingVersionOf(tx: TenantTx, id: string) {
+  const v = await tx.decisionVersion.findUnique({ where: { id }, select: { questionId: true, versionNumber: true, status: true, contentVersionId: true } });
+  if (v === null) return null;
+  const semver = (await contentRefById(tx, v.contentVersionId)).semver;
+  return { ...v, ownQuestion: loadContent(semver as never).questions.get(v.questionId) };
+}
+
 /** S-15: one finding of the route's project with its mitigations and history, or `NotFoundError`. */
 export async function loadFindingPage(
   ctx: OrgContext, identity: Identity, a: { projectId: string; findingId: string },
@@ -335,9 +353,7 @@ export async function loadFindingPage(
     return {
       versions: await versionsOf(tx, [detail.decisionVersionId]),
       decisions: await closureDecisions(tx, detail.mitigations.filter(isClosingRecord).map((m) => m.current.closureDecisionVersionId)),
-      closingVersion: closing === undefined ? null : await tx.decisionVersion.findUnique({
-        where: { id: closing.decisionVersionId }, select: { questionId: true, versionNumber: true, status: true },
-      }),
+      closingVersion: closing === undefined ? null : await closingVersionOf(tx, closing.decisionVersionId),
       members: memberRows.map((m) => refs.get(m.userId)).filter((r): r is UserRef => r !== undefined)
         .sort((x, y) => x.name.localeCompare(y.name) || x.userId.localeCompare(y.userId)),
       viewer: { userId: self.userId, name: self.name },
@@ -360,15 +376,16 @@ export async function loadFindingPage(
     cause: closedBy.cause,
   };
   const question = detail.questionId === null ? undefined : content.questions.get(detail.questionId);
+  const ownQuestion = ownQuestionOf(detail.questionId, version);
   return {
     orgSlug: project.orgSlug, orgId: ctx.orgId, projectId: a.projectId, projectName: project.name, archived: project.archived, viewer, detail,
     title: titleOf(detail, version),
     questionText: detail.source === 'team' && detail.questionId !== null ? questionTextOf(detail.questionId, version) : null,
-    sourceLabel: findingSourceLabel(detail, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
+    sourceLabel: findingSourceLabel(detail, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, question: ownQuestion }),
     stateLabel: closure === null ? findingStateLabel(detail.state, detail.acceptedRisk) : FINDINGS_COPY.labels.closed,
     closure,
     questionHref: question === undefined ? null : `/orgs/${project.orgSlug}/projects/${a.projectId}/stages/${question.stage}/questions/${question.id}`,
-    version: version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, statusWord: decisionStatusWord(version.status) },
+    version: version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, statusWord: decisionStatusWord(version.status, ownQuestion) },
     contentSemver: content.semver,
     mitigations: pages.filter(({ m }) => !isClosingRecord(m)).map(({ m, history }) => ({
       current: m.current, versions: m.versions, history,
@@ -384,7 +401,7 @@ export async function loadFindingPage(
     closeBlocked: mayClose && closeBlocked(detail, closing !== undefined),
     closeByDecision: closing === undefined || closingVersion === null || !mayClose ? null : {
       reason: closing.reason, decisionVersionId: closing.decisionVersionId, questionId: closingVersion.questionId,
-      versionNumber: closingVersion.versionNumber, statusWord: decisionStatusWord(closingVersion.status as StoredDecisionStatus | null),
+      versionNumber: closingVersion.versionNumber, statusWord: decisionStatusWord(closingVersion.status as StoredDecisionStatus | null, closingVersion.ownQuestion),
       status: closingVersion.status as StoredDecisionStatus | null,
     },
     canMitigate: can(ctx.role, 'mitigation:write') && writable,

@@ -388,7 +388,8 @@
 
 .save-status [role="status"]:is([data-message-id="M-03"], [data-message-id="M-04"])::before {
   background-color: var(--color-saved);
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m16 9-5.5 5.5L8 12'/%3E%3C/svg%3E");
+  /* The saved shape (SavedShape in SavedMark.tsx), not a check: a page with a folded corner and two lines. */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M9.5 13h5M9.5 17h5'/%3E%3C/svg%3E");
 }
 
 .save-status [role="alert"]:not(:empty)::before {

@@ -2,6 +2,7 @@ import type { LoadedContent, LoadedQuestion } from '@/types/content';
 import type { DocumentType, Stage, UtcInstant } from '@/types/record';
 import { STAGES } from '@/types/record';
 import type { DraftRecord } from '@/lib/data/documents';
+import { answerLabel } from '@/lib/question/answerWords';
 import { loadResources } from '@/lib/content/resources';
 import {
   controlSuggestionsOn, controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup,
@@ -116,7 +117,7 @@ export function buildWorkingReportSummary(r: DraftRecord, content: LoadedContent
       const answerStatus = decision?.row.status ?? null;
       const item: OpenItem = {
         findingId: f.id, stage: st, questionId: f.questionId, questionText: words,
-        answer: answerStatus === null ? null : STATUS_WORD[answerStatus] ?? null, title, alsoAreas: alsoAreaIds.map(areaWords), controls,
+        answer: answerStatus === null || answerStatus === 'withdrawn' ? null : known ? answerLabel(content.questions.get(f.questionId as string) as LoadedQuestion, answerStatus) : STATUS_WORD[answerStatus] ?? null, title, alsoAreas: alsoAreaIds.map(areaWords), controls,
       };
       open.push({ item, areaId, order });
     }

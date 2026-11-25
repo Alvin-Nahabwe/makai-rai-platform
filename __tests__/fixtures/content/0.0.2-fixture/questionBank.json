@@ -30,7 +30,18 @@
               "example": "Would a basic statistical dashboard or a rule-based alert system get the job done, or does the problem genuinely need a machine learning model?",
               "expectedPractice": "Fixture expected practice for Q-PP-01, revised in 0.0.2: the team records what it does, where and when.",
               "whyAsked": "Fixture reason for asking Q-PP-01: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-01: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-01, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-01, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-01, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-01, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-01",
                 "Fixture evidence example 2 for Q-PP-01"
@@ -48,7 +59,18 @@
               "example": "Instead of a vague goal like 'improve outcomes,' define something measurable: 'reduce false positive rate below 8% for the target population within six months.'",
               "expectedPractice": "Fixture expected practice for Q-PP-02: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-02: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-02: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-02, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-02, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-02, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-02, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-02",
                 "Fixture evidence example 2 for Q-PP-02"
@@ -66,7 +88,18 @@
               "example": "For a loan approval model, stakeholders include applicants, loan officers, compliance teams, and communities where credit access patterns may shift.",
               "expectedPractice": "Fixture expected practice for Q-PP-03: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-03: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-03: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-03, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-03, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-03, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-03, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-03",
                 "Fixture evidence example 2 for Q-PP-03"
@@ -85,7 +118,18 @@
               "example": "A crop pest detection model trained mostly on images from large commercial farms might misclassify pests on smallholder plots where growing conditions differ.",
               "expectedPractice": "Fixture expected practice for Q-PP-04: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-04: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-04: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-04, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-04, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-04, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-04, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-04",
                 "Fixture evidence example 2 for Q-PP-04"
@@ -104,7 +148,18 @@
               "example": "For a student performance prediction system, assess whether it could limit access to educational opportunities or reinforce existing inequalities in resource allocation.",
               "expectedPractice": "Fixture expected practice for Q-PP-05: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-05: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-05: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-05, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-05, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-05, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-05, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-05",
                 "Fixture evidence example 2 for Q-PP-05"
@@ -123,7 +178,18 @@
               "example": "A fraud detection team might include data scientists, domain experts from banking, legal counsel, and representatives from communities most affected by false flags.",
               "expectedPractice": "Fixture expected practice for Q-PP-06: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-06: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-06: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-06, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-06, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-06, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-06, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-06",
                 "Fixture evidence example 2 for Q-PP-06"
@@ -141,7 +207,18 @@
               "example": "Training a large transformer model for a task that a logistic regression could handle wastes energy and computing resources.",
               "expectedPractice": "Fixture expected practice for Q-PP-07: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-07: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-07: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-07, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-07, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-07, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-07, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-07",
                 "Fixture evidence example 2 for Q-PP-07"
@@ -174,7 +251,18 @@
               "example": "Record whether data was collected prospectively or retrospectively, from which sources, over what time period, and under what conditions.",
               "expectedPractice": "Fixture expected practice for Q-PP-08: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-08: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-08: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-08, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-08, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-08, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-08, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-08",
                 "Fixture evidence example 2 for Q-PP-08"
@@ -193,7 +281,18 @@
               "example": "Does your dataset cover the range of conditions the model will encounter? If you trained on urban data but deploy in rural areas, representation gaps will hurt performance.",
               "expectedPractice": "Fixture expected practice for Q-PP-09: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-09: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-09: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-09, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-09, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-09, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-09, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-09",
                 "Fixture evidence example 2 for Q-PP-09"
@@ -212,7 +311,18 @@
               "example": "Plot age, gender, income, and geographic distributions. If your loan dataset skews toward high-income urban applicants but the model will serve rural borrowers, that gap matters.",
               "expectedPractice": "Fixture expected practice for Q-PP-10: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-10: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-10: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-10, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-10, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-10, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-10, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-10",
                 "Fixture evidence example 2 for Q-PP-10"
@@ -230,7 +340,18 @@
               "example": "Postal code can proxy for ethnicity in segregated regions. School district can proxy for socioeconomic status. Identify these indirect encodings and decide how to handle them.",
               "expectedPractice": "Fixture expected practice for Q-PP-11: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-11: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-11: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-11, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-11, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-11, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-11, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-11",
                 "Fixture evidence example 2 for Q-PP-11"
@@ -248,7 +369,18 @@
               "example": "Annotation inconsistencies between labelers using different criteria, or labels that change meaning across languages, facilities, or time periods.",
               "expectedPractice": "Fixture expected practice for Q-PP-12, revised in 0.0.2: the team records what it does, where and when.",
               "whyAsked": "Fixture reason for asking Q-PP-12: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-12: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-12, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-12, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-12, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-12, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-12",
                 "Fixture evidence example 2 for Q-PP-12"
@@ -285,7 +417,18 @@
               "example": "People whose data you use should understand what it will be used for and have the option to opt out.",
               "expectedPractice": "Fixture expected practice for Q-PP-13: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-13: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-13: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-13, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-13, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-13, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-13, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-13",
                 "Fixture evidence example 2 for Q-PP-13"
@@ -307,7 +450,18 @@
               "example": "Replace names with random IDs, generalize ages to ranges, and remove rare attributes that could identify individuals through combination.",
               "expectedPractice": "Fixture expected practice for Q-PP-14: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-14: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-14: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-14, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-14, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-14, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-14, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-14",
                 "Fixture evidence example 2 for Q-PP-14"
@@ -325,7 +479,18 @@
               "example": "A datasheet for a satellite imagery dataset should document geographic coverage, resolution, seasonal variation, labeling methodology, and known gaps.",
               "expectedPractice": "Fixture expected practice for Q-PP-15: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-15: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-15: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-15, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-15, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-15, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-15, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-15",
                 "Fixture evidence example 2 for Q-PP-15"
@@ -409,7 +574,18 @@
               "example": "Look for systematic gaps: are records from certain regions, time periods, or demographic groups consistently incomplete?",
               "expectedPractice": "Fixture expected practice for Q-PP-16: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-16: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-16: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-16, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-16, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-16, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-16, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-16",
                 "Fixture evidence example 2 for Q-PP-16"
@@ -485,7 +661,18 @@
               "example": "Historical bias in legacy records; population bias from convenience sampling; labeling bias from inconsistent annotation guidelines across sites.",
               "expectedPractice": "Fixture expected practice for Q-PP-17: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-17: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-17: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-17, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-17, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-17, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-17, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-17",
                 "Fixture evidence example 2 for Q-PP-17"
@@ -504,7 +691,18 @@
               "example": "Collecting data only from users who actively engage with a platform excludes those who lack access, creating a skewed picture of the population.",
               "expectedPractice": "Fixture expected practice for Q-PP-18: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-18: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-18: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-18, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-18, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-18, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-18, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-18",
                 "Fixture evidence example 2 for Q-PP-18"
@@ -522,7 +720,18 @@
               "example": "Lending data may encode decades of redlining. Hiring data may reflect historical gender imbalances. Enrollment data may underrepresent marginalized communities.",
               "expectedPractice": "Fixture expected practice for Q-PP-19: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-19: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-19: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-19, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-19, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-19, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-19, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-19",
                 "Fixture evidence example 2 for Q-PP-19"
@@ -541,7 +750,18 @@
               "example": "Training on pre-2020 economic data to predict current consumer behavior misses major behavioral shifts from recent global events.",
               "expectedPractice": "Fixture expected practice for Q-PP-20: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-20: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-20: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-20, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-20, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-20, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-20, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-20",
                 "Fixture evidence example 2 for Q-PP-20"
@@ -560,7 +780,18 @@
               "example": "Define who can access the data, under what conditions it can be shared with partners, and how long it should be retained before deletion.",
               "expectedPractice": "Fixture expected practice for Q-PP-21: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-21: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-21: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-21, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-21, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-21, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-21, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-21",
                 "Fixture evidence example 2 for Q-PP-21"
@@ -579,7 +810,18 @@
               "example": "A fraud detection model needs enough examples of novel fraud patterns, not just common ones. A crop classifier needs rare pest variants, not just the top five.",
               "expectedPractice": "Fixture expected practice for Q-PP-22: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-22: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-22: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-22, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-22, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-22, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-22, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-22",
                 "Fixture evidence example 2 for Q-PP-22"
@@ -598,7 +840,18 @@
               "example": "An agronomist reviewing crop labels, a teacher checking student performance categories, or a financial analyst verifying transaction codes can each spot errors a data scientist would not.",
               "expectedPractice": "Fixture expected practice for Q-PP-23: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PP-23: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PP-23: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PP-23, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PP-23, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PP-23, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PP-23, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PP-23",
                 "Fixture evidence example 2 for Q-PP-23"
@@ -633,7 +886,18 @@
               "example": "For a classification task with limited data, a gradient boosted tree may outperform a neural network while being far easier to explain to stakeholders.",
               "expectedPractice": "Fixture expected practice for Q-IP-01: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-01: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-01: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-01, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-01, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-01, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-01, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-01",
                 "Fixture evidence example 2 for Q-IP-01"
@@ -652,7 +916,18 @@
               "example": "If your training data comes entirely from one region but your test set includes another, your performance estimates will be unreliable.",
               "expectedPractice": "Fixture expected practice for Q-IP-02: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-02: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-02: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-02, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-02, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-02, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-02, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-02",
                 "Fixture evidence example 2 for Q-IP-02"
@@ -670,7 +945,18 @@
               "example": "On an imbalanced dataset, 95% accuracy might mean the model just predicts the majority class every time. Recall and precision tell a more honest story.",
               "expectedPractice": "Fixture expected practice for Q-IP-03: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-03: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-03: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-03, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-03, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-03, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-03, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-03",
                 "Fixture evidence example 2 for Q-IP-03"
@@ -689,7 +975,18 @@
               "example": "Compare accuracy, recall, and false negative rates across age groups, income brackets, geographic regions, or whatever subgroups matter for your deployment.",
               "expectedPractice": "Fixture expected practice for Q-IP-04: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-04: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-04: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-04, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-04, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-04, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-04, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-04",
                 "Fixture evidence example 2 for Q-IP-04"
@@ -707,7 +1004,18 @@
               "example": "For a hiring screening tool, false positive error rate balance checks whether qualified candidates from different demographic groups are equally likely to be incorrectly rejected.",
               "expectedPractice": "Fixture expected practice for Q-IP-05, revised in 0.0.2: the team records what it does, where and when.",
               "whyAsked": "Fixture reason for asking Q-IP-05: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-05: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-05, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-05, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-05, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-05, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-05",
                 "Fixture evidence example 2 for Q-IP-05"
@@ -798,7 +1106,18 @@
               "example": "Statistical Parity checks equal selection rates; Predictive Parity checks equal precision; Treatment Equality checks equal error rate ratios.",
               "expectedPractice": "Fixture expected practice for Q-IP-06: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-06: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-06: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-06, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-06, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-06, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-06, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-06",
                 "Fixture evidence example 2 for Q-IP-06"
@@ -816,7 +1135,18 @@
               "example": "SHAP values showing that a borrower's debt-to-income ratio and employment length were the primary drivers of a credit scoring prediction.",
               "expectedPractice": "Fixture expected practice for Q-IP-07: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-07: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-07: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-07, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-07, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-07, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-07, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-07",
                 "Fixture evidence example 2 for Q-IP-07"
@@ -834,7 +1164,18 @@
               "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations.",
               "expectedPractice": "Fixture expected practice for Q-IP-08: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-08: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-08: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-08, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-08, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-08, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-08, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-08",
                 "Fixture evidence example 2 for Q-IP-08"
@@ -852,7 +1193,18 @@
               "example": "If a random forest achieves 87% accuracy but a simple decision tree achieves 85%, the added complexity may not be worth the interpretability trade-off.",
               "expectedPractice": "Fixture expected practice for Q-IP-16: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-16: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-16: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-16, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-16, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-16, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-16, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-16",
                 "Fixture evidence example 2 for Q-IP-16"
@@ -871,7 +1223,18 @@
               "example": "An image classifier might learn to associate a particular watermark with a label because all images from one source carry that watermark, not because of actual content.",
               "expectedPractice": "Fixture expected practice for Q-IP-17: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-17: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-17: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-17, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-17, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-17, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-17, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-17",
                 "Fixture evidence example 2 for Q-IP-17"
@@ -889,7 +1252,18 @@
               "example": "A model that says '90% confident' should be correct approximately 90% of the time. Poor calibration can lead to overconfident wrong predictions.",
               "expectedPractice": "Fixture expected practice for Q-IP-18: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-18: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-18: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-18, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-18, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-18, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-18, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-18",
                 "Fixture evidence example 2 for Q-IP-18"
@@ -919,7 +1293,18 @@
               "example": "If a logistic regression achieves 88% accuracy and a deep network achieves 90%, the simpler model may be preferable given its interpretability.",
               "expectedPractice": "Fixture expected practice for Q-IP-09: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-09: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-09: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-09, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-09, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-09, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-09, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-09",
                 "Fixture evidence example 2 for Q-IP-09"
@@ -937,7 +1322,18 @@
               "example": "Record the exact Python package versions, random seeds, data preprocessing steps, and hardware specifications used during training.",
               "expectedPractice": "Fixture expected practice for Q-IP-10: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-10: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-10: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-10, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-10, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-10, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-10, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-10",
                 "Fixture evidence example 2 for Q-IP-10"
@@ -955,7 +1351,18 @@
               "example": "Validate that date format conversions, unit transformations, and encoding mappings preserve data accuracy through each pipeline stage.",
               "expectedPractice": "Fixture expected practice for Q-IP-11: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-11: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-11: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-11, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-11, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-11, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-11, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-11",
                 "Fixture evidence example 2 for Q-IP-11"
@@ -974,7 +1381,18 @@
               "example": "A model card should state which populations the model was validated on, where performance degrades, and what it should not be used for.",
               "expectedPractice": "Fixture expected practice for Q-IP-12: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-12: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-12: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-12, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-12, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-12, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-12, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-12",
                 "Fixture evidence example 2 for Q-IP-12"
@@ -1054,7 +1472,18 @@
               "example": "Use k-fold cross-validation to get stable estimates, then calibration analysis to verify predicted probabilities match observed frequencies.",
               "expectedPractice": "Fixture expected practice for Q-IP-13: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-13: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-13: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-13, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-13, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-13, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-13, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-13",
                 "Fixture evidence example 2 for Q-IP-13"
@@ -1072,7 +1501,18 @@
               "example": "Pooling data across regions or languages may mask important differences. A model that works well on average might fail badly for specific subgroups.",
               "expectedPractice": "Fixture expected practice for Q-IP-14: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-14: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-14: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-14, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-14, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-14, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-14, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-14",
                 "Fixture evidence example 2 for Q-IP-14"
@@ -1091,7 +1531,18 @@
               "example": "A decision threshold tuned on overall F1 may produce unacceptable false negative rates for underrepresented subgroups.",
               "expectedPractice": "Fixture expected practice for Q-IP-15: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-15: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-15: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-15, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-15, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-15, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-15, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-15",
                 "Fixture evidence example 2 for Q-IP-15"
@@ -1110,7 +1561,18 @@
               "example": "A screening model with 5% overall false negative rate might have 2% for one group and 12% for another. The aggregate hides the disparity.",
               "expectedPractice": "Fixture expected practice for Q-IP-19: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-19: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-19: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-19, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-19, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-19, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-19, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-19",
                 "Fixture evidence example 2 for Q-IP-19"
@@ -1129,7 +1591,18 @@
               "example": "State clearly that a model trained on data from one context has not been validated for use in a different context, and should not be applied there without further testing.",
               "expectedPractice": "Fixture expected practice for Q-IP-20: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-20: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-20: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-20, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-20, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-20, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-20, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-20",
                 "Fixture evidence example 2 for Q-IP-20"
@@ -1147,7 +1620,18 @@
               "example": "Use git for code, DVC or similar for data versioning, and model registries (e.g., MLflow) for trained model artifacts.",
               "expectedPractice": "Fixture expected practice for Q-IP-21: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-21: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-21: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-21, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-21, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-21, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-21, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-21",
                 "Fixture evidence example 2 for Q-IP-21"
@@ -1166,7 +1650,18 @@
               "example": "Test whether small perturbations to input data (slightly altered images, reworded text, modified sensor readings) cause the model to flip its prediction.",
               "expectedPractice": "Fixture expected practice for Q-IP-22: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-22: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-22: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-22, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-22, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-22, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-22, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-22",
                 "Fixture evidence example 2 for Q-IP-22"
@@ -1184,7 +1679,18 @@
               "example": "For decisions that directly affect people's lives or livelihoods, a slightly less accurate but fully interpretable model may be preferable to a black box.",
               "expectedPractice": "Fixture expected practice for Q-IP-23: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-23: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-23: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-23, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-23, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-23, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-23, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-23",
                 "Fixture evidence example 2 for Q-IP-23"
@@ -1203,7 +1709,18 @@
               "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
               "expectedPractice": "Fixture expected practice for Q-IP-24: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-24: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-24: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-24, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-24, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-24, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-24, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-24",
                 "Fixture evidence example 2 for Q-IP-24"
@@ -1222,7 +1739,18 @@
               "example": "Break down key metrics (accuracy, precision, recall, F1) by age group, gender, ethnicity, socioeconomic status, and any other relevant demographic dimensions. Flag subgroups where performance falls below the overall average by more than 5 percentage points.",
               "expectedPractice": "Fixture expected practice for Q-IP-EXTRA-01: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-EXTRA-01: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-EXTRA-01: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-EXTRA-01, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-EXTRA-01, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-EXTRA-01, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-EXTRA-01, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-EXTRA-01",
                 "Fixture evidence example 2 for Q-IP-EXTRA-01"
@@ -1241,7 +1769,18 @@
               "example": "Introduce controlled noise (missing values, mislabeled samples, distribution shifts) into validation data and measure prediction stability. Document which quality dimensions have the largest impact on model outputs.",
               "expectedPractice": "Fixture expected practice for Q-IP-EXTRA-02: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-IP-EXTRA-02: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-IP-EXTRA-02: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-IP-EXTRA-02, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-IP-EXTRA-02, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-IP-EXTRA-02, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-IP-EXTRA-02, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-IP-EXTRA-02",
                 "Fixture evidence example 2 for Q-IP-EXTRA-02"
@@ -1275,7 +1814,18 @@
               "example": "Track whether prediction accuracy changes over time as the population or environment the model serves shifts.",
               "expectedPractice": "Fixture expected practice for Q-PO-01: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-01: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-01: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-01, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-01, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-01, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-01, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-01",
                 "Fixture evidence example 2 for Q-PO-01"
@@ -1293,7 +1843,18 @@
               "example": "Set a rule: retrain the model when monthly accuracy drops below a threshold, or when the input data distribution shifts beyond a defined tolerance.",
               "expectedPractice": "Fixture expected practice for Q-PO-02: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-02: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-02: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-02, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-02, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-02, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-02, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-02",
                 "Fixture evidence example 2 for Q-PO-02"
@@ -1311,7 +1872,18 @@
               "example": "Can a domain expert override the model's recommendation? Is there a clear, documented workflow for doing so?",
               "expectedPractice": "Fixture expected practice for Q-PO-03: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-03: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-03: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-03, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-03, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-03, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-03, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-03",
                 "Fixture evidence example 2 for Q-PO-03"
@@ -1329,7 +1901,18 @@
               "example": "If the AI system makes a harmful decision, who is responsible? The deploying organization, the model developer, or the data provider? Define this upfront.",
               "expectedPractice": "Fixture expected practice for Q-PO-04: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-04: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-04: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-04, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-04, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-04, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-04, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-04",
                 "Fixture evidence example 2 for Q-PO-04"
@@ -1348,7 +1931,18 @@
               "example": "If the model starts producing systematically wrong predictions for a specific group, who gets alerted and what steps follow?",
               "expectedPractice": "Fixture expected practice for Q-PO-05: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-05: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-05: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-05, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-05, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-05, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-05, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-05",
                 "Fixture evidence example 2 for Q-PO-05"
@@ -1366,7 +1960,18 @@
               "example": "Have end-users been trained to interpret the model's confidence scores and understand when to trust or question its outputs?",
               "expectedPractice": "Fixture expected practice for Q-PO-06: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-06: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-06: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-06, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-06, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-06, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-06, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-06",
                 "Fixture evidence example 2 for Q-PO-06"
@@ -1384,7 +1989,18 @@
               "example": "Show confidence intervals alongside predictions. Clearly state what populations or conditions the model was not designed for.",
               "expectedPractice": "Fixture expected practice for Q-PO-07: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-07: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-07: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-07, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-07, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-07, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-07, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-07",
                 "Fixture evidence example 2 for Q-PO-07"
@@ -1402,7 +2018,18 @@
               "example": "Deploy the new model in one site first, compare outcomes with the existing system, then expand gradually if results hold up.",
               "expectedPractice": "Fixture expected practice for Q-PO-16: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-16: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-16: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-16, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-16, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-16, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-16, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-16",
                 "Fixture evidence example 2 for Q-PO-16"
@@ -1420,7 +2047,18 @@
               "example": "Monitor whether false negative rates for different demographic groups remain balanced as the model encounters new populations in production.",
               "expectedPractice": "Fixture expected practice for Q-PO-17: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-17: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-17: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-17, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-17, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-17, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-17, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-17",
                 "Fixture evidence example 2 for Q-PO-17"
@@ -1439,7 +2077,18 @@
               "example": "Set an alert when weekly prediction accuracy drops below 80%, and automatically route decisions to human review below 70%.",
               "expectedPractice": "Fixture expected practice for Q-PO-18: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-18: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-18: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-18, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-18, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-18, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-18, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-18",
                 "Fixture evidence example 2 for Q-PO-18"
@@ -1457,7 +2106,18 @@
               "example": "Document required server specifications, network bandwidth, database dependencies, and API integrations needed for the system to function.",
               "expectedPractice": "Fixture expected practice for Q-PO-19: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-19: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-19: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-19, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-19, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-19, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-19, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-19",
                 "Fixture evidence example 2 for Q-PO-19"
@@ -1487,7 +2147,18 @@
               "example": "Give end-users a straightforward way to flag cases where the AI's output seems wrong or inappropriate.",
               "expectedPractice": "Fixture expected practice for Q-PO-08: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-08: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-08: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-08, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-08, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-08, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-08, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-08",
                 "Fixture evidence example 2 for Q-PO-08"
@@ -1505,7 +2176,18 @@
               "example": "Someone denied a service based on an AI score should be able to request human review of that decision.",
               "expectedPractice": "Fixture expected practice for Q-PO-09: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-09: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-09: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-09, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-09, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-09, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-09, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-09",
                 "Fixture evidence example 2 for Q-PO-09"
@@ -1523,7 +2205,18 @@
               "example": "A deployment codebook should describe the system architecture, API endpoints, data flows, update procedures, and known limitations.",
               "expectedPractice": "Fixture expected practice for Q-PO-10: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-10: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-10: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-10, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-10, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-10, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-10, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-10",
                 "Fixture evidence example 2 for Q-PO-10"
@@ -1607,7 +2300,18 @@
               "example": "An ethics review board that reviews AI deployments before they go live, with representation from affected communities.",
               "expectedPractice": "Fixture expected practice for Q-PO-11: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-11: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-11: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-11, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-11, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-11, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-11, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-11",
                 "Fixture evidence example 2 for Q-PO-11"
@@ -1625,7 +2329,18 @@
               "example": "A voice-based tool trained in one language may fail for speakers of different dialects. A text model trained on formal writing may struggle with informal input.",
               "expectedPractice": "Fixture expected practice for Q-PO-12: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-12: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-12: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-12, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-12, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-12, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-12, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-12",
                 "Fixture evidence example 2 for Q-PO-12"
@@ -1643,7 +2358,18 @@
               "example": "Define criteria for when the model should be retired, such as when the problem it solves is no longer relevant or when a better approach becomes available.",
               "expectedPractice": "Fixture expected practice for Q-PO-13: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-13: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-13: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-13, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-13, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-13, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-13, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-13",
                 "Fixture evidence example 2 for Q-PO-13"
@@ -1661,7 +2387,18 @@
               "example": "When the model encounters input it wasn't trained on, it should flag uncertainty rather than confidently returning a wrong answer.",
               "expectedPractice": "Fixture expected practice for Q-PO-14: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-14: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-14: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-14, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-14, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-14, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-14, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-14",
                 "Fixture evidence example 2 for Q-PO-14"
@@ -1680,7 +2417,18 @@
               "example": "Document clearly that a model validated on one population should not be assumed to work for a different population without separate testing.",
               "expectedPractice": "Fixture expected practice for Q-PO-15: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-15: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-15: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-15, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-15, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-15, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-15, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-15",
                 "Fixture evidence example 2 for Q-PO-15"
@@ -1698,7 +2446,18 @@
               "example": "Include representatives from the communities affected by the system in reviewing how its outputs are presented, interpreted, and acted on.",
               "expectedPractice": "Fixture expected practice for Q-PO-20: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-20: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-20: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-20, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-20, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-20, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-20, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-20",
                 "Fixture evidence example 2 for Q-PO-20"
@@ -1717,7 +2476,18 @@
               "example": "Assess whether end-users can integrate AI recommendations into their existing workflow without adding unreasonable overhead.",
               "expectedPractice": "Fixture expected practice for Q-PO-21: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-21: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-21: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-21, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-21, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-21, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-21, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-21",
                 "Fixture evidence example 2 for Q-PO-21"
@@ -1735,7 +2505,18 @@
               "example": "Check compliance with national data protection laws, institutional review requirements, and any sector-specific regulations that apply to your deployment.",
               "expectedPractice": "Fixture expected practice for Q-PO-22: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-22: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-22: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-22, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-22, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-22, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-22, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-22",
                 "Fixture evidence example 2 for Q-PO-22"
@@ -1754,7 +2535,18 @@
               "example": "Schedule quarterly reviews of model performance, fairness metrics, and user feedback to decide on retraining, updates, or decommissioning.",
               "expectedPractice": "Fixture expected practice for Q-PO-23: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-23: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-23: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-23, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-23, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-23, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-23, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-23",
                 "Fixture evidence example 2 for Q-PO-23"
@@ -1772,7 +2564,18 @@
               "example": "Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy?",
               "expectedPractice": "Fixture expected practice for Q-PO-24: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-24: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-24: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-24, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-24, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-24, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-24, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-24",
                 "Fixture evidence example 2 for Q-PO-24"
@@ -1791,7 +2594,18 @@
               "example": "Set up automated dashboards that break down prediction accuracy, false positive rates, and false negative rates by age, gender, ethnicity, and other relevant categories.",
               "expectedPractice": "Fixture expected practice for Q-PO-EXTRA-01: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-EXTRA-01: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-EXTRA-01: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-EXTRA-01, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-EXTRA-01, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-EXTRA-01, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-EXTRA-01, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-EXTRA-01",
                 "Fixture evidence example 2 for Q-PO-EXTRA-01"
@@ -1810,7 +2624,18 @@
               "example": "Engage an external ethics advisory board or partner with community organizations representing affected populations to review system behavior quarterly.",
               "expectedPractice": "Fixture expected practice for Q-PO-EXTRA-02: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-EXTRA-02: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-EXTRA-02: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-EXTRA-02, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-EXTRA-02, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-EXTRA-02, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-EXTRA-02, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-EXTRA-02",
                 "Fixture evidence example 2 for Q-PO-EXTRA-02"
@@ -1829,7 +2654,18 @@
               "example": "Integrate LIME or SHAP into the prediction pipeline to generate per-decision feature importance scores, or provide natural language rationales for high-stakes outputs.",
               "expectedPractice": "Fixture expected practice for Q-PO-EXTRA-03: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-EXTRA-03: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-EXTRA-03: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-EXTRA-03, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-EXTRA-03, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-EXTRA-03, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-EXTRA-03, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-EXTRA-03",
                 "Fixture evidence example 2 for Q-PO-EXTRA-03"
@@ -1848,7 +2684,18 @@
               "example": "Implement input validation that flags anomalous feature distributions, set confidence thresholds below which predictions are routed to human review, and define circuit breakers for sustained degradation.",
               "expectedPractice": "Fixture expected practice for Q-PO-EXTRA-04: the team records what it does and where.",
               "whyAsked": "Fixture reason for asking Q-PO-EXTRA-04: it shows where the team stands.",
-              "reasonPrompt": "Fixture reason prompt for Q-PO-EXTRA-04: say what was done and why. Name who can confirm it.",
+              "answerLabels": {
+                "done": "Done",
+                "partly": "Partly",
+                "not_yet": "Not yet",
+                "not_applicable": "Not applicable"
+              },
+              "answerPrompts": {
+                "done": "For Q-PO-EXTRA-04, describe what your team did and why you chose that approach. Name the person who can confirm it and where the supporting evidence is kept.",
+                "partly": "For Q-PO-EXTRA-04, describe which part your team has done and what is still open. Name who owns the rest and the date by which your team expects to finish it.",
+                "not_yet": "For Q-PO-EXTRA-04, say why your team has not started this yet and what is holding it back. Name who will own it and what your team will do first when it begins.",
+                "not_applicable": "For Q-PO-EXTRA-04, explain why this does not apply to your project and what you checked to be sure. Name who agreed that it does not apply, and note the date."
+              },
               "evidenceExamples": [
                 "Fixture evidence example 1 for Q-PO-EXTRA-04",
                 "Fixture evidence example 2 for Q-PO-EXTRA-04"

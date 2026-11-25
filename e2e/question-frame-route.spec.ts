@@ -19,8 +19,14 @@ const Q = 'Q-PP-01';
 const RUNNING = (JSON.parse(readFileSync('data/content/index.json', 'utf8')) as { running: string }).running;
 type Bank = { stages: Record<string, { modules: Array<{ questions: Array<{ id: string; text: string }> }> }> };
 const realBank = JSON.parse(readFileSync(`data/content/${RUNNING}/questionBank.json`, 'utf8')) as Bank;
-/** The real Q-PP-01 (26 words in 5.1.0): the server runs on the fixture bundle, so the gate puts this text in the h1. */
-const REAL_Q01 = realBank.stages['pre-processing'].modules.flatMap((m) => m.questions).find((q) => q.id === Q)!.text;
+/**
+ * The longest real question stem of the running content, any stage (25 words in 5.2.0, Q-PP-24): the server runs on the
+ * fixture bundle, so the gate puts this text in the h1. Computed, not named, so a content release that shortens one
+ * stem moves the gate to the next longest instead of emptying it (ruling R40).
+ */
+const wordCount = (t: string) => t.split(/\s+/).length;
+const REAL_LONGEST = Object.values(realBank.stages).flatMap((s) => s.modules.flatMap((m) => m.questions))
+  .reduce((a, b) => (wordCount(b.text) > wordCount(a.text) ? b : a)).text;
 const fixtureBank = JSON.parse(readFileSync('__tests__/fixtures/content/0.0.1-fixture/questionBank.json', 'utf8')) as Bank;
 const textOf = (id: string) => fixtureBank.stages['pre-processing'].modules.flatMap((m) => m.questions).find((q) => q.id === id)!.text;
 
@@ -61,13 +67,13 @@ async function seal(baseURL: string, projectId: string): Promise<void> {
   } finally { await owner.dispose(); }
 }
 
-test('spec 9.3 item 7 (joint gate): at 1280 by 800, with the real Q-PP-01 in the heading, the decision slot starts at or above 230px', async ({ page, baseURL }, info) => {
+test('spec 9.3 item 7 (joint gate): at 1280 by 800, with the longest real question in the heading, the decision slot starts at or above 230px', async ({ page, baseURL }, info) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const projectId = await newProject(baseURL!);
   expect((await saveViaApi(baseURL!, 'assessor', projectId, 'Q-PP-02', { status: 'partly', reason: 'Two of three in place.' })).status).toBe(201);
   await openQuestion(page, 'assessor', Q, baseURL!, projectId);
-  expect(REAL_Q01.split(/\s+/).length, 'a long real question').toBeGreaterThanOrEqual(25);
-  await page.locator('#question-heading').evaluate((h, text) => { h.textContent = text; }, REAL_Q01);
+  expect(wordCount(REAL_LONGEST), 'a long real question').toBeGreaterThanOrEqual(25);
+  await page.locator('#question-heading').evaluate((h, text) => { h.textContent = text; }, REAL_LONGEST);
   const m = await page.evaluate(() => {
     const h = document.getElementById('question-heading')!;
     const range = document.createRange();
@@ -177,7 +183,7 @@ test('fix rounds 1-2 (I1, N1, owners 11:00 and 12:28): the full tally with every
   for (const [w, h] of [[1280, 800], [1440, 900], [1160, 800]] as const) {
     await page.setViewportSize({ width: w, height: h });
     await openQuestion(page, 'assessor', Q, baseURL!, projectId);
-    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_Q01);
+    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_LONGEST);
     // Every kind is really there before the numbers are raised.
     await expect(page.locator('.question-top__tally > li')).toHaveCount(7);
     results[`${w}x${h}`] = await fullTally(page, baseURL!, info, `${w}x${h}`);
@@ -192,7 +198,7 @@ test('fix rounds 1-2 (I1, N1, owners 11:00 and 12:28): the full tally with every
     const longId = await seedEveryKind(baseURL!, name);
     await page.setViewportSize({ width: 1280, height: 800 });
     await openQuestion(page, 'assessor', Q, baseURL!, longId);
-    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_Q01);
+    await page.locator('#question-heading').evaluate((el, text) => { el.textContent = text; }, REAL_LONGEST);
     const project = page.locator('.question-top .ui-breadcrumb').getByRole('link', { name, exact: true });
     await expect(project, 'the link keeps the whole name as its text').toHaveCount(1);
     results[`1280x800-name${length}`] = await fullTally(page, baseURL!, info, `1280x800-name${length}`);
@@ -314,10 +320,10 @@ test('narrow: the position strip names its neighbours in words with their place 
   await expect(page.getByRole('navigation', { name: QUESTION_COPY.nav.label, exact: true }).getByRole('link', { name: /^Previous question/ })).toHaveCount(0);
 });
 
-test('reflow: nothing scrolls sideways at 320 by 640 with the real Q-PP-01 in the heading, both strips and the route column; on Q-PP-22 (question 23) the strip\'s three items do not overlap', async ({ page, baseURL }, info) => {
+test('reflow: nothing scrolls sideways at 320 by 640 with the longest real question in the heading, both strips and the route column; on Q-PP-22 (question 23) the strip\'s three items do not overlap', async ({ page, baseURL }, info) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await openQuestion(page, 'assessor', 'Q-PP-22', baseURL!);
-  await page.locator('#question-heading').evaluate((h, text) => { h.textContent = text; }, REAL_Q01);
+  await page.locator('#question-heading').evaluate((h, text) => { h.textContent = text; }, REAL_LONGEST);
   await expectNoHorizontalScroll(page);
   // Two-digit neighbours (21 and 23) and "22 of 24": previous link, ring, place, next link, left to right, apart.
   const strip = page.locator('.position-strip');

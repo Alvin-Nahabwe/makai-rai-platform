@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@/lib/integrity/canonical.mjs';
 import { questionsInStage } from '@/lib/content/loader';
-import type { DocumentHelpFile, LoadedContent, ReasonCodeEntry } from '@/types/content';
+import type { AnswerKey, DocumentHelpFile, LoadedContent, ReasonCodeEntry } from '@/types/content';
 import { DOCUMENT_TYPES, STAGES, type Stage } from '@/types/record';
 
 /**
@@ -18,11 +18,12 @@ export type SignOffBatch = Stage | 'help-and-reason-codes' | QuestionSetBatch | 
 export type SignOffPayload =
   | {
       batch: Stage;
-      questions: Array<{ id: string; text: string; expectedPractice: string; whyAsked: string; reasonPrompt: string;
+      questions: Array<{ id: string; text: string; expectedPractice: string; whyAsked: string; reasonPrompt?: string;
+        answerLabels?: Record<AnswerKey, string>; answerPrompts?: Record<AnswerKey, string>;
         evidenceExamples: string[]; helpText: string | null; example: string | null }>;
     }
   | { batch: 'help-and-reason-codes'; documentHelp: DocumentHelpFile; reasonCodes: ReasonCodeEntry[] }
-  | { batch: QuestionSetBatch; questions: Array<{ id: string; text: string }> }
+  | { batch: QuestionSetBatch; questions: Array<{ id: string; text: string; practiceSameAs?: string[] }> }
   | {
       batch: 'risk-mapping';
       questions: Array<{ id: string; gaps: string[]; optionAreas: Record<string, string[]> | null }>;
@@ -90,7 +91,11 @@ export function signOffPayload(c: LoadedContent, batch: SignOffBatch): SignOffPa
         // The loader does not check this field's shape; a spread of a string or a missing field would sign the wrong thing or throw unnamed.
         if (!Array.isArray(q.evidenceExamples)) throw new Error(`signOffPayload: question ${q.id} evidenceExamples is not a list`);
         return {
-          id: q.id, text: q.text, expectedPractice: q.expectedPractice, whyAsked: q.whyAsked, reasonPrompt: q.reasonPrompt,
+          id: q.id, text: q.text, expectedPractice: q.expectedPractice, whyAsked: q.whyAsked,
+          // D2: an optional key is copied only when the question has it (canonicalJson refuses undefined), so 5.0.0 and 5.1.0 hash as committed.
+          ...(q.reasonPrompt !== undefined && { reasonPrompt: q.reasonPrompt }),
+          ...(q.answerLabels !== undefined && { answerLabels: { ...q.answerLabels } }),
+          ...(q.answerPrompts !== undefined && { answerPrompts: { ...q.answerPrompts } }),
           evidenceExamples: [...q.evidenceExamples], helpText: q.helpText ?? null, example: q.example ?? null,
         };
       }),
@@ -98,7 +103,9 @@ export function signOffPayload(c: LoadedContent, batch: SignOffBatch): SignOffPa
   }
   const stage = batch.startsWith(QUESTION_SET) ? batch.slice(QUESTION_SET.length) : '';
   if (!isStage(stage)) throw new Error(`signOffPayload: unknown batch ${JSON.stringify(String(batch))}`);
-  return { batch: `${QUESTION_SET}${stage}`, questions: questionsInStage(c, stage).map((q) => ({ id: q.id, text: q.text })) };
+  return { batch: `${QUESTION_SET}${stage}`, questions: questionsInStage(c, stage).map((q) => ({
+    id: q.id, text: q.text, ...(q.practiceSameAs !== undefined && { practiceSameAs: [...q.practiceSameAs] }),
+  })) };
 }
 
 /** Lowercase hex SHA-256 of the UTF-8 bytes of `canonicalJson(p)`. */

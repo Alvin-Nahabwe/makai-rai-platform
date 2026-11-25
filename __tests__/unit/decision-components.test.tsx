@@ -4,12 +4,12 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { DecisionDraft } from '@/lib/question/draft';
-import type { LoadedQuestion } from '@/types/content';
+import type { AnswerKey, LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
-import { deciderLabel, FINDING_NOTE } from '@/lib/decision/copy';
+import { deciderLabel, FINDING_NOTE, STATUS_OPTIONS, WITHDRAWAL_CODE_LABELS } from '@/lib/decision/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { STATUS_MARK_COPY } from '@/lib/ui/copy';
@@ -108,6 +108,112 @@ describe('S-12 decision fields', () => {
     expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
   });
 
+  describe('per-question wording (content 5.2.0)', () => {
+    const LABELLED = {
+      ...QUESTION,
+      reasonPrompt: undefined,   // D1: a question with per-answer prompts carries no reasonPrompt
+      answerLabels: { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not yet compared', not_applicable: 'Does not apply' },
+      answerPrompts: { done: 'Say what you compared.', partly: 'Say what is still to compare.', not_yet: 'Say when you will compare.', not_applicable: 'Say why comparing does not apply.' },
+    } as LoadedQuestion;
+    const radioNames = (h: string) => [...h.matchAll(/<label class="ui-radio-card__label"[^>]*>([\s\S]*?)<\/label>/g)]
+      .map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<input[^>]*>/g, '').replace(/<[^>]+>/g, ''));
+    const withCodes = [{ code: 'ny_planned_later' as const, status: 'not_yet' as const, label: 'Planned for later', useWhen: '', reasonMustSay: 'Name the date.' }];
+
+    it('the status radios are named by the question\'s labels, each with "Counts as <word>" help carrying the term', () => {
+      const h = html({ runningQuestion: LABELLED });
+      expect(radioNames(h)).toEqual(['Yes, we compared', 'Partly compared', 'Not yet compared', 'Does not apply']);
+      for (const [v, word, term] of [['done', 'Done', 'done'], ['partly', 'Partly', 'partly'], ['not_yet', 'Not yet', 'not-yet'], ['not_applicable', 'Not applicable', 'not-applicable']]) {
+        const help = h.match(new RegExp(`<p[^>]*id="decision-status-${v}-help"[^>]*>[\\s\\S]*?</p>`))?.[0] ?? '';
+        expect(help.replace(/<[^>]+>/g, ''), v).toContain(`Counts as ${word}`);
+        // R4: the term sits on the word in the label when the label holds it ("Partly compared"), else on the word in the help.
+        const inLabel = new RegExp(word, 'i').test(LABELLED.answerLabels![v as AnswerKey]);
+        expect(help.includes(`<span data-term="${term}">`), v).toBe(!inLabel);
+        expect(h.split(`<span data-term="${term}">${inLabel ? word.slice(0, 1) : word}`).length - 1, v).toBe(1);
+      }
+      expect(h).not.toMatch(/<span data-term[^>]*>Yes, we compared/);
+    });
+
+    it('the first-use rule holds for the four status terms under every kind of label', async () => {
+      const { firstUseProblems } = await import('../helpers/firstUseMarkup');
+      const ids = new Set(['done', 'partly', 'not-yet', 'not-applicable']);
+      const labelled = (answerLabels: Record<string, string>) => ({ ...LABELLED, answerLabels }) as LoadedQuestion;
+      const cases: Array<[string, Partial<QuestionPanelData>]> = [
+        ['labels containing the term', { runningQuestion: labelled({ done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not yet compared', not_applicable: 'Does not apply' }) }],
+        ['labels without the term', { runningQuestion: LABELLED }],
+        ['labels equal to the generic words', { runningQuestion: labelled({ done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' }) }],
+        ['an unlabelled question', {}],
+      ];
+      for (const [name, over] of cases) {
+        for (const status of [null, 'partly'] as const) {
+          const h = html(over, { status });
+          expect(firstUseProblems(h).filter((p) => ids.has(p.id)), `${name}, status ${String(status)}`).toEqual([]);
+        }
+      }
+    });
+
+    it('the definition is its own element, named by the radio, and the label keeps its words as the name', () => {
+      const h = html({ runningQuestion: LABELLED });
+      expect(h).toMatch(/<input[^>]*id="decision-status-partly"[^>]*aria-describedby="decision-status-partly-help decision-status-partly-help-definition"/);
+      expect(h).toContain('<span id="decision-status-partly-help-definition" data-definition="partly">Some of it is in place, but not all of it.</span>');
+      const named = html({ runningQuestion: { ...LABELLED, answerLabels: { ...LABELLED.answerLabels!, partly: 'Partly compared' } } as LoadedQuestion });
+      expect(named).toContain('<span data-term="partly">Partly</span> compared');
+    });
+
+    it('the text box prompt is the chosen answer\'s prompt and changes with the answer; the typed note is kept', () => {
+      const help = (h: string) => h.match(/<p id="decision-reason-help"[^>]*>([^<]*)<\/p>/)?.[1] ?? '';
+      const partly = html({ runningQuestion: LABELLED }, { status: 'partly', reason: 'abc' });
+      expect(help(partly)).toBe('Say what is still to compare.');
+      const notYet = html({ runningQuestion: LABELLED, reasonCodes: withCodes }, { status: 'not_yet', reason: 'abc', reasonCode: 'ny_planned_later' });
+      expect(help(notYet)).toBe('Say when you will compare. Name the date.');
+      expect(notYet).toMatch(/<textarea[^>]*>abc<\/textarea>/);
+      // Before an answer is chosen, real 5.2.0 content has no prompt to show (D1: no reasonPrompt), so the help is empty.
+      const none = html({ runningQuestion: LABELLED }, { status: null });
+      expect(help(none)).toBe('');
+      // Switching the answer patches the status and the code only; the draft's reason is left as typed.
+      const seen: DecisionDraft[] = [];
+      const tree = DecisionFields({ data: { ...PANEL, runningQuestion: LABELLED }, value: { ...EMPTY, status: 'partly', reason: 'abc' }, errors: [], disabled: false, onChange: (v) => seen.push(v), whoWhenOpen: false, onOpenWhoWhen: () => {} });
+      const radios = findAll(tree, (e) => e.props.name === 'status' && typeof e.props.onChange === 'function')[0];
+      (radios.props.onChange as (v: string) => void)('not_yet');
+      expect(seen[0].status).toBe('not_yet');
+      expect(seen[0].reason).toBe('abc');
+    });
+
+    it('the consequence line quotes the label', async () => {
+      const { consequenceOf } = await import('@/components/decision/DecisionForm');
+      const data = { ...PANEL, runningQuestion: LABELLED };
+      expect(consequenceOf({ ...EMPTY, status: 'partly' }, data, null).text).toContain('Saving \u2018Partly compared\u2019');
+      expect(consequenceOf({ ...EMPTY, status: 'partly' }, PANEL, null).text).toContain('Saving \u2018Partly\u2019');
+    });
+
+    it('the conflict view names both versions in the running question\'s labels, and keeps the withdrawn words (D4)', () => {
+      const status = (h: string) => [...h.matchAll(/<dt>Status: <\/dt><dd><bdi>([^<]*)<\/bdi>/g)].map((m) => m[1]);
+      const show = (current: DecisionVersionView, mine: Partial<DecisionDraft>, question: LoadedQuestion) => renderToStaticMarkup(
+        <ConflictView current={current} mine={{ ...EMPTY, ...mine }} question={question} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+      expect(status(show(V2, { status: 'not_yet' }, LABELLED))).toEqual(['Partly compared', 'Not yet compared']);
+      expect(status(show(V2, { status: 'not_yet' }, QUESTION))).toEqual(['Partly', 'Not yet']);
+      expect(status(show({ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }, { status: null }, LABELLED)))
+        .toEqual([DECISION_FORM_COPY.conflict.withdrawn(WITHDRAWAL_CODE_LABELS.duplicate), DECISION_FORM_COPY.conflict.none]);
+    });
+
+    it('the gate under labelled content keeps Yes, No and Not sure, its reasonPrompt, and no "Counts as" line', () => {
+      const gate = { ...LABELLED, id: 'Q-PP-GATE-SENSITIVE', type: 'gate', reasonPrompt: 'Gate prompt.' } as LoadedQuestion;
+      delete (gate as { answerPrompts?: unknown }).answerPrompts;
+      const h = html({ question: gate, runningQuestion: gate }, { scopeAnswer: 'yes' });
+      expect(radioNames(h)).toEqual(['Yes', 'No', 'Not sure']);
+      expect(h).toContain('<p id="decision-reason-help" class="decision-fields__help">Gate prompt.</p>');
+      expect(h).not.toContain('Counts as');
+    });
+
+    it('a question with no labels renders exactly as before', () => {
+      const h = html({}, { status: 'partly' });
+      expect(radioNames(h)).toEqual(['Done', 'Partly', 'Not yet', 'Not applicable']);
+      for (const o of STATUS_OPTIONS) expect(h).toContain(`id="decision-status-${o.value}-help"`);
+      for (const o of STATUS_OPTIONS) expect(h).toContain(`data-definition="${o.value === 'not_yet' ? 'not-yet' : o.value === 'not_applicable' ? 'not-applicable' : o.value}">${o.help}</p>`);
+      expect(h).not.toContain('Counts as');
+      expect(h).toContain(`<p id="decision-reason-help" class="decision-fields__help">${PANEL.runningQuestion.reasonPrompt}</p>`);
+    });
+  });
+
   it('FR-CNT-04 FR-CNT-03 (screen): the gate takes a scope answer, a checklist its options with the count in text', () => {
     const gate = html({ question: { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } });
     expect(gate).toMatch(/<legend[^>]*>Answer \(required\)<\/legend>/);
@@ -127,13 +233,15 @@ describe('S-12 decision fields', () => {
     expect(h).toMatch(/id="decision-reason-error"[^>]*>Write a reason\.</);
   });
 
-  it('plan 1A Task 17 R3: every control keeps its id and name, and each status card shows its radio button and its status mark', () => {
+  it('plan 1A Task 17 R3: every control keeps its id and name, and each status card has its radio, and only the chosen card draws its status mark (critique P1 4)', () => {
     const h = html({ question: { ...QUESTION, type: 'checklist', options: ['A', 'B'] } }, { status: 'not_yet' });
     for (const v of ['done', 'partly', 'not_yet', 'not_applicable']) {
       const radio = h.match(new RegExp(`<input[^>]*id="decision-status-${v}"[^>]*>`))?.[0] ?? '';
       for (const attr of ['type="radio"', 'name="status"', `value="${v}"`, `aria-describedby="decision-status-${v}-help"`]) expect(radio).toContain(attr);
     }
-    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(4);
+    expect(h.match(/class="ui-mark__shape"/g)).toHaveLength(1);
+    expect(h).toContain('data-shape-kind="not_yet"');
+    expect(h.match(/class="ui-radio-card__ring"/g)).toHaveLength(3);
     expect(h).toMatch(/<input[^>]*id="decision-option-0"[^>]*name="optionsInPlace"/);
     expect(h).toMatch(/<select[^>]*id="decision-reason-code"[^>]*name="reasonCode"/);
     expect(h).toMatch(/<option value=""[^>]*>Choose one<\/option>/);
@@ -331,7 +439,7 @@ describe('S-12 status line and conflict view', () => {
   });
 
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toMatch(/<p>Joseph K\. saved a newer version at \d{2}:\d{2} \S+\. Compare it with your version, then choose what to keep\.<\/p>/);
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(h).toMatch(new RegExp(`<h3[^>]*tabindex="-1"[^>]*>${esc(DECISION_FORM_COPY.conflict.heading)}</h3>`, 'i'));
@@ -340,26 +448,26 @@ describe('S-12 status line and conflict view', () => {
   });
 
   it('answer cost: ConflictView: reason null shows no \'erased\' text, and an erased reason still shows the erased line', () => {
-    const none = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const none = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: null, reasonErased: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(none).not.toContain(DECISION_FORM_COPY.conflict.erased);
     expect(none).not.toContain('Reason: </dt><dd><bdi>Theirs');
-    const erased = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const erased = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(erased).toContain(DECISION_FORM_COPY.conflict.erased);
   });
 
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
-    const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('memo.pdf');
     expect(h).toContain(DECISION_OUTCOME_COPY.keptEvidence(2));
   });
 
   it('F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toMatch(/Status: <\/dt><dd[^>]*><bdi>Withdrawn: Duplicate<\/bdi>/);
   });
 
   it('NFR-SEC-11: record text in the conflict view is text, never markup', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: '<img src=x onerror=alert(1)>' }} mine={{ ...EMPTY, reason: '<script>alert(1)</script>' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: '<img src=x onerror=alert(1)>' }} mine={{ ...EMPTY, reason: '<script>alert(1)</script>' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).not.toContain('<img src=x'); expect(h).not.toContain('<script>');
   });
 });
@@ -393,6 +501,17 @@ describe('S-12 regions', () => {
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
   });
 
+  it('FR-CNT-08 D9: the page measures "the practice changed" against the semver the answer was saved under, not the running one', async () => {
+    // V2 was saved under 0.0.1-fixture; the running content is 0.0.2-fixture and words the practice differently.
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const page = async (practiceSameAs: string[]) => renderToStaticMarkup(await QuestionPanelRegions({
+      data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.', practiceSameAs }, contentSemver: '0.0.2-fixture' }, stage: stageFixture() }));
+    expect(await page([V2.content.semver])).not.toContain('data-reworded');
+    expect(await page([])).toContain('data-reworded');
+    // Listing the running semver itself does not stand in for the answered one.
+    expect(await page(['0.0.2-fixture'])).toContain('data-reworded');
+  });
+
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
     // Lane 1 Task 1: Previous and Next are the position strip's (under 1160px; the breadcrumb and the route column above
     // it), which needs the stage's data: each link is named by its question in words, its place and its status.
@@ -423,6 +542,22 @@ describe('S-12 regions', () => {
     expect(v2).toMatch(/Entered by: Joseph K\. on 12 Oct 2026 at \d{2}:\d{2} \S+/);
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(v2).toMatch(new RegExp(`<a[^>]*href="/h"[^>]*>${esc(QUESTION_COPY.current.history(2))}</a>`));
+  });
+
+  it('D4: each history entry names its answer in its own version\'s label, and a version without labels reads the shared word', async () => {
+    const { DecisionHistoryList } = await import('@/components/decision/DecisionHistoryList');
+    const labels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+    const w = (answerLabels: typeof labels | null) => ({ text: 'Q', expectedPractice: 'P', answerLabels });
+    const h = renderToStaticMarkup(<DecisionHistoryList orgSlug="acme" entries={[
+      { version: V2, wording: w(labels), seals: [] },
+      { version: { ...V2, status: 'partly' }, wording: w(null), seals: [] },
+      { version: { ...V2, id: 'dv0', versionNumber: 0, status: 'partly' }, wording: null, seals: [] },
+    ]} />);
+    const [first, second, third] = h.split('<li ').slice(1);
+    expect(first).toContain('Partly compared');
+    expect(second).toContain('>Partly<');
+    expect(second).not.toContain('Partly compared');
+    expect(third).toContain('>Partly<');
   });
 
   it('U12 (d): the current decision shows the version\'s reason and its evidence, or None, for every role', () => {

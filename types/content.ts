@@ -6,6 +6,8 @@ export type ContentSemver = string;
 export type QuestionType = 'likert-5' | 'checklist' | 'gate';
 export interface OptionMapping { area: string; role?: 'primary' | 'supporting' | 'supplementary' }
 
+/** The four stored answer statuses a question's own labels and prompts are keyed by (per-question wording, content 5.2.0). */
+export type AnswerKey = 'done' | 'partly' | 'not_yet' | 'not_applicable';
 /**
  * The arrays and maps that `LoadedContent` reaches are `readonly`: the loader freezes what it returns because every request
  * shares it, so `q.options.sort()` or `area.controls.push(...)` would be a runtime TypeError; as a type it is a compile error.
@@ -26,7 +28,14 @@ export interface ContentQuestion {
   example?: string;
   expectedPractice: string;
   whyAsked: string;
-  reasonPrompt: string;
+  /** Optional from 5.2.0: only the gate keeps it; a question with `answerPrompts` has none. */
+  reasonPrompt?: string;
+  /** From 5.2.0, on every non-gate question: the question's own name for each stored status. */
+  answerLabels?: Readonly<Record<AnswerKey, string>>;
+  /** From 5.2.0, on every non-gate question: what to write in the reason box for each status. */
+  answerPrompts?: Readonly<Record<AnswerKey, string>>;
+  /** Earlier content versions whose `expectedPractice` for this question the owner confirmed is the same practice. */
+  practiceSameAs?: readonly string[];
   evidenceExamples: readonly string[];
 }
 export interface ContentModule {

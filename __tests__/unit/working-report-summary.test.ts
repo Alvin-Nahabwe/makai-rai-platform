@@ -303,3 +303,51 @@ describe('buildWorkingReportSummary (Task 7)', () => {
     expect(items(s.nextSteps).find((i) => i.findingId === 'f-t')?.title).toBe(docTextErasedLine('2026-11-01'));
   });
 });
+
+// Per-question wording (content 5.2.0, D4): which content's label a surface prints.
+const LABELS = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' } as const;
+/** The fixture content with `qid` carrying labels, as a 5.2.0 bundle would. */
+function labelled(qid: string, semver = '0.0.9-labelled'): typeof plain {
+  const questions = new Map([...plain.questions].map(([id, q]) => [id, id === qid ? { ...q, answerLabels: LABELS } : q]));
+  return { ...plain, semver, questions };
+}
+
+describe('per-question wording in the working report and the documents (D4)', () => {
+  it('the working report\'s open item prints the running question\'s label beside the running question text', () => {
+    const r = record({ 'pre-processing': {
+      decisions: [decision('Q-PP-09', 'partly')],
+      findings: [finding({ id: 'f-09', stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-09' })],
+    } });
+    const running = labelled('Q-PP-09');
+    const item = items(buildWorkingReportSummary(r, running).nextSteps).find((i) => i.findingId === 'f-09')!;
+    expect(item.questionText).toBe(running.questions.get('Q-PP-09')!.text);
+    expect(item.answer).toBe('Partly compared');
+    // A question the running content gives no labels keeps the shared word.
+    expect(items(buildWorkingReportSummary(r, plain).nextSteps).find((i) => i.findingId === 'f-09')!.answer).toBe('Partly');
+  });
+
+  it('a data card field with a status part prints the label of the decision\'s own version', () => {
+    const own = labelled('Q-PP-18', '0.0.1-fixture');
+    const dc07 = (cv: 'cv1' | 'cv0', content: typeof plain): string => {
+      const d = decision('Q-PP-18', 'partly');
+      d.row.contentVersionId = cv;
+      const r = record({ 'pre-processing': { decisions: [d] } }, { contents: new Map([[cv, content]]) });
+      const snap: DocumentSnapshot = { ...planSnap(r, 'pre-processing'), documentType: 'data_card' };
+      const map = { ...loadFieldMap('data_card'), fields: loadFieldMap('data_card').fields.filter((f) => f.fieldId === 'DC-07') };
+      return resolveFields(map, snap, {}).fields[0].text ?? '';
+    };
+    expect(dc07('cv1', own)).toContain('Status: Partly compared');
+    // A not applicable decision prints its own version's word too, with the code's label after it (I2).
+    const na = (content: typeof plain): string => {
+      const r = record({ 'pre-processing': { decisions: [decision('Q-PP-18', 'not_applicable')] } }, { contents: new Map([['cv1', content]]) });
+      const snap: DocumentSnapshot = { ...planSnap(r, 'pre-processing'), documentType: 'data_card' };
+      const map = { ...loadFieldMap('data_card'), fields: loadFieldMap('data_card').fields.filter((f) => f.fieldId === 'DC-07') };
+      return resolveFields(map, snap, {}).fields[0].text ?? '';
+    };
+    expect(na(own)).toContain(`Does not apply here (${NA_CODE.label}).`);
+    expect(na(plain)).toContain(`Not applicable (${NA_CODE.label}).`);
+    expect(dc07('cv0', plain)).toContain('Status: Partly');
+    expect(dc07('cv0', plain)).not.toContain('Partly compared');
+  });
+});
+

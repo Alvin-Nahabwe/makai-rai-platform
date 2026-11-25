@@ -3566,5 +3566,53 @@
     "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0, 0.9.0, 0.10.0 and 0.10.1",
     "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.10.1 records a waiver (the owner deferred the screen-reader walk again on 24 November 2026: \"Defer again (Recommended)\"), so the list and the title gain 0.10.1.",
     "proof": "The same case with one more version in its toEqual list, second because the list is sorted as strings; a release outside the list still fails it. The 0.10.1 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.10.1 the committed file waives the screen-reader walk and nothing else."
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/integration/question-panel.test.ts::FR-CNT-08 FR-CNT-07: after the running content rewords the practice, the panel holds both wordings",
+    "replacedBy": "__tests__/integration/question-panel.test.ts::FR-CNT-08 FR-CNT-07: after the running content rewords the practice, the panel holds both wordings",
+    "property": "After the running content words Q-PP-01's expected practice differently, the panel holds both wordings (the answered-against question and the running one differ in expectedPractice) and isReworded is true for them; the contentSemver, version number and history count are asserted as before. isReworded now takes the answered content version's semver as a second argument (per-question wording, Task 2: a running question that lists that version in practiceSameAs is not reworded); the case passes the decision's own version, d.current!.content.semver.",
+    "proof": "In this case the one isReworded call gains the argument d.current!.content.semver, 0.0.1-fixture here, which the running question does not list in practiceSameAs, and every expectation is unchanged (still toBe(true), same fixtures). __tests__/unit/question-reworded.test.ts::FR-CNT-08: a question counts as reworded only when the expected practice differs holds the signature directly (true on a changed practice, false on a changed text only) and the same file's practiceSameAs case holds the listed-version behaviour.",
+    "task": "per-question wording 6b"
+  },
+  {
+    "kind": "removed",
+    "deleted": "__tests__/content/revision-5.1.0.test.ts::index.json runs 5.1.0 and still lists 5.0.0",
+    "replacedBy": "__tests__/content/revision-5.1.0.test.ts::index.json still lists 5.0.0 and 5.1.0, and 5.2.0 runs",
+    "property": "data/content/index.json lists 5.0.0, 5.1.0 and 5.2.0. The old case pinned 5.1.0 as the running version; content 5.2.0 now runs (its registration, per-question wording task 10), so the same case pins 5.2.0 running and still lists the two older versions.",
+    "proof": "In revision-5.1.0.test.ts: index.json still lists 5.0.0 and 5.1.0, and 5.2.0 runs (running is 5.2.0, versions are 5.0.0, 5.1.0, 5.2.0); the same pin is held in revision-5.2.0.test.ts and content-bundle.test.ts.",
+    "task": "per-question wording 10"
+  },
+  {
+    "task": "release 0.11.0",
+    "kind": "wording",
+    "changed": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1 and 0.6.2",
+    "replacedBy": "__tests__/unit/release-waivers.test.ts::SFH-11: the committed file names no release but 0.6.0, 0.6.1, 0.6.2, 0.7.0, 0.8.0, 0.9.0, 0.10.0, 0.10.1 and 0.11.0",
+    "property": "The committed waiver file names only the releases the test lists, so a mistyped release cannot waive nothing in silence. Release 0.11.0 records a waiver (the owner deferred the screen-reader walk again on 25 November 2026: \"Defer again (Recommended)\"), so the list and the title gain 0.11.0.",
+    "proof": "The same case with one more version in its toEqual list, third because the list is sorted as strings; a release outside the list still fails it. The 0.11.0 entry has a case of its own above it: __tests__/unit/release-waivers.test.ts::NFR-A11Y-07 FR-ACC-02 UX-03 SFH-11: for 0.11.0 the committed file waives the screen-reader walk and nothing else."
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::F3 UX-28: \"Your answer\" lists the restored draft's evidence the block cannot name, as Save mine will attach it",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::F3 UX-28: \"Your answer\" lists the restored draft's evidence the block cannot name, as Save mine will attach it",
+    "property": "The conflict view renders the case's records as before (what the title says it shows). ConflictView now takes the running question, so that both versions are named in its own labels (per-question wording, final review I-1, D4: one screen never mixes voices); the case's data and its assertions are unchanged.",
+    "proof": "The only change is the added prop question={QUESTION} on the ConflictView element, the unlabelled question of this file; its status words are the shared ones as before. The new case 'the conflict view names both versions in the running question's labels, and keeps the withdrawn words (D4)' in the same file pins the labelled and the shared words and the withdrawn line.",
+    "task": "per-question wording fix wave"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so",
+    "property": "The conflict view renders the case's records as before (what the title says it shows). ConflictView now takes the running question, so that both versions are named in its own labels (per-question wording, final review I-1, D4: one screen never mixes voices); the case's data and its assertions are unchanged.",
+    "proof": "The only change is the added prop question={QUESTION} on the ConflictView element, the unlabelled question of this file; its status words are the shared ones as before. The new case 'the conflict view names both versions in the running question's labels, and keeps the withdrawn words (D4)' in the same file pins the labelled and the shared words and the withdrawn line.",
+    "task": "per-question wording fix wave"
+  },
+  {
+    "kind": "rule",
+    "changed": "__tests__/unit/decision-components.test.tsx::NFR-SEC-11: record text in the conflict view is text, never markup",
+    "replacedBy": "__tests__/unit/decision-components.test.tsx::NFR-SEC-11: record text in the conflict view is text, never markup",
+    "property": "The conflict view renders the case's records as before (what the title says it shows). ConflictView now takes the running question, so that both versions are named in its own labels (per-question wording, final review I-1, D4: one screen never mixes voices); the case's data and its assertions are unchanged.",
+    "proof": "The only change is the added prop question={QUESTION} on the ConflictView element, the unlabelled question of this file; its status words are the shared ones as before. The new case 'the conflict view names both versions in the running question's labels, and keeps the withdrawn words (D4)' in the same file pins the labelled and the shared words and the withdrawn line.",
+    "task": "per-question wording fix wave"
   }
 ]

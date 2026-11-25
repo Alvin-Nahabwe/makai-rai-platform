@@ -98,15 +98,36 @@ describe('the fixture content bundle', () => {
         expect(q.expectedPractice.length, q.id).toBeLessThanOrEqual(400);
         expect(q.whyAsked.length, q.id).toBeLessThanOrEqual(300);
         expect(sentences(q.whyAsked), q.id).toBeLessThanOrEqual(2);
-        expect(q.reasonPrompt.length, q.id).toBeLessThanOrEqual(400);
-        expect(sentences(q.reasonPrompt), q.id).toBeLessThanOrEqual(4);
+        if (q.answerPrompts === undefined) {
+          expect((q.reasonPrompt ?? '').length, q.id).toBeLessThanOrEqual(400);
+          expect(sentences(q.reasonPrompt ?? ''), q.id).toBeLessThanOrEqual(4);
+        } else {
+          // D1: a question with answerPrompts has no reasonPrompt; its four prompts are 150 to 200 characters, at most two sentences.
+          expect(q.reasonPrompt, q.id).toBeUndefined();
+          expect(Object.values(q.answerPrompts), q.id).toHaveLength(4);
+          expect(new Set(Object.values(q.answerPrompts)).size, q.id).toBe(4);
+          for (const t of Object.values(q.answerPrompts)) {
+            expect([...t].length, q.id).toBeGreaterThanOrEqual(150);
+            expect([...t].length, q.id).toBeLessThanOrEqual(200);
+            expect(sentences(t), q.id).toBeLessThanOrEqual(2);
+          }
+          expect(q.answerLabels, q.id).toEqual({ done: 'Done', partly: 'Partly', not_yet: 'Not yet', not_applicable: 'Not applicable' });
+        }
         expect(q.evidenceExamples.length, q.id).toBeGreaterThanOrEqual(1);
         expect(q.evidenceExamples.length, q.id).toBeLessThanOrEqual(4);
       }
   });
 
   it('FR-CNT-07 FR-CNT-08 (harness): 0.0.2-fixture differs from 0.0.1-fixture only in the text and expected practice of three questions', () => {
-    expect(diffPaths('0.0.1-fixture', '0.0.2-fixture').sort()).toEqual([
+    const wording = /\.(answerLabels|answerPrompts|reasonPrompt)$/;
+    const diff = diffPaths('0.0.1-fixture', '0.0.2-fixture');
+    // Per-question wording (D8): 0.0.2 names each non-gate answer (labels equal to the generic words) and prompts in place of reasonPrompt.
+    const gate = 'Q-PP-GATE-SENSITIVE';
+    const nonGate = idsOf('0.0.2-fixture').filter((id) => id !== gate);
+    expect(diff.filter((p) => wording.test(p)).sort()).toEqual(
+      nonGate.flatMap((id) => [`${id}.answerLabels`, `${id}.answerPrompts`, `${id}.reasonPrompt`]).sort(),
+    );
+    expect(diff.filter((p) => !wording.test(p)).sort()).toEqual([
       'Q-IP-05.expectedPractice',
       'Q-IP-05.text',
       'Q-PP-01.expectedPractice',

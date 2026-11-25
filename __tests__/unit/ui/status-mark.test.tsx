@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { SavedShape } from '@/components/ui/SavedMark';
 import { StatusMark } from '@/components/ui/StatusMark';
 import type { StatusMarkKind } from '@/components/ui/types';
 import { text, textOf } from '@/__tests__/helpers/markup';
@@ -32,6 +33,19 @@ const EXPECTED_SHAPES: Record<StatusMarkKind, string[]> = {
   no_decision: ['circle cx=12 cy=12 fill=currentColor r=3.5'],
 };
 
+
+describe('the saved shape', () => {
+  it('the saved shape differs from Done\'s shape: its own kind, its own geometry, no disc and no check', () => {
+    const html = renderToStaticMarkup(<SavedShape size={24} />);
+    expect(html).toContain('data-saved-shape');
+    expect(html).not.toContain('data-shape-kind="done"');
+    expect(html).not.toContain('ui-mark__');
+    expect(shapeOf(html)).not.toEqual(EXPECTED_SHAPES.done);
+    expect(html).not.toContain('M8 12.5l2.7');
+    expect(html).not.toMatch(/<circle/);
+    expect(html).toContain('aria-hidden="true"');
+  });
+});
 
 describe('StatusMark (spec 7.2)', () => {
   it('7.2: each kind draws its shape with its colour from CSS; only done has a check (R8)', () => {

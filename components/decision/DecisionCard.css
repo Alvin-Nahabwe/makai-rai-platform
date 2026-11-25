@@ -50,26 +50,6 @@
   display: inline-flex;
 }
 
-/* The corner's saved shape (design finish review m4): Done's filled green disc and its check in the surface colour, as
-   StatusMark.css paints Done; in forced colours the disc is the system text colour and the check the canvas. */
-.decision-card__saved-disc {
-  fill: var(--color-saved);
-}
-
-.decision-card__saved-check {
-  stroke: var(--color-surface);
-}
-
-@media (forced-colors: active) {
-  .decision-card__saved-disc {
-    fill: CanvasText;
-  }
-
-  .decision-card__saved-check {
-    stroke: Canvas;
-  }
-}
-
 /* The seal markers of the current version, first in the foot (T3 item 7): quiet, no list bullets. */
 .decision-card__meta .seal-markers {
   margin: 0 0 var(--space-1);

@@ -6,9 +6,11 @@ import { StatusMark } from '@/components/ui/StatusMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { textErasedLine } from '@/lib/documents/copy';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
+import { answerLabel } from '@/lib/question/answerWords';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { markKindOf } from '@/lib/ui/marks';
 import type { DecisionVersionView } from '@/types/api';
+import type { AnswerKey } from '@/types/content';
 import type { SealRef } from '@/types/seal';
 
 /** East Africa time, the zone "Entered by" is written in (components/decision/zone.ts). */
@@ -16,8 +18,12 @@ const ZONE = PLATFORM_ZONE;
 
 export type HistoryEntry = {
   version: DecisionVersionView;
-  /** The question's wording in that version's content version (FR-CNT-07), or null when that version no longer lists it. */
-  wording: { text: string; expectedPractice: string } | null;
+  /**
+   * The question's wording in that version's content version (FR-CNT-07), or null when that version no longer lists it.
+   * `answerLabels` are that version's own words for the answers (null before content 5.2.0): each entry names its answer in
+   * the voice of the question printed beside it (D4).
+   */
+  wording: { text: string; expectedPractice: string; answerLabels: Readonly<Record<AnswerKey, string>> | null } | null;
   seals: SealRef[];
 };
 
@@ -48,7 +54,8 @@ export function DecisionHistoryList({ orgSlug, entries, isScopeQuestion = false 
             {/* A withdrawn version keeps its words and no mark; any other shows the kit's mark with its words (spec 7.2). */}
             <dd>{v.status === 'withdrawn'
               ? <span className="status-label">{H.withdrawn(v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode])}</span>
-              : <StatusMark kind={markKindOf({ status: v.status, scopeAnswer: v.scopeAnswer, gated: false, isScopeQuestion })} scopeAnswer={v.scopeAnswer ?? undefined} />}</dd>
+              : <StatusMark kind={markKindOf({ status: v.status, scopeAnswer: v.scopeAnswer, gated: false, isScopeQuestion })} scopeAnswer={v.scopeAnswer ?? undefined}
+                  label={wording?.answerLabels != null && v.status !== null ? answerLabel({ answerLabels: wording.answerLabels }, v.status) : undefined} />}</dd>
             {v.reasonErased !== null || v.reason !== null ? (<>
               <dt>{H.reason}</dt>
               <dd>{v.reasonErased !== null ? textErasedLine(v.reasonErased.erasedOn) : v.reason}</dd>

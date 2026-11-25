@@ -44,7 +44,7 @@ export function wordingIn(semver: string, questionId: string, load: (semver: str
     throw e;
   }
   const q = content.questions.get(questionId);
-  return q === undefined ? null : { text: q.text, expectedPractice: q.expectedPractice };
+  return q === undefined ? null : { text: q.text, expectedPractice: q.expectedPractice, answerLabels: q.answerLabels ?? null };
 }
 
 /**

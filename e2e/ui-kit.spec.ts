@@ -462,23 +462,117 @@ test.describe('RadioCards', () => {
     await expect(section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true }).getByRole('radio', { name: 'Partly', exact: true })).toBeChecked();
   });
 
-  test('the chosen card is the only one with a border, and its radio stays drawn, in normal and in forced colours', async ({ page }) => {
+  test('the chosen card is the only one with a border and the only one with a mark, in normal and in forced colours (critique P1 4)', async ({ page }) => {
     await openKit(page);
     const group = section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true });
+    await expect(group.locator('.ui-mark__shape'), 'no mark until a card is chosen').toHaveCount(0);
     await group.getByRole('radio', { name: 'Not yet', exact: true }).check();
     const expectSelection = async (mode: string) => {
       const cards = await drawnBorders(group.locator('.ui-radio-card'), ':has(:checked)');
       expect(cards.filter((c) => c.marked), mode).toHaveLength(1);
       expect(cards.filter((c) => c.drawn).map((c) => c.marked), `${mode}, borders drawn: ${JSON.stringify(cards.filter((c) => c.drawn))}`).toEqual([true]);
-      const dot = await group.locator('.ui-radio-card__input:checked').evaluate((input) => {
-        const s = getComputedStyle(input, '::before');
-        return { width: parseFloat(s.borderTopWidth), colour: s.borderTopColor, ground: getComputedStyle(document.body).backgroundColor };
-      });
-      expect(dot.width, `${mode}, the checked radio's dot`).toBeGreaterThan(0);
-      expect(dot.colour, `${mode}, the checked radio's dot`).not.toBe(dot.ground);
+      // One mark in the group, on the chosen card, and it is painted against the page.
+      await expect(group.locator('.ui-mark__shape'), mode).toHaveCount(1);
+      await expect(group.locator('.ui-radio-card:has(:checked) .ui-mark__shape'), mode).toHaveCount(1);
+      const painted = await shapesVisible(page, '[data-kit-section="radio-cards"] .ui-radio-card:has(:checked) .ui-radio-card__label');
+      expect(painted.count, `${mode}, the chosen mark's primitives`).toBeGreaterThan(0);
+      expect(painted.invisible, `${mode}, the chosen mark`).toEqual([]);
+      // The unchosen cards draw a ring, never a mark, and the ring is painted against the page.
+      const rings = await group.locator('.ui-radio-card:not(:has(:checked)) .ui-radio-card__ring').evaluateAll((els) =>
+        els.map((e) => getComputedStyle(e).borderTopColor !== getComputedStyle(document.body).backgroundColor));
+      expect(rings, `${mode}, rings on the unchosen cards`).toEqual([true, true, true]);
     };
     await expectSelection('normal colours');
     await withForcedColors(page, () => expectSelection('forced colours'));
+  });
+
+  test('forced colours: Done\'s chosen mark stays visible (disc and check apart)', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'Status', exact: true });
+    await group.getByRole('radio', { name: 'Done', exact: true }).check();
+    await withForcedColors(page, async () => {
+      const paint = await group.locator('.ui-mark__done-disc, .ui-mark__done-check').evaluateAll((els) =>
+        els.map((e) => { const s = getComputedStyle(e); return { cls: e.getAttribute('class'), fill: s.fill, stroke: s.stroke }; }));
+      const disc = paint.find((p) => p.cls === 'ui-mark__done-disc')!;
+      const check = paint.find((p) => p.cls === 'ui-mark__done-check')!;
+      expect(disc.fill).not.toBe('none');
+      expect(check.stroke).not.toBe(disc.fill);
+    });
+  });
+
+  test('an option with no mark shows its choice as a drawn dot, in normal and in forced colours', async ({ page }) => {
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'Does the data hold personal information?', exact: true });
+    await group.getByRole('radio', { name: 'No', exact: true }).check();
+    const expectDot = async (mode: string) => {
+      const dot = await group.locator('.ui-radio-card:has(:checked) .ui-radio-card__ring').evaluate((ring) => {
+        const s = getComputedStyle(ring, '::before');
+        return { width: parseFloat(s.borderTopWidth), colour: s.borderTopColor, ground: getComputedStyle(document.body).backgroundColor };
+      });
+      expect(dot.width, `${mode}, the chosen dot`).toBeGreaterThan(0);
+      expect(dot.colour, `${mode}, the chosen dot`).not.toBe(dot.ground);
+      await expect(group.locator('.ui-radio-card:not(:has(:checked)) .ui-radio-card__ring[data-on="true"]'), mode).toHaveCount(0);
+    };
+    await expectDot('normal colours');
+    await withForcedColors(page, () => expectDot('forced colours'));
+  });
+
+  test('a 40-character label wraps inside its card in the decision card\'s own grid at 320 px and at 200% zoom (160 CSS px), the whole document not scrolling sideways; the radio is named by the label alone', async ({ page }) => {
+    const LABEL = 'Yes, we compared each group in the data.';
+    expect([...LABEL]).toHaveLength(40);
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openKit(page);
+    const group = section(page, 'radio-cards').getByRole('group', { name: 'A long answer label', exact: true });
+    const radio = group.getByRole('radio', { name: LABEL, exact: true });
+    await expect(radio).toHaveCount(1);
+    await radio.check();
+    await expect(radio).toHaveAccessibleName(LABEL);
+    // Hide every other part of the gallery (its own sections are not this check's business at 160 px), leaving the demo's path.
+    await page.evaluate(() => {
+      let el: Element | null = document.getElementById('kit-long-label-wrap');
+      while (el !== null && el !== document.body) {
+        for (const sib of Array.from(el.parentElement!.children)) if (sib !== el) (sib as HTMLElement).style.display = 'none';
+        el = el.parentElement;
+      }
+    });
+    const inside = async (what: string) => {
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('#kit-long-label-wrap .ui-radio-card:has(input[value="compared"])')!;
+        const label = card.querySelector('.ui-radio-card__label')!;
+        const c = card.getBoundingClientRect();
+        const text = Array.from(label.childNodes).filter((n) => n.nodeType === 3 || n.nodeType === 1)
+          .map((n) => { const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect(); });
+        const de = document.documentElement;
+        return { card: { left: c.left, right: c.right }, text: text.map((r) => ({ left: r.left, right: r.right, height: r.height })), documentOverflow: de.scrollWidth - de.clientWidth };
+      });
+      expect(m.documentOverflow, `${what}: the document scrolls sideways`).toBeLessThanOrEqual(0);
+      for (const t of m.text) {
+        if (t.height === 0) continue;
+        expect(t.left, `${what}: text starts inside the card`).toBeGreaterThanOrEqual(m.card.left - 0.5);
+        expect(t.right, `${what}: text ends inside the card`).toBeLessThanOrEqual(m.card.right + 0.5);
+      }
+    };
+    await inside('320 px');
+    await page.setViewportSize({ width: 160, height: 640 });   // 200% zoom of a 320 px window
+    await inside('200% zoom (160 CSS px)');
+
+    // The auto-fit rule itself, where DecisionFields.css's "narrower than 360 px" rule does not apply: a 400 px viewport with the
+    // grid's container held to 300 px, under two 10rem cards and the gap (328 px), gives one column; wide gives two.
+    const columns = async () => page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('#kit-long-label-wrap .ui-radio-card')).map((c) => c.getBoundingClientRect());
+      return { sameRow: Math.abs(cards[0].top - cards[1].top) < 1, stacked: cards[1].top >= cards[0].bottom - 0.5, width: cards[0].width };
+    });
+    await page.setViewportSize({ width: 400, height: 640 });
+    expect(await page.evaluate(() => matchMedia('(max-width: 359px)').matches), 'the narrow-phone rule does not apply').toBe(false);
+    await page.evaluate(() => { document.getElementById('kit-long-label-wrap')!.style.maxInlineSize = '300px'; });
+    const narrow = await columns();
+    expect(narrow.stacked, `one column at a 300 px container (card ${narrow.width}px)`).toBe(true);
+    await inside('400 px viewport, 300 px container');
+    await page.evaluate(() => { document.getElementById('kit-long-label-wrap')!.style.maxInlineSize = ''; });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const wide = await columns();
+    expect(wide.sameRow, `two columns at desktop width (card ${wide.width}px)`).toBe(true);
+    await inside('desktop');
   });
 });
 

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { DecisionForm, type NextQuestion } from '@/components/decision/DecisionForm';
 import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
-import { SavedMark } from '@/components/ui/SavedMark';
+import { SavedMark, SavedShape } from '@/components/ui/SavedMark';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
@@ -18,20 +18,8 @@ import './DecisionCard.css';
 
 const C = QUESTION_COPY.current;
 
-/**
- * The corner's saved shape (design finish review m4; the sketch's .saved): Done's filled green disc with its white check,
- * the kit's done geometry (components/ui/StatusMark.tsx SHAPES.done), in classes of its own. It says "saved", not a
- * status, so it is not a status mark (`ui-mark__shape`), which the no-score checks hold to the status rules
- * (e2e/helpers/noScore.ts); DecisionCard.css paints it. Hidden: the words beside it say what it means.
- */
-const savedShape = (size: number): ReactElement => (
-  <svg className="decision-card__saved-svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <circle className="decision-card__saved-disc" cx={12} cy={12} r={9} />
-    <path className="decision-card__saved-check" d="M8 12.5l2.7 2.7L16 9.8" fill="none" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-/** The corner's shape, 16 px; the phone's saved block draws the same shape at 24 px (design N4). */
-const SAVED_SHAPE = savedShape(16);
+/** The corner's saved shape, 16 px; the phone's saved block draws the same shape at 24 px (design N4). */
+const SAVED_SHAPE = <SavedShape size={16} />;
 
 export type DecisionCardProps = {
   data: QuestionPanelData;
@@ -64,8 +52,8 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
   const decision = current !== null && current.status !== 'withdrawn' ? current : null;
   const S = UI_COPY.saved;
 
-  // The corner (lead's ruling D1, the sketch's .fh): one line, the saved shape (Done's mark, the filled green disc with its
-  // check: design finish review m4, as the sketch draws it) and "Saved as version N · <saved date>" in the reader's zone;
+  // The corner (lead's ruling D1, the sketch's .fh): one line, the saved shape (SavedShape: a page with a folded corner,
+  // its own form, not Done's mark; critique P1 4) and "Saved as version N · <saved date>" in the reader's zone;
   // "No decision yet." with no version; the withdrawn line for a withdrawal. Not a live region: it is server-rendered
   // filled, and the save's own status line announces the save. The date is the reader's and names its zone (review A
   // A3-3), so it never reads as a contradiction of the foot's "Entered by", which is in East Africa time.
@@ -123,7 +111,7 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
     <div className="decision-card__saved-block">
       <SavedMark saved={{ version: decision.versionNumber, savedAt: decision.receivedAt, decidedOn: decision.declaredDate }} historyHref={historyHref} live={false}
         savedTime={<ReaderZoneTime at={decision.receivedAt} />} historyLink={<HeldLink href={historyHref}>{UI_COPY.saved.keptLink}</HeldLink>}
-        shape={savedShape(24)} />
+        shape={<SavedShape size={24} />} />
     </div>
   );
 

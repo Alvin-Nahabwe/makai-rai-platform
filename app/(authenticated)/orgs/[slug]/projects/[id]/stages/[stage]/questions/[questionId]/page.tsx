@@ -65,7 +65,7 @@ function readingRegions(data: QuestionPanelData, openWork: QuestionOpenWork | nu
   return {
     decision: (
       <ReadingDecision orgSlug={data.orgSlug} current={data.current} historyCount={data.historyCount} historyHref={historyHref}
-        seals={data.seals} isScopeQuestion={data.question.type === 'gate'} />
+        seals={data.seals} isScopeQuestion={data.question.type === 'gate'} question={data.runningQuestion} />
     ),
     openWork: <StillOpen work={openWork} orgSlug={data.orgSlug} projectId={data.projectId} />,
     aside: (
@@ -101,7 +101,7 @@ export function QuestionPanelRegions({ data, openWork, route, stage, arrival }: 
   const count = countFor(data);
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
   const stageHref = `${base}/stages/${data.stage}`;
-  const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
+  const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.current.content.semver, data.runningQuestion);
   const { index, total, previousId, nextId } = data.position;
   const historyHref = `${stageHref}/questions/${question.id}/history`;
   const doesNotApply = data.gateAnswer === 'no' && !questionApplies(runningContent(), data.runningQuestion.id, data.gateAnswer);

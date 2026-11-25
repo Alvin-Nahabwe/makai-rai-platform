@@ -206,6 +206,17 @@ describe('S-13 page', () => {
 });
 
 describe('S-13 wording', () => {
+  it("history shows each version's own labels: a 5.1.0 version reads \"Partly\", a labelled version reads its label (D4)", async () => {
+    const { loadContent } = await import('@/lib/content/loader');
+    const labels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+    const labelledLoad = (semver: string) => {
+      const c = loadContent(semver as never);
+      return { ...c, questions: new Map([...c.questions].map(([id, q]) => [id, id === 'Q-PP-01' ? { ...q, answerLabels: labels } : q])) } as ReturnType<typeof loadContent>;
+    };
+    expect(wordingIn('0.0.1-fixture', 'Q-PP-01')!.answerLabels).toBeNull();   // a version before 5.2.0 has none: the entry shows the shared word
+    expect(wordingIn('0.0.2-fixture', 'Q-PP-01', labelledLoad)!.answerLabels).toEqual(labels);
+  });
+
   it('CR-5 F8 FR-CNT-07: only a version the index no longer lists loses its wording; any other content error is thrown', async () => {
     const { AppError } = await import('@/lib/http/errors');
     expect(wordingIn('9.9.9', 'Q-PP-01', () => { throw new AppError(500, 'unknown_content_version'); })).toBeNull();

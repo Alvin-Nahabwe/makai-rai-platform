@@ -15,8 +15,8 @@ const view = (questionId: string, semver: string, status: DecisionVersionView['s
 
 describe('reworded marker', () => {
   it('FR-CNT-08: a question counts as reworded only when the expected practice differs', () => {
-    expect(isReworded(q('Q-PP-01', 'Old wording.'), q('Q-PP-01', 'New wording.'))).toBe(true);
-    expect(isReworded(q('Q-PP-01', 'Same.', 'Old text'), q('Q-PP-01', 'Same.', 'New text'))).toBe(false);
+    expect(isReworded(q('Q-PP-01', 'Old wording.'), '0.0.1-fixture', q('Q-PP-01', 'New wording.'))).toBe(true);
+    expect(isReworded(q('Q-PP-01', 'Same.', 'Old text'), '0.0.1-fixture', q('Q-PP-01', 'Same.', 'New text'))).toBe(false);
   });
 
   it('FR-CNT-08: rewordedQuestionIds lists the current decisions answered against an older wording, withdrawals excepted', () => {
@@ -31,6 +31,15 @@ describe('reworded marker', () => {
     expect(rewordedQuestionIds(current, running, load)).toEqual(['Q-PP-01']);
     // a decision answered on the running version is never reworded
     expect(rewordedQuestionIds(new Map([['Q-PP-01', view('Q-PP-01', '0.0.2-fixture')]]), running, load)).toEqual([]);
+  });
+
+  it('FR-CNT-08: rewordedQuestionIds skips answers whose version the running question lists in practiceSameAs', () => {
+    const older = content('0.0.1-fixture', [q('Q-PP-01', 'Old wording.'), q('Q-PP-02', 'Old two.')]);
+    const running = content('0.0.2-fixture', [
+      { ...q('Q-PP-01', 'New wording.'), practiceSameAs: ['0.0.1-fixture'] }, q('Q-PP-02', 'New two.'),
+    ]);
+    const current = new Map([['Q-PP-01', view('Q-PP-01', '0.0.1-fixture')], ['Q-PP-02', view('Q-PP-02', '0.0.1-fixture')]]);
+    expect(rewordedQuestionIds(current, running, () => older)).toEqual(['Q-PP-02']);
   });
 
   it('SI-5: each older content version is loaded once, however many decisions were answered against it', () => {

@@ -4,9 +4,10 @@ import { STAGES } from '@/types/record';
 import type {
   AcceptedRiskView, ContentRef, DeciderView, ErasedMark, EvidenceItemView, FindingEventView, FindingView, MitigationVersionView, UserRef,
 } from '@/types/api';
-import type { LoadedContent, LoadedQuestion } from '@/types/content';
+import type { AnswerKey, LoadedContent, LoadedQuestion } from '@/types/content';
 import type { FieldMap, FieldMapEntry, FieldSource, RecordPart, SourceStage } from '@/types/documents';
 import type { SealManifestV1, SealRef } from '@/types/seal';
+import { answerLabel } from '@/lib/question/answerWords';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { controlSuggestionsOn, controlsForArea, controlsForQuestion, questionAreaIds, type ControlGroup } from '@/lib/content/suggestions';
 import { FINDINGS_COPY } from '@/lib/findings/copy';
@@ -289,7 +290,8 @@ function evidenceItem(e: EvidenceItemView, snap: DocumentSnapshot): string {
 export function notApplicableLine(d: SealedDecision, content: LoadedContent): string {
   const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
   if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
-  const stem = `Not applicable (${code.label}).`;
+  // The question's own word for the answer, read from the decision's own content (D4); the shared word when it names none.
+  const stem = `${answerLabel(content.questions.get(d.row.questionId) ?? {}, 'not_applicable')} (${code.label}).`;
   if (d.reasonErased !== null) return `${stem} Reason: ${docTextErasedLine(d.reasonErased.erasedOn)}`;
   return d.row.reason === null ? stem : `${stem} Reason: '${d.row.reason}'`;
 }
@@ -317,7 +319,9 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
   } else {
     if (parts.has('status') && d.row.status !== null) {
       // SRS 7.5.6: a Not yet decision prints "Not yet (<label>)", the label read from the decision's own content.
-      let status = word(STATUS_WORD, d.row.status, 'status');
+      word(STATUS_WORD, d.row.status, 'status');   // refuses a status this module has no word for
+      // The question's own word for it, from the decision's own content (D4): the same voice as the stem printed above it.
+      let status = answerLabel(own, d.row.status as AnswerKey);
       if (d.row.status === 'not_yet') {
         const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
         if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);

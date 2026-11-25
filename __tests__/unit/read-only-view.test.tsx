@@ -174,6 +174,16 @@ describe('the read-only question page (plan 1C Task 7)', () => {
     expect(c).toContain('<span>saved 10 Nov 2026</span>');
   });
 
+  it('the current-answer card shows the running question\'s label for an answer saved under an older version (D4)', async () => {
+    // The answer was saved against 0.0.1 (no labels); the running question names its answers. The card reads beside the running wording.
+    const running = { ...QUESTION, answerLabels: { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' } } as LoadedQuestion;
+    const head = card(await render({ ...PANEL, runningQuestion: running })).match(/<div class="reading-decision__head">[\s\S]*?<\/div>/)![0];
+    expect(textOf(head)).toBe('What the team decidedYes, we compared');
+    expect(head).toContain('data-mark-kind="done"');   // the mark is the stored status's, whatever its words
+    // Without labels the shared word stays.
+    expect(textOf(card(await render(PANEL)).match(/<div class="reading-decision__head">[\s\S]*?<\/div>/)![0])).toBe('What the team decidedDone');
+  });
+
   it('the personal data question shows its answer in the card\'s corner', async () => {
     const gate = { ...QUESTION, id: 'Q-PP-GATE-SENSITIVE', type: 'gate' } as LoadedQuestion;
     const c = card(await render({ ...VIEWER, question: gate, runningQuestion: gate, current: { ...CURRENT, status: null, scopeAnswer: 'no' } as never }));

@@ -28,6 +28,20 @@ vi.mock('next/navigation', async (importOriginal) => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
+// The fixture bundles hold no answerLabels; these flags let a test give the answer's own content version (loadContent) or the
+// running content (runningContent) its labels, to show the findings pages read the own version's (D4's rule).
+const wording = vi.hoisted(() => ({ own: false, running: false }));
+vi.mock('@/lib/content/loader', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/content/loader')>();
+  const answerLabels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
+  const label = <C extends ReturnType<typeof real.loadContent>>(c: C): C => ({ ...c, questions: new Map([...c.questions].map(([id, q]) => [id, { ...q, answerLabels }])) });
+  return {
+    ...real,
+    loadContent: (semver: Parameters<typeof real.loadContent>[0]) => (wording.own ? label(real.loadContent(semver)) : real.loadContent(semver)),
+    runningContent: () => (wording.running ? label(real.runningContent()) : real.runningContent()),
+  };
+});
+
 let fx: OrgFixture;
 let contentVersionId: string;
 const identityOf = (role: OrgRole) => ({ userId: fx.members[role].userId } as Identity);
@@ -166,6 +180,29 @@ describe('S-14 the findings list (UX-15, UX-06, UX-07, FR-FND-07, FR-FND-08)', (
     const html = await renderList('viewer', k.p.id);
     expect(html).toContain(FINDINGS_COPY.labels.fromDecisionWith('Not yet'));
     expect(html).toContain(FINDINGS_COPY.labels.raisedByTeam);
+  });
+
+  it('the findings pages print the label of the answer\'s own content version, the version their question text comes from (D4)', async () => {
+    const k = await everyKind();
+    const Y = FINDINGS_COPY.labels.fromDecisionWith('Not yet');
+    const L = FINDINGS_COPY.labels.fromDecisionWith('Not compared yet');
+    // Only the running content is labelled: an answer saved under an unlabelled version keeps the shared word.
+    wording.running = true;
+    try {
+      const html = await renderList('viewer', k.p.id);
+      expect(html).toContain(Y);
+      expect(html).not.toContain(L);
+    } finally { wording.running = false; }
+    // The own version is labelled: its label shows, on the list and on the finding's own page.
+    wording.own = true;
+    try {
+      expect(await renderList('viewer', k.p.id)).toContain(L);
+      const page = await pageData('assessor', k.p.id, k.done.f.id);
+      expect(page.sourceLabel).toBe(L);
+      expect(page.version?.statusWord).toBe('Not compared yet');   // the raising version's status
+      expect(page.closeByDecision?.statusWord).toBe('Yes, we compared');   // the closing version's status
+    } finally { wording.own = false; }
+    expect(await renderList('viewer', k.p.id)).toContain(Y);
   });
 
   it('FR-FND-02 FR-FND-08: members see their findings on S-14, and a non-member gets 404', async () => {
