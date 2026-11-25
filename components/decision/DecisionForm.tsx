@@ -774,7 +774,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
-          current={conflict} mine={value} viewerId={data.viewer.userId}
+          current={conflict} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? F.evidenceFallback)}
           mineKeptEvidence={extraEvidenceIds.length}
           onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); save(false, uploads, b); }}

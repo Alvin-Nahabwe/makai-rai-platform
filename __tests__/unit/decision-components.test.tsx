@@ -9,7 +9,7 @@ import type { DecisionVersionView } from '@/types/api';
 import { gateStatus } from '@/lib/question/saveOutcome';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
-import { deciderLabel, FINDING_NOTE, STATUS_OPTIONS } from '@/lib/decision/copy';
+import { deciderLabel, FINDING_NOTE, STATUS_OPTIONS, WITHDRAWAL_CODE_LABELS } from '@/lib/decision/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { AUTHZ_COPY } from '@/lib/authz/copy';
 import { STATUS_MARK_COPY } from '@/lib/ui/copy';
@@ -111,6 +111,7 @@ describe('S-12 decision fields', () => {
   describe('per-question wording (content 5.2.0)', () => {
     const LABELLED = {
       ...QUESTION,
+      reasonPrompt: undefined,   // D1: a question with per-answer prompts carries no reasonPrompt
       answerLabels: { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not yet compared', not_applicable: 'Does not apply' },
       answerPrompts: { done: 'Say what you compared.', partly: 'Say what is still to compare.', not_yet: 'Say when you will compare.', not_applicable: 'Say why comparing does not apply.' },
     } as LoadedQuestion;
@@ -165,8 +166,9 @@ describe('S-12 decision fields', () => {
       const notYet = html({ runningQuestion: LABELLED, reasonCodes: withCodes }, { status: 'not_yet', reason: 'abc', reasonCode: 'ny_planned_later' });
       expect(help(notYet)).toBe('Say when you will compare. Name the date.');
       expect(notYet).toMatch(/<textarea[^>]*>abc<\/textarea>/);
+      // Before an answer is chosen, real 5.2.0 content has no prompt to show (D1: no reasonPrompt), so the help is empty.
       const none = html({ runningQuestion: LABELLED }, { status: null });
-      expect(help(none)).toBe(PANEL.runningQuestion.reasonPrompt);
+      expect(help(none)).toBe('');
       // Switching the answer patches the status and the code only; the draft's reason is left as typed.
       const seen: DecisionDraft[] = [];
       const tree = DecisionFields({ data: { ...PANEL, runningQuestion: LABELLED }, value: { ...EMPTY, status: 'partly', reason: 'abc' }, errors: [], disabled: false, onChange: (v) => seen.push(v), whoWhenOpen: false, onOpenWhoWhen: () => {} });
@@ -181,6 +183,16 @@ describe('S-12 decision fields', () => {
       const data = { ...PANEL, runningQuestion: LABELLED };
       expect(consequenceOf({ ...EMPTY, status: 'partly' }, data, null).text).toContain('Saving \u2018Partly compared\u2019');
       expect(consequenceOf({ ...EMPTY, status: 'partly' }, PANEL, null).text).toContain('Saving \u2018Partly\u2019');
+    });
+
+    it('the conflict view names both versions in the running question\'s labels, and keeps the withdrawn words (D4)', () => {
+      const status = (h: string) => [...h.matchAll(/<dt>Status: <\/dt><dd><bdi>([^<]*)<\/bdi>/g)].map((m) => m[1]);
+      const show = (current: DecisionVersionView, mine: Partial<DecisionDraft>, question: LoadedQuestion) => renderToStaticMarkup(
+        <ConflictView current={current} mine={{ ...EMPTY, ...mine }} question={question} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+      expect(status(show(V2, { status: 'not_yet' }, LABELLED))).toEqual(['Partly compared', 'Not yet compared']);
+      expect(status(show(V2, { status: 'not_yet' }, QUESTION))).toEqual(['Partly', 'Not yet']);
+      expect(status(show({ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }, { status: null }, LABELLED)))
+        .toEqual([DECISION_FORM_COPY.conflict.withdrawn(WITHDRAWAL_CODE_LABELS.duplicate), DECISION_FORM_COPY.conflict.none]);
     });
 
     it('the gate under labelled content keeps Yes, No and Not sure, its reasonPrompt, and no "Counts as" line', () => {
@@ -427,7 +439,7 @@ describe('S-12 status line and conflict view', () => {
   });
 
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toMatch(/<p>Joseph K\. saved a newer version at \d{2}:\d{2} \S+\. Compare it with your version, then choose what to keep\.<\/p>/);
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(h).toMatch(new RegExp(`<h3[^>]*tabindex="-1"[^>]*>${esc(DECISION_FORM_COPY.conflict.heading)}</h3>`, 'i'));
@@ -436,26 +448,26 @@ describe('S-12 status line and conflict view', () => {
   });
 
   it('answer cost: ConflictView: reason null shows no \'erased\' text, and an erased reason still shows the erased line', () => {
-    const none = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const none = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: null, reasonErased: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(none).not.toContain(DECISION_FORM_COPY.conflict.erased);
     expect(none).not.toContain('Reason: </dt><dd><bdi>Theirs');
-    const erased = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const erased = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: null, reasonErased: { erasedOn: '2026-11-01' } as never }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(erased).toContain(DECISION_FORM_COPY.conflict.erased);
   });
 
   it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
-    const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('memo.pdf');
     expect(h).toContain(DECISION_OUTCOME_COPY.keptEvidence(2));
   });
 
   it('F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toMatch(/Status: <\/dt><dd[^>]*><bdi>Withdrawn: Duplicate<\/bdi>/);
   });
 
   it('NFR-SEC-11: record text in the conflict view is text, never markup', () => {
-    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: '<img src=x onerror=alert(1)>' }} mine={{ ...EMPTY, reason: '<script>alert(1)</script>' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={{ ...V2, reason: '<img src=x onerror=alert(1)>' }} mine={{ ...EMPTY, reason: '<script>alert(1)</script>' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).not.toContain('<img src=x'); expect(h).not.toContain('<script>');
   });
 });
@@ -489,6 +501,17 @@ describe('S-12 regions', () => {
     expect(same).not.toContain(line);   // with the same wording there is no line (the property's own words), not only no summary
   });
 
+  it('FR-CNT-08 D9: the page measures "the practice changed" against the semver the answer was saved under, not the running one', async () => {
+    // V2 was saved under 0.0.1-fixture; the running content is 0.0.2-fixture and words the practice differently.
+    const { stageFixture } = await import('../helpers/stageFixture');
+    const page = async (practiceSameAs: string[]) => renderToStaticMarkup(await QuestionPanelRegions({
+      data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.', practiceSameAs }, contentSemver: '0.0.2-fixture' }, stage: stageFixture() }));
+    expect(await page([V2.content.semver])).not.toContain('data-reworded');
+    expect(await page([])).toContain('data-reworded');
+    // Listing the running semver itself does not stand in for the answered one.
+    expect(await page(['0.0.2-fixture'])).toContain('data-reworded');
+  });
+
   it('UX-42 W-3: one h1 for the question that takes focus, and Previous and Next go to the neighbouring questions', async () => {
     // Lane 1 Task 1: Previous and Next are the position strip's (under 1160px; the breadcrumb and the route column above
     // it), which needs the stage's data: each link is named by its question in words, its place and its status.
@@ -519,16 +542,6 @@ describe('S-12 regions', () => {
     expect(v2).toMatch(/Entered by: Joseph K\. on 12 Oct 2026 at \d{2}:\d{2} \S+/);
     const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(v2).toMatch(new RegExp(`<a[^>]*href="/h"[^>]*>${esc(QUESTION_COPY.current.history(2))}</a>`));
-  });
-
-  it('D4: CurrentDecision names the answer in the running question\'s label when given one, else the shared word', () => {
-    const labels = { done: 'Yes, we compared', partly: 'Partly compared', not_yet: 'Not compared yet', not_applicable: 'Does not apply here' };
-    const withLabel = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} question={{ answerLabels: labels }} />);
-    expect(withLabel).toContain('Partly compared');
-    expect(withLabel).toContain('data-mark-kind="partly"');
-    const none = renderToStaticMarkup(<CurrentDecision orgSlug="acme" current={V2} historyCount={2} historyHref="/h" seals={[]} isScopeQuestion={false} question={{}} />);
-    expect(none).toContain('>Partly<');
-    expect(none).not.toContain('Partly compared');
   });
 
   it('D4: each history entry names its answer in its own version\'s label, and a version without labels reads the shared word', async () => {

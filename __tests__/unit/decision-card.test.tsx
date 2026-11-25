@@ -375,7 +375,7 @@ describe('review round 1', () => {
 
   it('B-M3: "Your answer" with no decider chosen says so, never "Decided by: , <date>"', async () => {
     const { ConflictView } = await import('@/components/decision/ConflictView');
-    const h = renderToStaticMarkup(<ConflictView current={V1} mine={{ ...draftFromCurrent(PANEL, null), date: { day: '14', month: '11', year: '2026' } }}
+    const h = renderToStaticMarkup(<ConflictView question={QUESTION} current={V1} mine={{ ...draftFromCurrent(PANEL, null), date: { day: '14', month: '11', year: '2026' } }}
       viewerId="u-me" mineDecidedBy="" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(decode(h)).toContain(`${F.conflict.notChosen}, 14 Nov 2026`);
     expect(decode(h)).not.toMatch(/>, 14 Nov 2026</);

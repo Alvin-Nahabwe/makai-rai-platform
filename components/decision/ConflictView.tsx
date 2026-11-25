@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { statusText } from '@/lib/question/stageList';
+import { answerLabel } from '@/lib/question/answerWords';
 import { keptEvidenceLine } from '@/lib/question/draft';
 import { formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { evidenceDisplayName } from '@/components/evidence/EvidenceItemText';
@@ -12,12 +13,15 @@ import { conflictText } from '@/lib/question/saveOutcome';
 import { declaredDateFromParts } from '@/lib/decision/rules';
 import type { DecisionDraft } from '@/lib/question/draft';
 import type { DecisionVersionView } from '@/types/api';
+import type { ContentQuestion } from '@/types/content';
 import './ConflictView.css';
 
 const C = DECISION_FORM_COPY.conflict;
 
 export type ConflictViewProps = {
   current: DecisionVersionView; mine: DecisionDraft; viewerId: string;
+  /** The running question: both sides are named in its own labels, as the form's answer cards are (D4: one screen never mixes voices). */
+  question: Pick<ContentQuestion, 'answerLabels'>;
   onSaveMine: () => void; onEditMine: () => void; onDiscard: () => void;
   /** Who "your version" names as the decider and which evidence it holds, as the form knows them (W-4). */
   mineDecidedBy?: string; mineEvidence?: string[];
@@ -25,10 +29,14 @@ export type ConflictViewProps = {
   mineKeptEvidence?: number;
 };
 
-/** The status words of either side: statusText's words, and a withdrawal named with its code (as S-13 names it). */
-function statusWords(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer' | 'withdrawalCode'>): string {
+/**
+ * The status words of either side: the running question's label for an answer (the shared word when it has none), the
+ * gate's scope answer as statusText words it, and a withdrawal named with its code (as S-13 names it).
+ */
+function statusWords(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer' | 'withdrawalCode'>, question: Pick<ContentQuestion, 'answerLabels'>): string {
   if (v.status === 'withdrawn') return C.withdrawn(v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]);
-  return v.status === null && v.scopeAnswer === null ? C.none : statusText(v);
+  if (v.status !== null) return answerLabel(question, v.status);
+  return v.scopeAnswer === null ? C.none : statusText(v);
 }
 
 function Column({ title, rows }: { title: string; rows: Array<[string, string]> }): ReactElement {
@@ -56,14 +64,14 @@ export function ConflictView(p: ConflictViewProps): ReactElement {
   const c = p.current;
   const mineDate = declaredDateFromParts(p.mine.date);
   const theirs: Array<[string, string]> = [
-    [C.status, statusWords(c)],
+    [C.status, statusWords(c, p.question)],
     // A reason never typed (null, not erased) has no row; an erased one shows the erased line.
     ...(c.reasonErased !== null || c.reason !== null ? [[C.reason, c.reasonErased !== null ? C.erased : (c.reason as string)] as [string, string]] : []),
     [C.decidedBy, c.decidedBy === null ? C.none : `${deciderLabel(c.decidedBy, p.viewerId, 'record')}${c.declaredDate ? `, ${formatDeclaredDate(c.declaredDate)}` : ''}`],
     [C.evidence, c.evidence.length === 0 ? C.none : c.evidence.map(evidenceDisplayName).join(', ')],
   ];
   const mine: Array<[string, string]> = [
-    [C.status, statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null })],
+    [C.status, statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null }, p.question)],
     [C.reason, p.mine.reason],
     // A first decision's draft may have no decider yet: say so, never "Decided by: , 14 Nov 2026" (review round 1, B-M3).
     [C.decidedBy, `${p.mineDecidedBy || C.notChosen}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
