@@ -73,10 +73,10 @@ Words per question screen, as the plan measures them: words of the question, the
 
 | What | Rows | Needs your answer |
 |---|---|---|
-| Question wording (23 questions: question, good practice, why asked, evidence examples) | 23 | yes |
-| Answer labels (four per question) | 92 | yes |
-| Answer prompts (four per question) | 92 | yes |
-| "Practice did not change" confirmations (`practiceSameAs`) | 23 | yes |
+| Question wording (23 questions: question, good practice, why asked, evidence examples) | 23 | settled 25 Nov 2026 |
+| Answer labels (four per question) | 92 | settled 25 Nov 2026 |
+| Answer prompts (four per question) | 92 | settled 25 Nov 2026 |
+| "Practice did not change" confirmations (`practiceSameAs`) | 23 | settled 25 Nov 2026 |
 
 ## How to answer
 

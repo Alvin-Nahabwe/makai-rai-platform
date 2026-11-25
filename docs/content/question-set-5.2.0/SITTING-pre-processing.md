@@ -80,16 +80,16 @@ Words per question screen, as the plan measures them: words of the question, the
 
 | What | Rows | Needs your answer |
 |---|---|---|
-| Question wording (22 questions: question, good practice, why asked, evidence examples) | 22 | yes |
-| Answer labels (four per question, the gate has none) | 84 | yes |
-| Answer prompts (four per question; the gate keeps one reason prompt, rewritten) | 85 | yes |
-| "Practice did not change" confirmations (`practiceSameAs`, the gate included) | 22 | yes |
+| Question wording (22 questions: question, good practice, why asked, evidence examples) | 22 | settled 25 Nov 2026 |
+| Answer labels (four per question, the gate has none) | 84 | settled 25 Nov 2026 |
+| Answer prompts (four per question; the gate keeps one reason prompt, rewritten) | 85 | settled 25 Nov 2026 |
+| "Practice did not change" confirmations (`practiceSameAs`, the gate included) | 22 | settled 25 Nov 2026 |
 
 ## How to answer
 
 Reply with one line per row you want to settle: `<row>: accept`, `<row>: edit <your wording>` or `<row>: decline`. "Accept all the pre-processing rows" is also an answer. A row you leave unanswered stays undecided, and we come back to it before anything is signed.
 
-Each label is read as the answer it is stored as: a Done label says the practice is in place, a Partly label starts "Partly" (on the two checklist questions, Q-PP-16 and Q-PP-17, it starts "Some of"), a Not yet label says "No, not yet" (or "None yet" for the two checklist questions), and a Not applicable label says, in neutral words, why the question does not apply: "No <practice> applies" (Q-PP-01 adds "here"), except Q-PP-13's "No consent or waiver is needed", which is listed above for your decision. On the 17 questions whose typed text prints in the data card or model card (the 15 whose reason feeds a field, plus Q-PP-16 and Q-PP-17, whose typed reason prints with their ticks), every prompt asks for text that reads correctly there and says which document it prints in.
+Each label is read as the answer it is stored as: a Done label says the practice is in place, a Partly label starts "Partly" (on the two checklist questions, Q-PP-16 and Q-PP-17, it starts "Some of"), a Not yet label says "No, not yet" (or "None yet" for the two checklist questions), and a Not applicable label says, in neutral words, why the question does not apply: "No <practice> applies" (Q-PP-01 adds "here"). On the 17 questions whose typed text prints in the data card or model card (the 15 whose reason feeds a field, plus Q-PP-16 and Q-PP-17, whose typed reason prints with their ticks), every prompt asks for text that reads correctly there and says which document it prints in.
 
 ## Questions
 
