@@ -238,14 +238,16 @@ test('browser check 3: a form that has only loaded its defaults shows no unsaved
 });
 
 /**
- * Browser checks 4 and 5. Q-PP-03's next question, Q-PP-04, has a 148-character text: too long for two lines at 1280 and for one at 375.
- * M4 (design finish review): the words end in an ellipsis when cut. Chromium draws none on a clamped last line aligned to the end
- * that ends on a whole word, so the words are start-aligned inside a box as wide as they are; the check reads the rules in force and
- * that the text really is cut (scrollHeight over clientHeight at 1280, scrollWidth over clientWidth at 375). The save bar's Next
- * button must also stay inside the screen, the bar and beside Save, and the page must not scroll sideways.
+ * Browser checks 4 and 5. Q-PP-03's next question, Q-PP-04, has a 148-character text: too long for two lines at 1280.
+ * At 1280 (M4, design finish review) the words end in an ellipsis when cut. Chromium draws none on a clamped last line aligned to the
+ * end that ends on a whole word, so the words are start-aligned inside a box as wide as they are; the check reads the rules in force
+ * and that the text really is cut (scrollHeight over clientHeight). On a phone (the owner's "'Next question', no cut", 25 Nov 2026,
+ * replacing the one-line ellipsis) the button reads "Next question" over "Question n of N": the question's words are not shown, nothing
+ * shown is cut, and the link's name is what it shows. The save bar's Next button must also stay inside the screen, the bar and beside
+ * Save, and the page must not scroll sideways.
  */
 for (const [width, height] of [[1280, 800], [375, 812]] as const) {
-  test(`browser checks 4 and 5: at ${width} px the Next button's long words show an ellipsis and the button does not overflow the save bar`, async ({ page, baseURL }, info) => {
+  test(`browser checks 4 and 5: at ${width} px the Next button shows its words whole or cut with an ellipsis (1280) or "Next question" uncut (375), and does not overflow the save bar`, async ({ page, baseURL }, info) => {
     await page.setViewportSize({ width, height });
     await openQuestion(page, 'assessor', 'Q-PP-03', baseURL!);
     const bar = page.locator('.decision-save-bar');
@@ -253,29 +255,44 @@ for (const [width, height] of [[1280, 800], [375, 812]] as const) {
     await expect(next).toHaveClass(/\bui-button--secondary\b/);
     await expect(next).toHaveAttribute('href', questionPath(page.url().split('/projects/')[1].split('/')[0], 'Q-PP-04'));
     const words = next.locator('.decision-next__words');
-    await expect(words).toContainText('Next: Have you assessed how the AI system might affect');
-    const m = await words.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return {
-        overflow: s.overflow, textOverflow: s.textOverflow, textAlign: s.textAlign, display: s.display, whiteSpace: s.whiteSpace,
-        clamp: s.getPropertyValue('line-clamp') || s.getPropertyValue('-webkit-line-clamp'), lineHeight: parseFloat(s.lineHeight), scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
-        scrollWidth: el.scrollWidth, clientWidth: el.clientWidth,
-      };
-    });
-    info.annotations.push({ type: `words ${width}`, description: JSON.stringify(m) });
-    expect(m.overflow).toBe('hidden');
-    expect(m.textOverflow).toBe('ellipsis');
-    expect(m.textAlign).toBe('start');
+    const short = next.locator('.decision-next__short');
+    const position = F.card.position(4, 24);
     if (width >= 769) {
+      await expect(words).toBeVisible();
+      await expect(short).toBeHidden();
+      await expect(words).toContainText('Next: Have you assessed how the AI system might affect');
+      const m = await words.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          overflow: s.overflow, textOverflow: s.textOverflow, textAlign: s.textAlign,
+          clamp: s.getPropertyValue('line-clamp') || s.getPropertyValue('-webkit-line-clamp'), lineHeight: parseFloat(s.lineHeight), scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+        };
+      });
+      info.annotations.push({ type: `words ${width}`, description: JSON.stringify(m) });
+      expect(m.overflow).toBe('hidden');
+      expect(m.textOverflow).toBe('ellipsis');
+      expect(m.textAlign).toBe('start');
       expect(m.clamp).toBe('2');
       expect(m.clientHeight, `held to two lines of ${m.lineHeight}px`).toBeLessThanOrEqual(2 * m.lineHeight + 1);
       expect(m.scrollHeight, `cut at two lines: scrollHeight ${m.scrollHeight} over clientHeight ${m.clientHeight}`).toBeGreaterThan(m.clientHeight);
+      // The whole text stays the link's name.
+      await expect(next).toHaveAccessibleName(/^Next: Have you assessed how the AI system might affect protected or vulnerable .+Question 4 of 24$/);
     } else {
-      expect(m.whiteSpace).toBe('nowrap');
-      expect(m.scrollWidth, `cut at one line: scrollWidth ${m.scrollWidth} over clientWidth ${m.clientWidth}`).toBeGreaterThan(m.clientWidth);
+      // A phone: "Next question" over "Question n of N", the question's words not shown.
+      await expect(words).toBeHidden();
+      await expect(short).toBeVisible();
+      await expect(short).toHaveText(F.card.nextQuestion);
+      expect((await next.innerText()).replace(/\s+/g, ' ').trim()).toBe(`${F.card.nextQuestion} ${position}`);
+      // Nothing shown is cut: no ellipsis, and no part is wider than its box.
+      for (const part of [short, next.locator('.decision-next__position')]) {
+        const m = await part.evaluate((el) => ({ textOverflow: getComputedStyle(el).textOverflow, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, text: el.textContent }));
+        info.annotations.push({ type: `part ${width}`, description: JSON.stringify(m) });
+        expect(m.textOverflow, `${m.text}: no ellipsis`).not.toBe('ellipsis');
+        expect(m.scrollWidth, `${m.text}: scrollWidth ${m.scrollWidth} not over clientWidth ${m.clientWidth}`).toBeLessThanOrEqual(m.clientWidth);
+      }
+      // WCAG 2.5.3: the name is the visible label.
+      await expect(next).toHaveAccessibleName(new RegExp(`^${F.card.nextQuestion}\\s*${position}$`));
     }
-    // The whole text stays the link's name.
-    await expect(next).toHaveAccessibleName(/^Next: Have you assessed how the AI system might affect protected or vulnerable .+Question 4 of 24$/);
 
     // The button sits on the screen, inside the bar and beside Save, and nothing scrolls sideways.
     const geometry = await page.evaluate(() => {

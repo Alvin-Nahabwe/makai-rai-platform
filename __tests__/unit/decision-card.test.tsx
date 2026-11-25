@@ -292,10 +292,10 @@ describe('the consequence line: what this save will do, and its version (R2)', (
 });
 
 describe('Save beside the next question (R2, R9)', () => {
-  it('"Next: <question words>" links to the next question, with "Question n of N" under it, inside the save bar', () => {
+  it('"Next: <question words>" (or, on a phone, "Next question") links to the next question, with "Question n of N" under it, inside the save bar', () => {
     const h = card();
     const bar = h.match(/<div class="decision-save-bar"[\s\S]*$/)![0];
-    expect(bar).toMatch(new RegExp(`<a[^>]*href="${esc(NEXT.href)}"[^>]*><span class="decision-next__words">${esc(F.card.next(NEXT.text))}</span><span class="decision-next__position">${esc(F.card.position(3, 24))}</span></a>`));
+    expect(bar).toMatch(new RegExp(`<a[^>]*href="${esc(NEXT.href)}"[^>]*><span class="decision-next__words">${esc(F.card.next(NEXT.text))}</span><span class="decision-next__short">${esc(F.card.nextQuestion)}</span><span class="decision-next__position">${esc(F.card.position(3, 24))}</span></a>`));
     expect(bar.indexOf('>Save decision</button>')).toBeLessThan(bar.indexOf(F.card.next(NEXT.text)));
   });
 
@@ -327,7 +327,7 @@ describe('Save beside the next question (R2, R9)', () => {
     expect(link).toMatch(/class="[^"]*\bdecision-next\b[^"]*"/);
     expect(link).toContain(`href="${NEXT.href}"`);
     expect(link).toContain('data-held-on-save');
-    expect(words(live)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
+    expect(words(live)).toBe(`${F.card.next(NEXT.text)}${F.card.nextQuestion}${F.card.position(3, 24)}`);
   });
 
   it('on the stage\'s last question: the last-question line and All questions', () => {
@@ -427,7 +427,7 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
     for (const rule of [/border-color:\s*transparent/, /background-color:\s*transparent/, /color:\s*var\(--color-link\)/, /text-decoration:\s*underline/, /font-size:\s*var\(--font-size-small\)/]) expect(quiet).toMatch(rule);
   });
 
-  it('M4: the next question\'s words show an ellipsis when cut, and the phone keeps "Question n of N" visible in small type', () => {
+  it('M4: the next question\'s words show an ellipsis when cut; a phone shows "Next question" uncut instead, and keeps "Question n of N" visible in small type', () => {
     const form = css('components/decision/DecisionForm.css');
     const words = /\.decision-next__words\s*\{([^}]*)\}/.exec(form)?.[1] ?? '';
     expect(words).toMatch(/line-clamp:\s*2/);
@@ -441,11 +441,18 @@ describe('T3a: the card\'s finish (owner\'s sentence, design must-fix and minors
       .flatMap((m) => [...m[2].matchAll(/text-align:\s*([^;}\s]+)/g)].map((a) => `${m[1].trim()} -> ${a[1]}`));
     expect(aligned.filter((a) => !a.endsWith('-> start'))).toEqual([]);
     expect(form).not.toMatch(/\.decision-next__position\s*\{\s*display:\s*none/);
-    expect(form).toMatch(/@media \(max-width: 768px\)[\s\S]*\.decision-next__words\s*\{[^}]*white-space:\s*nowrap/);
-    // The whole text stays the link's name: the words and the position, never cut in the markup.
+    // The owner's "'Next question', no cut" (25 Nov 2026): wide, the short label is not drawn; at the phone breakpoint the words are not
+    // drawn and "Next question" is, with no one-line cut left on anything (it replaced the one-line ellipsis).
+    const plain = form.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(/\.decision-next__short\s*\{([^}]*)\}/.exec(plain)?.[1] ?? '').toMatch(/display:\s*none/);
+    const phone = [...plain.matchAll(/@media \(max-width: 768px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(/\.decision-next__words\s*\{([^}]*)\}/.exec(phone)?.[1] ?? '').toMatch(/display:\s*none/);
+    expect(/\.decision-next__short\s*\{([^}]*)\}/.exec(phone)?.[1] ?? '').toMatch(/display:\s*block/);
+    expect(phone).not.toMatch(/decision-next__\w+\s*\{[^}]*(white-space:\s*nowrap|text-overflow)/);
+    // The markup holds the words, the short label and the position; which shows is the stylesheet's.
     const link = card().match(/<a class="ui-button ui-button--secondary decision-next"[^>]*>([\s\S]*?)<\/a>/)![1];
     expect(words.length).toBeGreaterThan(0);
-    expect(textOf(link)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
+    expect(textOf(link)).toBe(`${F.card.next(NEXT.text)}${F.card.nextQuestion}${F.card.position(3, 24)}`);
   });
 
   it('m1: Save is 48 px high with 24 px each side, in the card\'s own stylesheet', () => {
@@ -584,7 +591,7 @@ describe('T3b: one Save/Retry control, the unsaved line, the way on during a sav
     const held = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held />);
     expect(held).not.toMatch(/<a[\s>]/);
     expect(held).not.toContain('href=');
-    expect(words(held)).toBe(`${F.card.next(NEXT.text)}${F.card.position(3, 24)}`);
+    expect(words(held)).toBe(`${F.card.next(NEXT.text)}${F.card.nextQuestion}${F.card.position(3, 24)}`);
     expect(held).toContain('decision-next--held');
     const live = renderToStaticMarkup(<NextWay next={NEXT} stageHref={STAGE} held={false} />);
     expect(live).toMatch(new RegExp(`<a[^>]*href="${esc(NEXT.href)}"`));

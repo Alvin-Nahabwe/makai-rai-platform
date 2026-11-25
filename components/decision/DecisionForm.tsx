@@ -211,7 +211,10 @@ export function WaitLines({ uploading, failed }: { uploading: readonly string[];
  */
 export function NextWay({ next, stageHref, held }: { next: NextQuestion | null; stageHref?: string; held: boolean }): ReactElement | null {
   if (next !== null) {
-    const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
+    // The question's words on a wide screen; "Next question" on a phone, where only about 12 characters of them would fit (the
+    // owner's "'Next question', no cut", 25 Nov 2026). The stylesheet shows one of the two; the other is display:none, so the link's
+    // name is what it shows at each width (WCAG 2.5.3).
+    const words = <><span className="decision-next__words">{F.card.next(next.text)}</span><span className="decision-next__short">{F.card.nextQuestion}</span><span className="decision-next__position">{F.card.position(next.number, next.total)}</span></>;
     return held
       ? <p className="decision-next decision-next--held" data-next-held>{words}</p>
       : <Link className="ui-button ui-button--secondary decision-next" href={next.href} {...{ [HELD_ON_SAVE]: '' }}>{words}</Link>;

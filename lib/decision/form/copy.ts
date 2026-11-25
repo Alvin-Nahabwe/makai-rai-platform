@@ -91,6 +91,11 @@ export const DECISION_FORM_COPY = Object.freeze({
     /** The foot's "Entered by: <name> on <saved time>.": the time, in East Africa time with its zone, follows these words. */
     enteredBy: (name: string): string => `Entered by: ${name} on `,
     next: (title: string): string => `Next: ${title}`,
+    /**
+     * The way on, on a phone, in place of `next(<words>)`: the owner's "'Next question', no cut" (25 Nov 2026). Only about 12 characters
+     * of the question's words fit there, so they are not shown. The owner's phrase; its wording has not yet had the copy review.
+     */
+    nextQuestion: 'Next question',
     position: (n: number, of: number): string => `Question ${n} of ${of}`,
   }),
   /**

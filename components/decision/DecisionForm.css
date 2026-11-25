@@ -302,6 +302,11 @@
   text-align: start;
 }
 
+/* "Next question", the phone's label in place of the words (below); not drawn on a wide screen. */
+.decision-next__short {
+  display: none;
+}
+
 .decision-next__position {
   display: block;
   font-size: var(--font-size-small);
@@ -331,9 +336,10 @@
   color: var(--color-ink-muted);
 }
 
-/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a secondary button beside it, its words
-   on one line ending in an ellipsis and "Question n of N" under them in small type (design finish review M4), so the
-   bar stays as short as Save. */
+/* R9, a phone: Save stays the one orange control in the fixed bar; the next question is a secondary button beside it, reading
+   "Next question" with "Question n of N" under it in small type, so the bar stays as short as Save. The question's words are not
+   drawn here: only about 12 characters of them fit (the owner's "'Next question', no cut", 25 Nov 2026, which replaced the
+   one-line ellipsis of design finish review M4). */
 @media (max-width: 768px) {
   .decision-save-bar__row {
     flex-wrap: nowrap;
@@ -357,12 +363,12 @@
     font-size: var(--font-size-small);
   }
 
-  /* One line cut with an ellipsis (a one-line clamp drew none at 375 px in Chromium; seen in the T3a screenshots). */
   .decision-next__words {
+    display: none;
+  }
+
+  .decision-next__short {
     display: block;
-    -webkit-line-clamp: none;
-    line-clamp: none;
-    white-space: nowrap;
   }
 }
 
