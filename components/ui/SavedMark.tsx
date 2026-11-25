@@ -1,5 +1,4 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Icon } from '@/components/ui/Icon';
 import { LocalTime } from '@/components/ui/LocalTime';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { UI_COPY } from '@/lib/ui/copy';
@@ -42,7 +41,7 @@ export type SavedMarkProps = {
    * `historyHref` (the decision card passes one that a held Save turns into text). Absent, the mark is exactly as before.
    */
   historyLink?: ReactNode;
-  /** Additive (lane 2 T5, design N4): the saved shape as the caller draws it, in place of the kit's outline check. */
+  /** Additive (lane 2 T5, design N4): the saved shape as the caller draws it, in place of the default folded-page shape. */
   shape?: ReactNode;
 };
 
@@ -60,7 +59,7 @@ export function SavedMark({ saved, historyHref, live = true, savedTime, historyL
     <div className="ui-saved" data-decision-version={saved === null ? undefined : saved.version} {...region}>
       {saved === null ? null : (
         <>
-          <span className="ui-saved__shape">{shape ?? <Icon name="circle-check" size={24} />}</span>
+          <span className="ui-saved__shape">{shape ?? <SavedShape size={24} />}</span>
           <p className="ui-saved__title">{copy.title(saved.version)}</p>
           <p className="ui-saved__when">
             {saved.decidedOn === null ? null : `${copy.decidedOn} ${formatDeclaredDate(saved.decidedOn)} · `}

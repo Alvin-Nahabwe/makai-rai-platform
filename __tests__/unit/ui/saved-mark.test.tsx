@@ -43,9 +43,10 @@ describe('SavedMark (spec 7.3)', () => {
     expect(quiet).toBe(live.replace(' role="status" aria-live="polite" aria-atomic="true"', ''));
   });
 
-  it('the check shape is an icon hidden from assistive technology', () => {
+  it('the default shape is the folded page, hidden from assistive technology, never the circle-check of Done', () => {
     const html = renderToStaticMarkup(<SavedMark saved={{ version: 1, savedAt: '2026-11-11T08:23:00.000Z', decidedOn: null }} />);
-    expect(html).toMatch(/<span class="ui-saved__shape"><svg class="ui-icon"[^>]*aria-hidden="true"/);
+    expect(html).toMatch(/<span class="ui-saved__shape"><svg class="ui-saved__svg" data-saved-shape[^>]*aria-hidden="true"/);
+    expect(html).not.toContain('ui-icon');
   });
 });
 
