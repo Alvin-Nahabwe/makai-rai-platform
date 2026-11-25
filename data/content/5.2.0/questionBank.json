@@ -436,7 +436,7 @@
                 "done": "Say how consent was obtained, in which languages and whether it covers AI and sharing, or the waiving committee and reference; this prints in the data card. Attach the blank form, never signed ones.",
                 "partly": "Say how consent was obtained and which uses or people it does not yet cover; this prints in the data card. Attach the blank form, never signed ones.",
                 "not_yet": "Say how you plan to obtain consent (written, oral with a witness, community and individual) and in which languages; this prints in the data card.",
-                "not_applicable": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan."
+                "not_applicable": "Say why no consent step applies to this project; this prints in the data card and mitigation plan."
               },
               "practiceSameAs": [
                 "5.0.0",

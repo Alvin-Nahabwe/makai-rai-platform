@@ -1716,8 +1716,8 @@
     "field": "answerPrompts.not_applicable",
     "from": null,
     "to": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan.",
-    "decision": "accept",
-    "final": "Say why the data needs neither consent nor a waiver; this prints in the data card and mitigation plan."
+    "decision": "edit",
+    "final": "Say why no consent step applies to this project; this prints in the data card and mitigation plan."
   },
   {
     "row": "Q-PP-13.practiceSameAs",
