@@ -11,6 +11,7 @@ import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { WITHDRAW_COPY } from '../lib/decision/copy';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
+import { QUESTION_COPY } from '../lib/question/copy';
 
 /**
  * Keyboard, accessibility and reflow of S-11 to S-13 (UX-42, NFR-A11Y-02, NFR-A11Y-04, NFR-A11Y-05). The themes follow
@@ -281,18 +282,17 @@ test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px,
       return;
     }
     if (state === 'S-12 conflict') {
-      await page.goto(questionPath(projectId, 'Q-PP-03')); await waitForQuestionPage(page);
+      // A real conflict, in a project of its own each time (so no visit's browser draft meets the next): someone else saves
+      // version 1 while the page is open, and the person's Save is refused with it. The refused save refreshes the page's server
+      // data, and the scan is of the page after that refresh has landed: the card's foot then counts the version the conflict
+      // names, which it does not show before (the question had no answer). The wait is on that, never on the document's title.
+      const conflictProject = await newProject(baseURL!);
+      await page.goto(questionPath(conflictProject, 'Q-PP-03')); await waitForQuestionPage(page);
       await fillValid(page, { reason: 'Mine' });
-      await page.route('**/decisions', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
-        error: 'x', code: 'base_version_moved', current: {
-          id: 'dv', projectId, stage: 'pre-processing', questionId: 'Q-PP-03', versionNumber: 1, baseVersionNumber: null,
-          content: { contentVersionId: 'c', semver: '0.0.1-fixture', contentHash: 'h' }, status: 'done', scopeAnswer: null, optionsInPlace: [],
-          reasonCode: null, reason: 'Theirs', reasonErased: null, decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-10',
-          declaredPrecision: 'month', withdrawalCode: null, enteredBy: { userId: 'other', name: 'Joseph K.', formerMember: false }, enteredByRole: 'owner',
-          receivedAt: new Date().toISOString(), evidence: [],
-        } }) }), { times: 1 });
+      expect((await saveViaApi(baseURL!, 'owner', conflictProject, 'Q-PP-03', { reason: 'Theirs' })).status).toBe(201);
       await page.getByRole('button', { name: 'Save decision' }).click();
       await expect(page.getByRole('heading', { name: DECISION_FORM_COPY.conflict.heading })).toBeVisible();
+      await expect(page.getByText(QUESTION_COPY.reading.history(1), { exact: true }).filter({ visible: true }).first()).toBeVisible();
       return;
     }
     if (state === 'S-11') { await page.goto(stagePath(projectId, 'pre-processing')); await page.waitForSelector('[data-question-id]'); return; }
