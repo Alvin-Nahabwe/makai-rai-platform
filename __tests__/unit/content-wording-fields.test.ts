@@ -4,7 +4,8 @@ import { basename, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildLoadedContent } from '@/lib/content/loader';
 import { signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
-import { validateContentVersion } from '@/lib/content/validate';
+import type { LoadedQuestion } from '@/types/content';
+import { checkWordingFields, validateContentVersion } from '@/lib/content/validate';
 
 /**
  * Per-question wording (content 5.2.0): `answerLabels` and `answerPrompts` on every non-gate question, `reasonPrompt` on
@@ -104,5 +105,49 @@ describe('wording fields', () => {
     const dir = wordedCopy((qs) => { delete firstNonGate(qs).answerLabels.not_applicable; });
     expect(problemsOf(dir).join('\n')).toMatch(/answerLabels\.not_applicable is missing/);
     expect(KEYS).toHaveLength(4);
+  });
+});
+
+/** practiceSameAs names only released versions earlier than the one under check (security review L-1, I-3). */
+describe('practiceSameAs', () => {
+  const problemsFor = (practiceSameAs: unknown, semver = '5.2.0', listed: readonly string[] = ['5.0.0', '5.1.0', '5.2.0']): string[] => {
+    const out: string[] = [];
+    checkWordingFields({ id: 'Q-X-01', type: 'single', practiceSameAs } as unknown as LoadedQuestion, false, (p) => out.push(p), { semver, listed });
+    return out;
+  };
+
+  it('practiceSameAs: a listed, earlier version passes, and so does an empty list', () => {
+    expect(problemsFor(['5.0.0', '5.1.0'])).toEqual([]);
+    expect(problemsFor(['5.1.0'])).toEqual([]);
+    expect(problemsFor([])).toEqual([]);
+  });
+
+  it('practiceSameAs: a version index.json does not list fails', () => {
+    expect(problemsFor(['5.0.1']).join('\n')).toMatch(/question Q-X-01: practiceSameAs "5\.0\.1" is not a version listed in index\.json/);
+  });
+
+  it('practiceSameAs: the version itself and a later version fail', () => {
+    expect(problemsFor(['5.2.0']).join('\n')).toMatch(/practiceSameAs "5\.2\.0" is not earlier than 5\.2\.0/);
+    expect(problemsFor(['5.1.0'], '5.0.0').join('\n')).toMatch(/practiceSameAs "5\.1\.0" is not earlier than 5\.0\.0/);
+    expect(problemsFor(['5.10.0'], '5.9.0', ['5.9.0', '5.10.0']).join('\n')).toMatch(/not earlier than 5\.9\.0/);
+  });
+
+  /** The index.json that sits beside a release's version directories; a temporary copy has none until a case writes one. */
+  const withIndex = (dir: string): string => {
+    write(join(dir, '..', 'index.json'), { running: '5.2.0', versions: ['5.0.0', '5.1.0', '5.2.0'] });
+    return dir;
+  };
+
+  it('practiceSameAs: through validateContentVersion, an unknown and a later version are refused', () => {
+    const unknown = withIndex(wordedCopy((qs) => { firstNonGate(qs).practiceSameAs = ['9.9.9']; }));
+    expect(problemsOf(unknown).join('\n')).toMatch(/practiceSameAs "9\.9\.9" is not a version listed in index\.json/);
+    // 5.0.0 is listed in data/content/index.json but is later than the fixture under check.
+    const later = withIndex(wordedCopy((qs) => { firstNonGate(qs).practiceSameAs = ['5.0.0']; }));
+    expect(problemsOf(later).join('\n')).toMatch(/practiceSameAs "5\.0\.0" is not earlier than 0\.0\.2-fixture/);
+  });
+
+  it('practiceSameAs: an index.json that is not beside the version is one problem, not a pass', () => {
+    const dir = wordedCopy((qs) => { firstNonGate(qs).practiceSameAs = ['5.0.0']; });
+    expect(problemsOf(dir).join('\n')).toMatch(/index\.json cannot be read, so practiceSameAs cannot be checked/);
   });
 });

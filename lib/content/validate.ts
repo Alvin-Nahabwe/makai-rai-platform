@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { principleSlugMap } from '@/data/constants';
 import { buildLoadedContent } from '@/lib/content/loader';
 import { riskAreaIdsOf } from '@/lib/content/riskAreas';
@@ -274,9 +274,10 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
   checkSourceLinks(c, opts.completeness, say);
   if (opts.completeness) {
     const versionUsesLabels = questions.some((q) => q.answerLabels !== undefined);
+    const released = { semver: c.semver, listed: questions.some((q) => q.practiceSameAs !== undefined) ? listedVersions(versionDir, say) : [] };
     for (const q of questions) {
       checkTexts(q, versionUsesLabels, say);
-      checkWordingFields(q, versionUsesLabels, say);
+      checkWordingFields(q, versionUsesLabels, say, released);
     }
     if (records !== null) checkSignOffs(c, records, say);
   }
@@ -577,16 +578,46 @@ function checkTexts(q: LoadedQuestion, versionUsesLabels: boolean, say: (p: stri
   }
 }
 
+/**
+ * The versions the `index.json` beside the version directory lists (`data/content/index.json` for a release; read from the
+ * directory, not through `lib/content/root`, so the content test seam cannot swap it). A file that cannot be read is one problem and an empty list.
+ */
+function listedVersions(versionDir: string, say: (p: string) => void): readonly string[] {
+  const file = join(/*turbopackIgnore: true*/ dirname(versionDir), 'index.json');
+  try {
+    const v = (parseBytes(readFileSync(/*turbopackIgnore: true*/ file)) as Json | null)?.versions;
+    if (Array.isArray(v) && v.every((x) => typeof x === 'string')) return v as string[];
+    say(`${file}: versions is not a list of strings, so practiceSameAs cannot be checked`);
+  } catch (e) {
+    say(`${file} cannot be read, so practiceSameAs cannot be checked: ${errorCode(e)}`);
+  }
+  return [];
+}
+
+/** True when semver `a` is earlier than `b` by major, minor, patch; the same triple (a pre-release tag included) is not earlier. */
+function isEarlier(a: string, b: string): boolean {
+  const n = (v: string): number[] => v.split('-')[0].split('.').map(Number);
+  const [x, y] = [n(a), n(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return false;
+}
+
 const ANSWER_KEYS: readonly AnswerKey[] = ['done', 'partly', 'not_yet', 'not_applicable'];
 
 /**
  * Per-question wording (content 5.2.0, plan D1). In a version where any question has `answerLabels`, each non-gate question
  * has `answerLabels` (four different labels, 1 to 40 characters) and `answerPrompts` (1 to 200 characters, at most two
- * sentences each) and no `reasonPrompt`; the gate keeps its `reasonPrompt` and has neither new field.
+ * sentences each) and no `reasonPrompt`; the gate keeps its `reasonPrompt` and has neither new field. Each `practiceSameAs`
+ * entry names a version `index.json` lists (`released.listed`) that is earlier than the version under check (`released.semver`),
+ * so a typo or a copied-forward value is refused (security review L-1, I-3).
  */
-export function checkWordingFields(q: LoadedQuestion, versionUsesLabels: boolean, say: (p: string) => void): void {
+export function checkWordingFields(q: LoadedQuestion, versionUsesLabels: boolean, say: (p: string) => void, released: { semver: string; listed: readonly string[] }): void {
   const at = `question ${q.id}`;
   if (q.practiceSameAs !== undefined && !listOf(q.practiceSameAs, isFilled)) say(`${at}: practiceSameAs is not a list of content versions`);
+  else for (const v of q.practiceSameAs ?? []) {
+    if (!released.listed.includes(v)) say(`${at}: practiceSameAs "${v}" is not a version listed in index.json`);
+    else if (!isEarlier(v, released.semver)) say(`${at}: practiceSameAs "${v}" is not earlier than ${released.semver}`);
+  }
   if (!versionUsesLabels) {
     if (q.answerPrompts !== undefined) say(`${at}: answerPrompts is present but no question of this version has answerLabels`);
     return;

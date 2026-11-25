@@ -16,6 +16,13 @@
  * payload is first built from the proposal's approved stems in the bank's content order; any id or stem that differs
  * from the bank stops the command, and so does a hash that differs from CNT's. A record already present for the same
  * batch, approver, time and hash is not written twice.
+ *
+ * What a question-set record covers. The proposal cross-check covers ids and stems only. A question's `practiceSameAs`
+ * is not in the proposal: it is signed from the bank, as the stage-batch texts (labels and prompts) are, against the
+ * owner's reading of the rendered tables (`render-tables.ts` prints it as "Practice same as"). Whatever the bank holds
+ * at signing time is what the record's hash covers; this script does not check it against an approved source. The
+ * content check (`checkWordingFields`) refuses only an entry that is not a version `index.json` lists or not earlier
+ * than the version signed.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -65,6 +72,8 @@ function approvedStems(p: QuestionSetProposal): Map<string, string> {
 /**
  * The `question-set:<stage>` record from the approved proposal: the stage's ids in the bank's content order, each with
  * the stem the proposal approves; refused unless that payload equals CNT's payload over the bank, byte for byte.
+ * The cross-check covers ids and stems only: `practiceSameAs` is copied from the bank, so the "byte for byte" test cannot
+ * disagree about it. It is signed from the bank, as the stage-batch texts are (see the note at the top of this file).
  */
 export function buildQuestionSetRecord(c: LoadedContent, proposal: QuestionSetProposal, stage: Stage, s: Signer): SignOffRecord {
   if (proposal.status !== 'approved') throw new Error(`sign-off: the proposal's status is ${proposal.status}, not approved`);
