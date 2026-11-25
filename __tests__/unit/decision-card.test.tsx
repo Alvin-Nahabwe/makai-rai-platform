@@ -180,7 +180,7 @@ describe('the status choice (R3) and the done mark (R8)', () => {
       expect(radio).toContain(`aria-describedby="decision-status-${o.value}-help"`);
       // T3c item 10a (lane 6's first-use rule): the word is the status's term, and its sentence the status's definition
       const term = { done: 'done', partly: 'partly', not_yet: 'not-yet', not_applicable: 'not-applicable' }[o.value];
-      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}(?:<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg>|<span class="ui-radio-card__ring"[^>]*aria-hidden="true"></span>)<span data-term="${term}">${esc(o.label)}</span></label>`));
+      expect(h).toMatch(new RegExp(`<label class="ui-radio-card__label" for="decision-status-${o.value}">${esc(radio)}(?:<svg class="ui-mark__shape[^"]*"[^>]*aria-hidden="true"[\\s\\S]*?</svg>|<span class="ui-radio-card__ring"[^>]*aria-hidden="true"></span>)<span class="ui-radio-card__text"><span data-term="${term}">${esc(o.label)}</span></span></label>`));
       expect(h).toContain(`<p class="ui-radio-card__help" id="decision-status-${o.value}-help" data-definition="${term}">${o.help}</p>`);
     }
     // the guiding line moved from the legend to the consequence line
