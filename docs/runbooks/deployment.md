@@ -1965,6 +1965,99 @@ published version, which is why v0.6.0 can save again after it.
 
 This runbook gives no way to re-publish 5.0.0 by hand while the content migration stays applied.
 
+### 9.7 v0.11.0: content 5.2.0 and a rollback to v0.10.1
+
+**What content 5.2.0 changes in the database.** Its migration, `20261125090000_content_5_2_0`,
+marks the earlier content versions (3.0.0, 3.0.1, 4.0.0, 5.0.0 and 5.1.0) as no longer published,
+where they are published, and adds content 5.2.0 as the published one (`fv_5_2_0`). It adds or
+drops no table or column, and it is the only migration in the release (`git diff --stat v0.10.1
+v0.11.0 -- prisma` lists that one file). Nothing in `decision_versions` changes. So 9.5's
+reasoning about a schema that an older image can read holds, as it did for 9.6. What v0.10.1
+cannot cope with is the content version, as v0.6.0 could not with 5.1.0. 9.6 describes that case
+for v0.6.0, and its list of failing pages is not this image's: the rehearsal found more, and the
+list below is from the rehearsal.
+
+These effects were rehearsed on 25 November 2026 on a workstation, not on the host, with a
+v0.10.1 image built locally from the tag (`makrai-web:rehearsal-v0.10.1`, not the published
+image) after the content migration had run. The project held five decision versions (Q-PP-01 and
+Q-PP-18 Done and Q-PO-22 Partly, all under 5.1.0; Q-PP-20 and a second version of Q-PO-22, under
+5.2.0), one finding, one sealed stage (pre-processing) and one issued data card. A failing page
+answered 500 "This page could not be loaded", and its first log line carried the code. The cause
+of the wider failures is inferred, not traced.
+
+- **The v0.10.1 image refuses three actions once the content migration has run: saving a decision,
+  withdrawing a decision and sealing a review.** It runs content 5.1.0, and each of these checks
+  first that 5.1.0 is still the published version (`resolveRunningContentVersion` in
+  `lib/data/framework.ts` at v0.10.1). It no longer is, so the action is answered with 503
+  `content_not_published`. That is read from the code and does not depend on any answer saved
+  under 5.2.0. The rehearsal saw it for a save of Q-IP-01 as Done: `POST` 503, no row written,
+  and the page kept the answer as a browser draft ("Not saved yet. Your text is kept in this
+  browser for up to 7 days…"). A withdrawal and a seal were not tried under the rollback: their
+  refusal is read from the code, not seen. People can still sign in.
+- **Pages that answered 500 `content_not_published`** (a page that reads a sealed review makes
+  the same check): the project page (it holds a sealed review), the review page, the review's
+  documents page and the seal page; the working report page, and its download, which answered 503;
+  the pre-processing stage page (sealed); and the question pages in the sealed stage, Q-PP-01 and
+  Q-PP-18, whose answers are 5.1.0's. The question page of Q-PO-01, unanswered, in the
+  post-processing stage, also answered 500, with a code that was not captured; 9.4's count stayed
+  at 0.
+- **Pages that answered 500 `unknown_content_version`:** a page that must load the wording of a
+  5.2.0 answer. The post-processing stage page (it holds Q-PO-22's second version, saved under
+  5.2.0), and the question pages of Q-PP-20 and Q-PO-22 (their current answer is under 5.2.0). The
+  hourly synthetic journey (7.4) saves a decision in the synthetic organisation, so from its first
+  run after the switch a decision exists there under 5.2.0, and that question's page and its stage
+  page fail from then. That is 9.6's reasoning for 5.1.0, applied here; it was not observed.
+- **What still answered 200:** the dashboard and the projects list; the in-processing stage page
+  and the page of Q-IP-01 (a stage with neither a seal nor a 5.2.0 answer); a question's history
+  (Q-PO-22's second version shows "Partly", the shared word, and its first keeps 5.1.0's words);
+  the findings page, for a finding raised from a 5.1.0 answer; and an issued document by the link a
+  person already has (the data card's PDF was byte-identical to the one issued before the
+  rollback). Only stages with neither a seal nor a 5.2.0 answer opened.
+- **The cause of the wider failures is inferred.** It is consistent with the v0.10.1 question
+  page importing the seal note and the stage page loader (`SealNote` and `loadStagePage` in
+  `app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page.tsx` at
+  v0.10.1), which read the stage's seal and its answers. The rehearsal did not trace it.
+
+The same refusals apply in the deploy itself: between 8.3 step 4 and step 5 the app still serving
+is the old one, and it refuses the three actions for that short interval (8.3 says so). In the
+rehearsal that interval and the swap together took 7.39 s from the start of step 4, and nobody saved
+in it. The second point applies then, for the pages that read a sealed review, as 8.3 says. The
+third does not, because nothing has yet been saved under 5.2.0.
+
+**The rule: fix forward with a later v0.11.x.** An application rollback to v0.10.1 (9.2) is an
+emergency stop only. After it, people can sign in and read the pages that still answered 200
+above, but cannot save, withdraw or seal, and the pages of the second and third points fail. If
+you must stop the release that way, say so to the teams, and expect those pages to fail until the
+return deploy. The design had said a rollback is safe before the first 5.2.0 answer exists. By the
+code that is not so for saving: the refusal comes from the registry, not from an answer. A
+rollback before any 5.2.0 answer was not rehearsed.
+
+The hourly journey's save is refused while v0.10.1 serves, so it reports a failure to the
+`makrai-synthetic` check every hour (inferred from the refused save: the journey was not run in the
+rehearsal). Pause the journey with the lines of 8.5 step 6 and pause the `makrai-synthetic` check,
+as 9.5 and 9.6 do, and write down that both are paused. After the return deploy to v0.11.1 or later,
+put the crontab back and resume the check with the block at the end of 9.5 that begins "Whatever you
+paused and wrote down comes back now"; 8.5 step 11 has completed, so that block applies as 9.5 words
+it.
+
+9.4 verifies the rollback. 8.4's third line prints more than `0` while v0.10.1 serves, and does
+not fail the verification on that alone. Use 9.4's two journalctl lines and its pattern, once 10
+minutes have passed since the last `up` of 9.2 returned: the pattern leaves out `content_not_published`
+and `unknown_content_version`, the two codes above, as whole lines. In the rehearsal it printed `0`
+over 250 error lines (23 page failures and 2 refused requests) with `docker logs` standing in for
+the journal, and 8.4's other lines passed (`SAME` twice, 0 restarts).
+
+**Going forward again** is a deploy of v0.11.1 or later as 8.2 to 8.4 describe it. In the
+rehearsal the return to the candidate printed "No pending migrations to apply." from the migrator and
+the swap took 5.92 s. The five decision versions, the finding, the seal, the stage review and the
+issued document were the same before the rollback and after going forward, the refused save left no
+row, and the pages that had failed served again and read as before.
+
+A database restore (9.3) is the only way v0.10.1 saves again. It discards every write since BACKUP,
+the file 8.2 wrote down, and it is the owner's decision, taken in the session. A restore to BACKUP puts 5.1.0 back as the
+published version, which is why v0.10.1 can save again after it. This runbook gives no way to
+re-publish 5.1.0 by hand while the content migration stays applied.
+
 ---
 
 ## 10. DNS Configuration
