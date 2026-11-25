@@ -38,6 +38,11 @@ export interface DecisionFieldsProps {
   whoWhenOpen: boolean;
   /** The Change button's press. It opens the fields and moves focus into them; it edits nothing (the next edit to who or when does). */
   onOpenWhoWhen: () => void;
+  /**
+   * The form holds the person's own version after a conflict, not the current decision: the note "The form shows the current
+   * decision." is not shown (the owner's "Hide it in that state", 25 Nov 2026). The form decides when (DecisionForm `heldOwnVersion`).
+   */
+  ownVersion?: boolean;
 }
 
 /** The field errors that point into Decided by or Decided on: they need those fields on the page (M-11's links). */
@@ -87,7 +92,7 @@ function deciderName(d: Decider | null, data: QuestionPanelData, extra: { userId
  * On a change of a decision someone else made (`keptDeciderIsOther`) there is no line: the two fields open, the date empty
  * (D-425; owner, 23 Nov 2026, "Open, date empty").
  */
-export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen }: DecisionFieldsProps): ReactElement {
+export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen, ownVersion = false }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
   // A patch to who or when is recorded in the draft (lib/question/draft.ts `patchDraft`), so a restore keeps the person's own.
@@ -185,7 +190,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
 
   return (
     <div className="decision-fields">
-      {current !== null ? <p className="decision-fields__note">{F.startingNote}</p> : null}
+      {current !== null && !ownVersion ? <p className="decision-fields__note">{F.startingNote}</p> : null}
       {checklist}
       <div className="decision-fields__choice">{q.type === 'gate' ? scopeGroup : statusGroup}</div>
       {reasonCode}

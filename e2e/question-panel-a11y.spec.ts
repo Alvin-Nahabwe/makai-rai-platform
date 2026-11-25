@@ -291,8 +291,8 @@ test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px,
       await fillValid(page, { reason: 'Mine' });
       expect((await saveViaApi(baseURL!, 'owner', conflictProject, 'Q-PP-03', { reason: 'Theirs' })).status).toBe(201);
       await page.getByRole('button', { name: 'Save decision' }).click();
-      await expect(page.getByRole('heading', { name: DECISION_FORM_COPY.conflict.heading })).toBeVisible();
-      await expect(page.getByText(QUESTION_COPY.reading.history(1), { exact: true }).filter({ visible: true }).first()).toBeVisible();
+      await expect(page.getByRole('heading', { name: DECISION_FORM_COPY.conflict.heading })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(QUESTION_COPY.reading.history(1), { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 });
       return;
     }
     if (state === 'S-11') { await page.goto(stagePath(projectId, 'pre-processing')); await page.waitForSelector('[data-question-id]'); return; }

@@ -410,10 +410,22 @@
   }
 }
 
-/* While the conflict view is shown, the card's corner ("Saved as version N", or "No decision yet.") and the foot's saved lines
-   are not drawn beside its "Not saved"; the view itself names the saved version. The card is rendered on the server and the
-   conflict is the form's state, so the form marks itself (data-conflict, DecisionForm.tsx) and the card's parts follow. The
-   phone's saved block is not rendered at all then. */
-.decision-card:has(form[data-conflict]) :is(.decision-card__corner, .decision-card__saved-lines) {
+/* The card is rendered on the server and the conflict is the form's state, so the form marks itself (DecisionForm.tsx) and the
+   card's parts that it does not render itself follow here. While the conflict view is shown (data-conflict), the corner ("Saved as
+   version N", or "No decision yet.") and the foot's saved lines are not drawn beside its "Not saved"; the view names the saved
+   version. While the card is behind a version the form knows of (data-card-behind), the corner and the More menu are not drawn;
+   the form itself leaves out the foot and the phone's saved block. The foot and the More menu follow the form in the card, so a
+   sibling selector reaches them; only the corner, which comes before it, needs :has(). */
+.decision-card:has(form:is([data-conflict], [data-card-behind])) .decision-card__corner,
+form[data-conflict] ~ .decision-card__meta .decision-card__saved-lines,
+form[data-card-behind] ~ .decision-card__more {
   display: none;
+}
+
+/* Without :has() the corner cannot follow the form's state, so it is not drawn at all: it never states an older version. The
+   foot's saved lines say the same on a wide screen, and a phone shows the saved block in its place. */
+@supports not selector(:has(*)) {
+  .decision-card__corner {
+    display: none;
+  }
 }
