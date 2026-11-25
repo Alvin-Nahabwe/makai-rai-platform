@@ -377,8 +377,10 @@ const DECISION_STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet
  * own transaction; the preview is advice before sealing, and the seal builder reads its own snapshot.
  *
  * `rewordedSinceDecision` counts current decisions whose question's expected practice differs between the content
- * version the decision was made on and the running one (FR-CNT-08, SRS line 729); a decision whose own content does not
- * hold its question counts as reworded, since the text it answered is not the current one.
+ * version the decision was made on and the running one (FR-CNT-08, SRS line 729), unless the running question lists
+ * that version in `practiceSameAs` (one predicate, `practiceChanged`, as the page marker and the stage filter use);
+ * a decision whose own content does not hold its question counts as reworded, since the text it answered is not
+ * the current one.
  */
 export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: string): Promise<SealPreview> {
   const out = await withOrg(ctx, async (tx) => {
@@ -423,14 +425,14 @@ export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: strin
       if (v.status === 'done' && v.evidenceIds.length === 0) doneWithoutEvidence += 1;
     }
 
-    const runningQuestions = practices(content);
+    const runningQuestions = questionsById(content);
     const thenOf = new Map<string, { semver: string; questions: Map<string, ContentQuestion> }>();
     let rewordedSinceDecision = 0;
     for (const v of decided) {
       let then = thenOf.get(v.contentVersionId);
       if (then === undefined) {
         const semver = (await contentRefById(tx, v.contentVersionId)).semver;
-        then = { semver, questions: practices(loadContent(semver)) };
+        then = { semver, questions: questionsById(loadContent(semver)) };
         thenOf.set(v.contentVersionId, then);
       }
       const now = runningQuestions.get(v.questionId);
@@ -457,6 +459,6 @@ export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: strin
 }
 
 /** Every question of a content version, by question id. */
-function practices(c: ReturnType<typeof loadContent>): Map<string, ContentQuestion> {
+function questionsById(c: ReturnType<typeof loadContent>): Map<string, ContentQuestion> {
   return new Map(STAGES.flatMap((st) => questionsInStage(c, st)).map((q) => [q.id, q]));
 }

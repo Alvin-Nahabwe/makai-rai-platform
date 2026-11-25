@@ -3,7 +3,8 @@
 
    Forced colours repaint every author border, a transparent resting one included (RouteRow.css found this), so only the
    selected card has a border. A resting card's outline is an inset box-shadow, which forced colours drop: there, the
-   radio itself and its words show each option, and the one border shows the selection. The selected card gives back the
+   ring (a currentColor border, kept in forced colours) or the option's mark shows each option, the native radio being
+   transparent, and the one border shows the selection. The selected card gives back the
    2 px in its padding, so nothing moves when the selection changes. */
 .ui-radio-cards {
   min-inline-size: 0;
