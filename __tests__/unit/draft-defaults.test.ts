@@ -177,6 +177,23 @@ describe('answer cost 3: a stored draft keeps who and when only if the person ch
     }
   });
 
+  it('isDraftValue ignores a hand-edited decider, status or scope answer the form could never have written', () => {
+    const bad = [
+      { decidedBy: {} }, { decidedBy: [] }, { decidedBy: { kind: 'member' } }, { decidedBy: { kind: 'member', userId: '' } },
+      { decidedBy: { kind: 'outside_role', role: 'astronaut' } }, { decidedBy: { kind: 'admin', userId: 'u-x' } },
+      { status: 'withdrawn' }, { status: 'yes' }, { scopeAnswer: 'maybe' },
+    ];
+    for (const over of bad) {
+      expect(isDraftValue(stored(over))).toBe(false);
+      expect(restoreDraft(stored({ ...over, whoWhenChanged: true, date: { day: '3', month: '11', year: '2026' } }), PANEL, T)).toBeNull();
+    }
+    const good = [
+      { decidedBy: null }, { decidedBy: { kind: 'member', userId: 'u-other' } }, { decidedBy: { kind: 'outside_role', role: 'principal_investigator' } },
+      { status: null }, { status: 'not_applicable' }, { scopeAnswer: 'not_sure' },
+    ];
+    for (const over of good) expect(isDraftValue(stored(over))).toBe(true);
+  });
+
   it('isDraftValue accepts a draft without whoWhenChanged and one with a boolean', () => {
     expect(isDraftValue(stored())).toBe(true);
     expect(isDraftValue(stored({ whoWhenChanged: true }))).toBe(true);

@@ -1,4 +1,4 @@
-import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
+import { declaredDateFromParts, SCOPES, STATUSES, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
 import { DECISION_OUTCOME_COPY } from '@/lib/decision/outcome/copy';
 import type { DraftKey, DraftStore, StoredDraft } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
@@ -6,7 +6,7 @@ import type { LoadedQuestion } from '@/types/content';
 import { can } from '@/lib/authz/policy';
 import type { OrgRole } from '@prisma/client';
 import type { DecisionVersionView, DeciderView, SaveDecisionRequest } from '@/types/api';
-import type { Decider, DecisionStatus, DeclaredDate, FieldError, ReasonCode, ScopeAnswer } from '@/types/record';
+import { OUTSIDE_ROLES, type Decider, type DecisionStatus, type DeclaredDate, type FieldError, type ReasonCode, type ScopeAnswer } from '@/types/record';
 
 /**
  * The answer a person is writing on S-12, as the form holds it and as the per-account draft store keeps it
@@ -148,7 +148,18 @@ export function canWithdrawVersion(role: OrgRole, viewerId: string, current: Dec
   return current.enteredBy.userId === viewerId;
 }
 
-/** A stored value that has the draft's shape; anything else (an older shape, a hand edit) is ignored (S-12, S-11). */
+/** A decider the form can write: a member with an account id, or one of the outside roles. */
+function isDraftDecider(v: unknown): v is Decider {
+  if (typeof v !== 'object' || v === null) return false;
+  const d = v as Record<string, unknown>;
+  return (d.kind === 'member' && typeof d.userId === 'string' && d.userId !== '')
+    || (d.kind === 'outside_role' && (OUTSIDE_ROLES as readonly unknown[]).includes(d.role));
+}
+
+/**
+ * A stored value that has the draft's shape, with a status, scope answer and decider the form can write; anything else
+ * (an older shape, a hand edit) is ignored (S-12, S-11).
+ */
 export function isDraftValue(v: unknown): v is StoredDecisionDraft {
   if (typeof v !== 'object' || v === null) return false;
   const d = v as Record<string, unknown>;
@@ -156,8 +167,9 @@ export function isDraftValue(v: unknown): v is StoredDecisionDraft {
   const date = d.date as Record<string, unknown> | null;
   return typeof d.reason === 'string' && strings(d.optionsInPlace) && strings(d.evidenceIds) && strings(d.notUploaded)
     && typeof date === 'object' && date !== null && ['day', 'month', 'year'].every((k) => typeof date[k] === 'string')
-    && (d.status === null || typeof d.status === 'string') && (d.scopeAnswer === null || typeof d.scopeAnswer === 'string')
-    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object')
+    && (d.status === null || (STATUSES as readonly unknown[]).includes(d.status))
+    && (d.scopeAnswer === null || (SCOPES as readonly unknown[]).includes(d.scopeAnswer))
+    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || isDraftDecider(d.decidedBy))
     && (d.whoWhenChanged === undefined || typeof d.whoWhenChanged === 'boolean');
 }
 
