@@ -40,7 +40,9 @@ export interface DecisionFieldsProps {
   onOpenWhoWhen: () => void;
   /**
    * The form holds the person's own version after a conflict, not the current decision: the note "The form shows the current
-   * decision." is not shown (the owner's "Hide it in that state", 25 Nov 2026). The form decides when (DecisionForm `heldOwnVersion`).
+   * decision." is not shown (the owner's "Hide it in that state", 25 Nov 2026). The form decides when (DecisionForm `heldOwnVersion`),
+   * and also sets it while `data.current` is a version a reply named that the page's own data does not hold yet (`behind`): the note
+   * comes with the page's data, as it did before, so it never appears over a version the page has not confirmed.
    */
   ownVersion?: boolean;
 }

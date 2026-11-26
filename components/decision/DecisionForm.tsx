@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
@@ -20,6 +20,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
 import { stageEndHref } from '@/lib/question/stageEndHref';
@@ -93,9 +94,11 @@ export function DecisionForm({ data, nextQuestion = null, stageHref, foot, lead,
  * question's open shortfall finding, the one a save acts on (`data.openFinding`, openShortfallForQuestion), never a team
  * finding. The version is one above the newer of the base the form holds and the version on the page: the same number as
  * the corner's mark after a refresh, and a stale base meets the conflict view before any save (review round 1).
- * `finding` is true when the sentence uses the word, so its definition goes beside it.
+ * `finding` is true when the sentence uses the word, so its definition goes beside it. `behind`: `data.current` is a version a
+ * reply named that the page does not hold yet (lib/decision/form/newestVersion.ts), so `data.openFinding` is an older version's;
+ * no sentence that reads it is given then, and the text is the version line alone, or empty when the answer does not differ.
  */
-export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null): { text: string; finding: boolean; tips: DefinedEntry[] } {
+export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: number | null, behind = false): { text: string; finding: boolean; tips: DefinedEntry[] } {
   const C = F.consequence;
   // Coordinator (T3c item 7): the version line only while the answer differs from the saved version; render only.
   const version = answerDiffers(d, data) ? C.version(Math.max(base ?? 0, data.current?.versionNumber ?? 0) + 1) : '';
@@ -108,6 +111,7 @@ export function consequenceOf(d: DecisionDraft, data: QuestionPanelData, base: n
   if (d.status === null) {
     return { text: join(FINDING_NOTE), finding: true, tips: version === '' ? [TERM_PARTLY, TERM_NOT_YET] : [TERM_PARTLY, TERM_NOT_YET, TERM_VERSION_OF_A_DECISION] };
   }
+  if (behind) return { text: version, finding: false, tips: [] };
   const label = answerLabel(data.runningQuestion, d.status);
   const open = data.openFinding !== null;
   if (d.status === 'partly' || d.status === 'not_yet') {
@@ -272,8 +276,18 @@ function pinnedBar(bar: HTMLElement): boolean {
   return r.top < foot && r.bottom >= foot - 1;
 }
 
-function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement {
+function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement {
   const router = useRouter();
+  // The newest saved version a reply has named to this form (a conflict's current version, the version a save made; the page's own when
+  // a draft is restored behind it), and the panel everything below reads: the page's, or that version's while the page is older
+  // (`behind`). The form has no other source for "the current decision", so no statement in it can be about a version it knows has
+  // been replaced; `page` itself is read only to see that the page's data changed. The reload that brings the page level is the
+  // conflict's (when this browser holds the draft), a save's, or "Discard my version"'s.
+  const [newest, setNewest] = useState<DecisionVersionView | null>(null);
+  /** A reply named `v` as saved: it becomes the newest version the form knows, unless it already knows a later one. */
+  const named = useCallback((v: DecisionVersionView): void => setNewest((n) => (n !== null && n.versionNumber > v.versionNumber ? n : v)), []);
+  const data = useMemo(() => panelWithNewest(page, newest), [page, newest]);
+  const behind = data !== page;
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
 
@@ -283,7 +297,10 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   const [status, setStatus] = useState<SaveStatusValue | null>(null);
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [saving, setSaving] = useState(false);
-  const [conflict, setConflict] = useState<DecisionVersionView | null>(null);
+  // The conflict view is open, on the version the reply named: its three actions act on that version, never on a later one that a
+  // reload brought while the person read it (a save over that one must meet its own conflict).
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const conflict = conflictOpen ? newest : null;
   const [uploads, setUploads] = useState<{ uploading: string[]; failed: string[]; linkAdding: boolean }>({ uploading: [], failed: [], linkAdding: false });
   const [waiting, setWaiting] = useState(false);
   // Walk finding B3. Whether a link's request is out, as the evidence block last reported it (it reports the start inside
@@ -359,27 +376,32 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
   // them for good: the M-11 summary's links need their controls, and the fields must not close under the person's typing.
   if (!whoWhenOpen && (errors.some(isWhoWhenError) || whoWhenUnreadable(value))) setWhoWhenOpen(true);
 
-  // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
-  if ((data.current?.id ?? null) !== seenCurrentId) {
-    setSeenCurrentId(data.current?.id ?? null);
+  /**
+   * Draws the form from the current version it knows, as on a new page: the answer, its evidence and the base of the next save
+   * together, so a Save always sends what the form shows on the version it shows.
+   */
+  const openFromCurrent = (): void => {
+    const evidence = data.current?.evidence ?? [];
+    setHeldOwnVersion(false);
+    setValue(draftFromCurrent(data, today));
+    setBase(currentNumber);
+    setRetry(NO_RETRY);
+    setEvidenceInitial(evidence);
+    setEvidenceItems(evidence);
+    setEvidenceKey(`${data.current?.id ?? 'none'}:open`);
+    setExtraEvidenceIds([]);
+  };
+
+  // The page's current version changed (a save's router.refresh, the conflict's, or "Discard my version"'s): open from the current
+  // version, as on a new page.
+  if ((page.current?.id ?? null) !== seenCurrentId) {
+    setSeenCurrentId(page.current?.id ?? null);
     // Only when the field holds nothing of the person's that the new version lacks, and no link's request or file upload
     // is out: the block that sent it would be replaced, and the link or the file lost with it. Review B I-r4-1: "Save
     // without this file" saves while the file uploads, and the new version's remount aborted that upload and dropped it
     // without a word (e2e/decision-save-without-upload.spec.ts); kept, it finishes and edits the answer, so the next Save
     // adds it as the "Saved without" line promises.
-    // Never an older version than the form's base: a reload that lands after a later save (the conflict's, carrying the version
-    // that save replaced) must not put that version's answer or base back.
-    const older = currentNumber !== null && base !== null && currentNumber < base;
-    if (conflict === null && !typedSinceCurrent && !older && !uploads.linkAdding && uploads.uploading.length === 0) {
-      setHeldOwnVersion(false);
-      setValue(draftFromCurrent(data, today));
-      setBase(currentNumber);
-      setRetry(NO_RETRY);
-      setEvidenceInitial(data.current?.evidence ?? []);
-      setEvidenceItems(data.current?.evidence ?? []);
-      setEvidenceKey(`${data.current?.id ?? 'none'}:open`);
-      setExtraEvidenceIds([]);
-    }
+    if (conflict === null && !typedSinceCurrent && !uploads.linkAdding && uploads.uploading.length === 0) openFromCurrent();
   }
 
   // On open: the store (or none: a private window), the purge of drafts past seven days, and this question's draft.
@@ -415,7 +437,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     setEvidenceItems(carried);
     setExtraEvidenceIds(restored.evidenceIds.filter((id) => !carried.some((e) => e.id === id)));
     setEvidenceKey(`${data.current?.id ?? 'none'}:restored`);
-    if (found.baseVersionNumber !== currentNumber && data.current !== null) { setConflict(data.current); setHeldOwnVersion(true); }
+    if (found.baseVersionNumber !== currentNumber && data.current !== null) { setNewest(data.current); setConflictOpen(true); setHeldOwnVersion(true); }
     // Read once on open, for this question's key: the page gives the form a key per question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -598,13 +620,15 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     const next = statusForOutcome(outcome, { viewerId: data.viewer.userId, timeText: formatTime });
     if ((next.id === 'M-03' || next.id === 'M-04') && outcome.kind === 'saved') {
       const saved = outcome.body.versionNumber;
-      // The version this save made is the base of anything typed from now on.
+      // The version this save made is the base of anything typed from now on, and the current version the form states until the
+      // page's data is that version's.
       setBase(saved);
+      named(outcome.body);
       setHeldOwnVersion(false);
       setRetry(NO_RETRY);
       latest.current = { ...latest.current, base: saved, retry: NO_RETRY };
       setLeftOut(omitted);
-      setConflict(null);
+      setConflictOpen(false);
       setStatus(next);
       const typedDuringSave = JSON.stringify(latest.current.value) !== JSON.stringify(d);
       if (typedDuringSave) {
@@ -666,23 +690,25 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
     if (next.next === 'conflict') {
       const current = conflictCurrent(outcome);
       if (current !== null) {
-        setConflict(current);
+        named(current);
+        setConflictOpen(true);
         // The field now holds an answer the current version lacks, whether or not anything was typed (an answer sent as it opened
         // can be refused too): marked so, the new version that the refresh below brings never replaces it, even when the view
-        // is closed before the refresh lands ("A new current version arrived", above).
+        // is closed before the refresh lands ("The page's current version changed", above).
         setTypedSinceCurrent(true);
         setHeldOwnVersion(true);
         // The owner's "Hide first, reload when safe" (25 Nov 2026): the card, its foot and the More menu are drawn on the server from
-        // the version this page opened with; until a reload brings the current one, the form hides them (`cardBehind`, below). The
-        // reload runs only when this browser holds the draft, written and read back as for a gate (CR-2): a reload that fails falls
-        // back to loading the page, and without a kept draft that would drop the person's answer. Without one, nothing reloads and
-        // the hidden parts stay hidden until a save or "Discard my version". e2e/decision-conflict-saved-claims.spec.ts covers both.
+        // the version this page opened with; until a reload brings the current one, the form hides them (`cardBehind`, below) and
+        // states the current decision from the reply's version (`data`, above). The reload runs only when this browser holds the
+        // draft, written and read back as for a gate (CR-2): a reload that fails falls back to loading the page, and without a kept
+        // draft that would drop the person's answer. Without one, nothing reloads and the hidden parts stay hidden until a save or
+        // "Discard my version". e2e/decision-conflict-saved-claims.spec.ts covers both.
         const draft = { baseVersionNumber: saveBase, value: latest.current.value, savedAt: now, savePressedAt: null, retry: id.state };
         if (draftHeldForGate(store.current, key, draft, new Date())) router.refresh();
       }
     }
     setStatus(next);
-  }, [data, key, keep, router, leaveHeldLink, stageHref]);
+  }, [data, key, keep, router, leaveHeldLink, stageHref, named]);
 
   // NFR-REL-05: one automatic retry when the browser says it is online again, of the unchanged draft, same id.
   useEffect(() => {
@@ -780,18 +806,22 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
-  const consequence = consequenceOf(value, data, base);
+  const consequence = consequenceOf(value, data, base, behind);
   const isRetry = saveControlIsRetry({
     retry, body: toSaveBody(value, data, base) as unknown as Record<string, unknown>, status, restoredPressed, saving, retrying,
   });
   useLayoutEffect(() => { retryLabel.current = isRetry; });
 
   const held = waiting || saving || moving;
-  // The card is behind when the form knows of a saved version newer than the one the card was drawn from: the conflict's, or the
-  // base a save or "Edit my version" set. Everything the card says about the older version is then not drawn (the owner's "Hide first,
-  // reload when safe"): the phone's saved block and the foot here, the corner and the More menu by the stylesheet (DecisionForm.css,
-  // `data-card-behind`). Derived each render, so it holds whether the reload has started, landed, failed or never runs.
-  const cardBehind = Math.max(base ?? 0, conflict?.versionNumber ?? 0) > (currentNumber ?? 0);
+  // The card is behind when the form knows of a saved version newer than the one the card was drawn from on the server: the one a
+  // reply named (`behind`), or a base above the page's version. Everything the card says about the older version is then not drawn (the
+  // owner's "Hide first, reload when safe"): the phone's saved block and the foot here, the corner and the More menu by the stylesheet
+  // (DecisionForm.css, `data-card-behind`). Derived each render, so it holds whether the reload has started, landed, failed or never runs.
+  const cardBehind = behind || (base ?? 0) > (currentNumber ?? 0);
+  // "(from the current decision)" beside the evidence the block opened with: only while every such item still shown is evidence of the
+  // current version the form knows. After a conflict the block can hold the older version's items, which the newer one may not have.
+  const ofCurrent = new Set(data.current?.evidence.map((e) => e.id));
+  const evidenceFromCurrent = isDecision(data.current) && evidenceInitial.every((i) => ofCurrent.has(i.id) || !evidenceItems.some((x) => x.id === i.id));
   return (
     <SaveHeldContext.Provider value={held}>
     {/* The phone's saved block is not drawn while the conflict view is shown: a "saved" claim beside its "Not saved" reads as a
@@ -810,22 +840,19 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
           current={conflict} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? F.evidenceFallback)}
           mineKeptEvidence={extraEvidenceIds.length}
-          onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); save(false, uploads, b); }}
+          onSaveMine={() => { const b = conflict.versionNumber; setConflictOpen(false); setBase(b); save(false, uploads, b); }}
           onEditMine={() => {
             const b = conflict.versionNumber;
-            setConflict(null); setBase(b); setStatus(null);
+            setConflictOpen(false); setBase(b); setStatus(null);
             keep({ baseVersionNumber: b, value, savedAt: new Date().toISOString(), savePressedAt: null, retry });
             requestAnimationFrame(() => document.getElementById(data.question.type === 'gate' ? FIELD_TARGET.scopeAnswer : 'decision-reason')?.focus());
           }}
           onDiscard={() => {
-            // The form is drawn at once from the saved version the view named, its answer and its base together, as "A new current
-            // version arrived" draws it: a Save before the reload below lands then sends that version's answer on its own base, never
-            // the discarded one, and the card stays hidden (base above the card's version) until the reload brings that version.
-            const from = { ...data, current: conflict };
-            store.current?.remove(key); setValue(draftFromCurrent(from, today)); setBase(conflict.versionNumber); setRetry(NO_RETRY);
-            setEvidenceInitial(conflict.evidence); setEvidenceItems(conflict.evidence); setEvidenceKey(`${conflict.id}:open`); setExtraEvidenceIds([]);
-            setConflict(null); setStatus(null); setDraftSavedAt(null);
-            setTypedSinceCurrent(false); setHeldOwnVersion(false); setSeenCurrentId('discarded'); router.refresh();
+            // The person gives up their version: the form opens at once from the current version it knows (the one the view named, or a
+            // later one the page already holds), and the page's data is reloaded. A Save before that reload lands sends that version's
+            // answer on that version, never the discarded one.
+            store.current?.remove(key); openFromCurrent(); setConflictOpen(false); setStatus(null); setDraftSavedAt(null);
+            setTypedSinceCurrent(false); router.refresh();
           }}
         />
       ) : null}
@@ -851,7 +878,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
 
         <DecisionFields
           data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
-          onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }} ownVersion={heldOwnVersion}
+          onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }} ownVersion={heldOwnVersion || behind}
         />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}
@@ -878,7 +905,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             }}
             onItemsChange={setEvidenceItems}
             notUploaded={restoredNotUploaded}
-            fromVersionNumber={isDecision(data.current) ? data.current.versionNumber : null}
+            fromVersionNumber={evidenceFromCurrent ? currentNumber : null}
             saveOut={saving || moving}
             unaddedLinkRefusals={linkRefusals}
             initialLink={typedLink}
@@ -908,6 +935,8 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
 
         {/* R2: one line on what this save will do, after the fields and the evidence and before Save. Not a live region: it
             follows the choice as the person makes it, and the save's own status line announces what happened. */}
+        {/* Nothing to say (the page is behind the version the form shows, and the answer is that version's): no line, not an icon alone. */}
+        {consequence.text === '' ? null : (
         <div className="decision-consequence">
           <svg className="decision-consequence__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
@@ -917,6 +946,7 @@ function WritableDecisionForm({ data, nextQuestion = null, stageHref, foot, lead
             {consequence.finding ? <Definition of={TERM_FINDING} as="p" /> : null}
           </div>
         </div>
+        )}
 
         {/* tabIndex -1: after a Retry's answer removes the Retry, focus comes here, beside the status line, not to the page. */}
         {/* Option A (owner, 15 Nov 2026): above 768 px the bar is sticky at the foot of the form, so it pins to the screen's foot
