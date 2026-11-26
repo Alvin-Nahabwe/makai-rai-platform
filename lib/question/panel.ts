@@ -24,6 +24,13 @@ export interface QuestionPanelData {
   canWrite: boolean; canRaiseFinding: boolean; lastOwnSaveDate: DeclaredDate | null;
   openFinding: { findingId: string; closable?: true } | null; gateAnswer: ScopeAnswer | null; contentSemver: string;
   orgId: string;                            // the draft key's organisation (UX-26; gap G041)
+  /**
+   * The members who decided an earlier version of this question and have since left the organisation, by account id and the
+   * name the server holds now ("Deleted user" for a deleted account, FR-EXP-03); absent when there are none. A name for an
+   * account id only: the decision form names a decider a draft holds with it (lib/decision/form/departedDecider.ts), never
+   * anything about which version is current (ruling P38).
+   */
+  formerDeciders?: Array<{ userId: string; name: string }>;
 }
 
 /**
@@ -40,6 +47,8 @@ export interface QuestionPanelData {
  * answer shows them all: owner question B13), the question itself always included, so Previous and Next skip a
  * switched-off question (FR-CNT-04) and a switched-off question's own page leads to its applying neighbours;
  * `members` are the organisation's members other than the viewer;
+ * `formerDeciders` come from the question's own history before the current version (owner's "Names from the server"); the
+ * current version's decider is on the page as its own;
  * `lastOwnSaveDate` is the declared date of the viewer's newest non-withdrawal version in this project;
  * `canWrite` and `canRaiseFinding` are the role's grant in a project that is not archived.
  */
@@ -83,6 +92,7 @@ export async function loadQuestionPanel(
   const ordered = inStage.filter((q) => q.id === p.questionId || questionApplies(running, q.id, gateAnswer));
   const at = ordered.findIndex((q) => q.id === p.questionId);
   const archived = read.project.archivedAt !== null;
+  const formerDeciders = formerDecidersOf(history.slice(1));
 
   return {
     orgSlug: read.project.org.slug, projectId: p.projectId, projectName: read.project.name, projectArchived: archived, stage: p.stage,
@@ -100,7 +110,19 @@ export async function loadQuestionPanel(
     // Fix 2 (lead's ruling): nobody can close a finding in an archived project, so S-12 does not say it can now be closed.
     openFinding: openFinding === null || !archived ? openFinding : { findingId: openFinding.findingId },
     gateAnswer, contentSemver: running.semver, orgId: ctx.orgId,
+    ...(formerDeciders.length > 0 ? { formerDeciders } : {}),
   };
+}
+
+/** The member deciders of `versions` marked as former members, once each, newest first: account id and name, nothing else. */
+function formerDecidersOf(versions: readonly DecisionVersionView[]): Array<{ userId: string; name: string }> {
+  const out: Array<{ userId: string; name: string }> = [];
+  for (const v of versions) {
+    const d = v.decidedBy;
+    if (d?.kind !== 'member' || !d.user.formerMember || out.some((u) => u.userId === d.user.userId)) continue;
+    out.push({ userId: d.user.userId, name: d.user.name });
+  }
+  return out;
 }
 
 /** The gate question the conditional questions name (FR-CNT-04), or null when the content has none. */
