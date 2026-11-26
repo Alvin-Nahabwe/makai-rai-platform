@@ -39,28 +39,34 @@ export type Heard = { page: QuestionPanelData | null; newest: DecisionVersionVie
 /**
  * `prev` once the form holds `page` and `newest`, each heard when it is a new object, as it arrives (ruling P61: for each account,
  * the name shown is the one the server sent last, by arrival). A new page gives its `formerDeciders` and its current version's
- * decider; a new `newest` (a version a save's reply named, even one the page already holds) gives its decider. One source never
- * re-hears the other: page data arriving after a reply wins over the reply's name, and a reply arriving after the page wins over
- * the page's. If both are new in the same render the reply is heard last. `prev` itself when nothing changed, so the form can
- * record this during render and settle.
+ * decider and author (who entered it); a new `newest` (a version a save's reply named, even one the page already holds) gives its
+ * decider and author. One source never re-hears the other: page data arriving after a reply wins over the reply's names, and a
+ * reply arriving after the page wins over the page's. If both are new in the same render the reply is heard last. `prev` itself
+ * when nothing changed, so the form can record this during render and settle.
  */
 export function hear(prev: Heard, page: QuestionPanelData, newest: DecisionVersionView | null): Heard {
   if (prev.page === page && prev.newest === newest) return prev;
   const accounts: Array<NamedAccount | null> = [];
-  if (prev.page !== page) accounts.push(...(page.formerDeciders ?? []), memberDecider(page.current));
-  if (prev.newest !== newest) accounts.push(memberDecider(newest));
+  if (prev.page !== page) accounts.push(...(page.formerDeciders ?? []), memberDecider(page.current), page.current?.enteredBy ?? null);
+  if (prev.newest !== newest) accounts.push(memberDecider(newest), newest?.enteredBy ?? null);
   return { page, newest, names: heardNames(prev.names, accounts) };
 }
 
 /**
- * `v` with its member decider named by the latest name heard for that account (the conflict view's saved column shows the reply's
- * version, which may carry a name the page has since replaced). `v` itself when that name is already its own.
+ * `v` with its member decider and its author (who entered it) named by the latest name heard for each account: the conflict view's
+ * saved column and sentence show the reply's version, and the card line the page's, either of which may carry a name the tab has
+ * since been sent anew. `v` itself when both names are already its own.
  */
-export const withLatestDecider = (v: DecisionVersionView, names: readonly NamedAccount[]): DecisionVersionView => {
+export const withLatestNames = (v: DecisionVersionView, names: readonly NamedAccount[]): DecisionVersionView => {
+  const latest = <U extends NamedAccount>(u: U): U => {
+    const heard = names.find((n) => n.userId === u.userId);
+    return heard === undefined || heard.name === u.name ? u : { ...u, name: heard.name };
+  };
   const d = v.decidedBy;
-  if (d?.kind !== 'member') return v;
-  const latest = names.find((u) => u.userId === d.user.userId);
-  return latest === undefined || latest.name === d.user.name ? v : { ...v, decidedBy: { ...d, user: { ...d.user, name: latest.name } } };
+  const user = d?.kind === 'member' ? latest(d.user) : null;
+  const enteredBy = latest(v.enteredBy);
+  if (enteredBy === v.enteredBy && (d?.kind !== 'member' || user === d.user)) return v;
+  return { ...v, enteredBy, decidedBy: d?.kind === 'member' && user !== null ? { ...d, user } : d };
 };
 
 /**

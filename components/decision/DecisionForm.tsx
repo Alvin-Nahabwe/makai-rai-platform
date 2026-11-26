@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
@@ -17,10 +17,10 @@ import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
+import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, deciderLabel, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { departedDeciders, departedLabel, hear, memberDecider, withLatestDecider, type Heard } from '@/lib/decision/form/departedDecider';
+import { departedDeciders, departedLabel, hear, memberDecider, withLatestNames, type Heard } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -28,12 +28,13 @@ import { stageEndHref } from '@/lib/question/stageEndHref';
 import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSION_OF_A_DECISION } from '@/lib/vocabulary/terms';
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
-import { formatTime } from '@/lib/format/dates';
+import { formatDay, formatTime } from '@/lib/format/dates';
+import { PLATFORM_ZONE } from '@/components/decision/zone';
 import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
 import { todayParts } from '@/lib/ui/dateParts';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, fillToday, isDecision, isStamped, keptEvidenceLine, restoreDraft, stampDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
-import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
+import { conflictCurrent, conflictText, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
 import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
@@ -61,6 +62,25 @@ const isLinkLine = (e: FieldError): boolean => e.message === F.linkNotAdded || e
 
 /** The names of files still moving or failed, joined for a sentence. */
 const fileList = (names: readonly string[]) => names.join(', ');
+
+/** The page's current decision as the form names it: its decider and author by the name the tab heard last (departedDecider.ts). */
+const CardVersion = createContext<DecisionVersionView | null>(null);
+
+/**
+ * The card foot's line "Decided by: …. Entered by: … on <time>." for the page's current decision. DecisionCard puts it in the foot,
+ * which the form draws inside `CardVersion`, so each person is named by the name the server sent last, as in the conflict view
+ * beside it (FR-EXP-03); outside the form it draws nothing.
+ */
+export function CardEntryLine(): ReactElement | null {
+  const v = useContext(CardVersion);
+  if (v === null) return null;
+  const C = QUESTION_COPY.current;
+  const decider = v.decidedBy === null ? null : C.decidedBy(deciderLabel(v.decidedBy, '', 'record'), null);
+  return (
+    <p>{decider === null ? null : `${decider} `}{F.card.enteredBy(v.enteredBy.formerMember ? C.formerMember(v.enteredBy.name) : v.enteredBy.name)}
+      <time dateTime={v.receivedAt}>{`${formatDay(v.receivedAt, PLATFORM_ZONE)}, ${formatTime(v.receivedAt, PLATFORM_ZONE)}`}</time>.</p>
+  );
+}
 
 /**
  * S-12's "Record a decision" (W-3, W-4; FR-DEC-01, FR-DEC-05 to FR-DEC-07, FR-DEC-10; UX-24 to UX-30;
@@ -830,6 +850,11 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : departedLabel(departed));
   })();
 
+  // The newer version the conflict view shows, its decider and author named by the latest name heard (FR-EXP-03); its status message
+  // repeats the view's sentence, so it names the author the same way while the view is open.
+  const conflictShown = conflict === null ? null : withLatestNames(conflict, heard.names);
+  const shownStatus = status?.id === 'M-10' && conflictShown !== null ? { ...status, text: conflictText(conflictShown, data.viewer.userId, formatTime) } : status;
+
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];
   const consequence = consequenceOf(value, data, base, behind);
@@ -863,7 +888,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} data-conflict={conflict !== null ? 'true' : undefined} data-card-behind={cardBehind ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
-          current={withLatestDecider(conflict, heard.names)} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
+          current={conflictShown ?? conflict} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? F.evidenceFallback)}
           mineKeptEvidence={extraEvidenceIds.length}
           onSaveMine={() => { const b = conflict.versionNumber; setConflictOpen(false); setBase(b); save(false, uploads, b); }}
@@ -993,7 +1018,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
           {/* R2, R9: the way on beside Save, a quiet link, never a second orange control; text while a Save waits or is out (B-I1). */}
           <NextWay next={nextQuestion} stageHref={stageHref} held={held} />
           </div>
-          <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
+          <SaveStatus status={shownStatus} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
           {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
             ? <p>{F.savedWithout.before}<bdi>{fileList(leftOut)}</bdi>{leftOut.length === 1 ? F.savedWithout.after : F.savedWithout.afterMany}</p>
             : null}
@@ -1029,7 +1054,9 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
           : null}
       </div>
     </form>
-    {cardBehind ? null : foot}
+    <CardVersion.Provider value={page.current === null || page.current.status === 'withdrawn' ? null : withLatestNames(page.current, heard.names)}>
+      {cardBehind ? null : foot}
+    </CardVersion.Provider>
     </SaveHeldContext.Provider>
   );
 }

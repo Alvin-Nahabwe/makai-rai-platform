@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { expect, request as pwRequest, test, type Page } from '@playwright/test';
+import { expect, request as pwRequest, test, type Browser, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { closeOpenedContexts } from './helpers/contexts';
 import { fillValid, fixtureOrgSlug, historyPath, openQuestion, questionPath, saveViaApi, seatOf, seatRequest, signInWith, stageOf, waitForQuestionPage } from './helpers/session';
@@ -9,6 +9,7 @@ import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
 import { FINDING_NOTE, REASON_OPTIONAL, WHO_WHEN_COPY, WITHDRAW_COPY, whoWhenSummary } from '../lib/decision/copy';
 import { DELETE_PHRASE } from '../lib/export/messages';
+import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { EVIDENCE_COPY } from '../lib/evidence/copy';
 import { FIELD_COPY } from '../lib/ui/field/copy';
 import { QUESTION_COPY } from '../lib/question/copy';
@@ -1314,6 +1315,102 @@ test.describe('a decider who has left, named by the page', () => {
     await answerKept(page);
     await fieldNames(page, gone, label);
     await savePosts(page, 2, gone);
+  });
+
+  /** The person deletes their own account through route 39, signed in as themselves; returns the name the server then holds. */
+  async function deletesOwnAccount(browser: Browser, baseURL: string, who: { email: string }, userId: string): Promise<string> {
+    const theirs = await browser.newContext({ baseURL });
+    try {
+      const own = await theirs.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      expect((await own.request.delete('/api/users/me', { data: { password: PASSWORD, phrase: DELETE_PHRASE } })).status(), 'the account is deleted').toBe(204);
+    } finally {
+      await theirs.close();
+    }
+    const stored = (await testDb.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } })).name;
+    expect(stored, 'the name the server holds after the deletion (FR-EXP-03)').toBe('Deleted user');
+    return stored;
+  }
+
+  test('a member who entered the newer version deletes their account while the conflict view is open: after the reload, the sentence naming who saved it uses the name the server sent last', async ({ page, browser, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Enters Then Deletes ${RUN}`, email: `claims-spec-enterer-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const enterer = await joinedMember(baseURL!, who);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const at = `${projectId}/decisions`;
+    expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: { kind: 'member', userId: seatOf('admin').userId }, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    // Version 2 is entered by them, from their own session, while they are a member; an outside role decided it, so the only
+    // place their name comes from is who entered it.
+    const signIn = await browser.newContext({ baseURL });
+    try {
+      const own = await signIn.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      const v2 = await own.request.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${at}`, { data: { requestId: crypto.randomUUID(), ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: { kind: 'outside_role', role: 'supervisor' }, declaredDate: '2026-11-03' } });
+      expect(v2.status(), 'they save version 2').toBe(201);
+    } finally {
+      await signIn.close();
+    }
+    const savedBy = (name: string) => new RegExp(`^${escapeRe(DECISION_OUTCOME_COPY.conflict.other(name, '\u0000').split('\u0000')[0])}`);
+    const reloads = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    await saveMeets(page, 2);
+    const sentence = page.locator('[data-region="conflict"] > p').first();
+    await expect(sentence).toHaveText(savedBy(who.name));
+    await deletesOwnAccount(browser, baseURL!, who, enterer);
+    await expect.poll(() => reloads.count()).toBeGreaterThan(0);
+    reloads.release();
+    await expect(visible(page, QUESTION_COPY.reading.history(2)).first()).toBeVisible({ timeout: 15_000 });
+    // The reload arrived last: the sentence, and the status message it repeats, name them as it does.
+    await expect(sentence).toHaveText(savedBy('Deleted user'));
+    await expect(page.getByText(who.name)).toHaveCount(0);
+  });
+
+  /**
+   * The re-reviewer's path 1, from the screen: a conflict, "Edit my version", someone else saves version 3 while the page's reload is
+   * slow; the reload lands with version 3 while the answer's base stays 2; the decider of version 3 deletes their account; the
+   * person's Save posts on base 2 and meets version 3, the version the page already holds. The view, the field and the card line
+   * under the view name them as the reply does.
+   */
+  test('a reply naming the version the page already holds, after the decider deleted their account: the view, the field and the card line under the view all read "Deleted user"', async ({ page, browser, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Decides Version Three ${RUN}`, email: `claims-spec-path-one-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const gone = await joinedMember(baseURL!, who);
+    await removedByOwner(baseURL!, gone);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const at = `${projectId}/decisions`;
+    expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-11-03' })).status).toBe(201);
+    const slow = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    await saveMeets(page, 2);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 2, status: 'partly', reason: `${OWNER} 3`, decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-11-04' })).status).toBe(201);
+    await expect.poll(() => slow.count()).toBeGreaterThan(0);
+    slow.release();
+    await expect(visible(page, QUESTION_COPY.reading.history(3)).first()).toBeVisible({ timeout: 15_000 });
+    await page.unroute('**/*');
+    await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    const label = DECISION_FORM_COPY.formerMember(await deletesOwnAccount(browser, baseURL!, who, gone));
+    const sent = await recordSaves(page, false);
+    await saveMeets(page, 3);
+    expect(sent.map((s) => s.baseVersionNumber), 'the Save went on base 2; the page holds version 3').toEqual([2]);
+    const columns = page.locator('[data-region="conflict"] .conflict-view__columns > div');
+    for (const column of [columns.nth(0), columns.nth(1)]) await expect(column.locator('dd').filter({ hasText: new RegExp(`^${escapeRe(label)}, `) })).toHaveCount(1);
+    // The card line under the view describes version 3, the page's own, and names them as the reply did.
+    await expect(page.locator('.decision-card__meta p').filter({ hasText: DECISION_FORM_COPY.card.enteredBy('\u0000').split('\u0000')[0] }))
+      .toContainText(QUESTION_COPY.current.decidedBy(label, null));
+    await expect(page.getByText(who.name)).toHaveCount(0);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    await fieldNames(page, gone, label);
+    await expect(page.getByText(who.name)).toHaveCount(0);
   });
 
   for (const width of [1280, 375]) {

@@ -19,7 +19,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
-const { departedDeciders, departedLabel, hear, heardNames, memberDecider, withLatestDecider } = await import('@/lib/decision/form/departedDecider');
+const { departedDeciders, departedLabel, hear, heardNames, memberDecider, withLatestNames } = await import('@/lib/decision/form/departedDecider');
 const { panelWithNewest } = await import('@/lib/decision/form/newestVersion');
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
@@ -184,7 +184,7 @@ describe('the decider the answer holds, named from the page', () => {
 
   /**
    * Ruling P61: for each account, the name shown is the one the server sent last, by arrival, from the page data or a save's reply.
-   * `hear` is what the form records (DecisionForm `heard`); `withLatestDecider` names the conflict view's saved column by it.
+   * `hear` is what the form records (DecisionForm `heard`); `withLatestNames` names the conflict view's saved column by it.
    */
   describe('what the form hears, by arrival', () => {
     const EMPTY: Heard = { page: null, newest: null, names: [] };
@@ -223,11 +223,36 @@ describe('the decider the answer holds, named from the page', () => {
 
     it('the saved column names the decider by the latest name heard, and is the same version otherwise (main re-review OOS-1)', () => {
       const deleted = [{ userId: GONE.userId, name: 'Deleted user' }];
-      const renamed = withLatestDecider(V1, deleted);
+      const renamed = withLatestNames(V1, deleted);
       expect(renamed.decidedBy).toEqual({ kind: 'member', user: { ...GONE, name: 'Deleted user' } });
       expect({ ...renamed, decidedBy: V1.decidedBy }).toEqual(V1);
-      expect(withLatestDecider(V1, [{ userId: GONE.userId, name: GONE.name }])).toBe(V1);
-      expect(withLatestDecider(V2, deleted)).toBe(V2);
+      expect(withLatestNames(V1, [{ userId: GONE.userId, name: GONE.name }])).toBe(V1);
+      expect(withLatestNames(V2, deleted)).toBe(V2);
+    });
+
+    /**
+     * The newer version's author (who entered it) is named the same way: the conflict sentence "<name> saved a newer version at …",
+     * its status message and the card line's "Entered by" read the name heard last (fix round 3, place 1).
+     */
+    const ENTERER = { userId: 'u-enterer', name: 'Ama E.', formerMember: false };
+    const enteredBy = (version: DecisionVersionView, versionNumber: number, name: string): DecisionVersionView => (
+      { ...version, versionNumber, enteredBy: { ...ENTERER, name } }
+    );
+
+    it('who entered the page\'s current version and a reply\'s version is heard, the later name winning', () => {
+      const page = { ...PAGE, current: enteredBy(V1, 1, ENTERER.name) };
+      const onPage = hear(EMPTY, page, null);
+      expect(onPage.names.find((u) => u.userId === ENTERER.userId)?.name).toBe(ENTERER.name);
+      const after = hear(onPage, page, enteredBy(V2, 2, 'Deleted user'));
+      expect(after.names.find((u) => u.userId === ENTERER.userId)?.name).toBe('Deleted user');
+    });
+
+    it('the newer version is shown with its author named by the latest name heard, as well as its decider', () => {
+      const reply = enteredBy(V1, 1, ENTERER.name);
+      const renamed = withLatestNames(reply, [{ userId: ENTERER.userId, name: 'Deleted user' }, { userId: GONE.userId, name: 'Deleted user' }]);
+      expect(renamed.enteredBy).toEqual({ ...ENTERER, name: 'Deleted user' });
+      expect(renamed.decidedBy).toEqual({ kind: 'member', user: { ...GONE, name: 'Deleted user' } });
+      expect(withLatestNames(reply, [{ userId: ENTERER.userId, name: ENTERER.name }])).toBe(reply);
     });
   });
 

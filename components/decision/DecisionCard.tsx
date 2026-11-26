@@ -1,14 +1,13 @@
 import type { ReactElement } from 'react';
-import { DecisionForm, type NextQuestion } from '@/components/decision/DecisionForm';
+import { CardEntryLine, DecisionForm, type NextQuestion } from '@/components/decision/DecisionForm';
 import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { SavedMark, SavedShape } from '@/components/ui/SavedMark';
-import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { WITHDRAWAL_CODE_LABELS } from '@/lib/decision/copy';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
+import { formatDeclaredDate } from '@/lib/format/dates';
 import { ReaderZoneTime } from '@/components/decision/ReaderZoneTime';
 import { SealMarker } from '@/components/review/SealMarker';
 import { HeldFindingLink, HeldLink } from '@/components/decision/SaveHeld';
-import { PLATFORM_ZONE } from '@/components/decision/zone';
 import { platformOrigin } from '@/components/evidence/VersionEvidenceList';
 import { UI_COPY } from '@/lib/ui/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -69,8 +68,8 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
   // Spec 9.3, after a save: "Entered by" and "Decided by" both shown, and "History: n versions"; spec 7.3's dates and its
   // line on the platform. All quiet, at the card's foot (D1). The saved time is the reader's (spec 7.3) and "Entered by" is
   // East Africa time (T3 item 9): both name their zone, so for a reader elsewhere the two never read as a contradiction.
-  const decider = decision?.decidedBy == null ? null : C.decidedBy(deciderLabel(decision.decidedBy, '', 'record'), null);
-  const enterer = decision === null ? null : (decision.enteredBy.formerMember ? C.formerMember(decision.enteredBy.name) : decision.enteredBy.name);
+  // The "Decided by … Entered by …" line is the form's CardEntryLine: it names each person by the name the tab heard last, and
+  // writes its time in PLATFORM_ZONE as before.
 
   // The card's foot, rendered by the form inside its SaveHeldContext (reviews B M-r4-3, A M-1): its History and finding
   // links are text while a Save waits or is out, as Next is, so none of them takes the person away from a Save not yet sent.
@@ -91,9 +90,7 @@ export function DecisionCard({ data, next, stageHref }: DecisionCardProps): Reac
           </p>
         </div>
       )}
-      {decision === null || enterer === null ? null : (
-        <p>{decider === null ? null : `${decider} `}{DECISION_FORM_COPY.card.enteredBy(enterer)}<time dateTime={decision.receivedAt}>{`${formatDay(decision.receivedAt, PLATFORM_ZONE)}, ${formatTime(decision.receivedAt, PLATFORM_ZONE)}`}</time>.</p>
-      )}
+      {decision === null ? null : <CardEntryLine />}
       <p><HeldLink href={historyHref}>{QUESTION_COPY.reading.history(data.historyCount)}</HeldLink></p>
       {/* Spec 9.3 (coordinator, T3b item 8 and T3c item 9): the page's own finding control in the card's foot. "View the
           finding" whenever the question has an open finding; "Raise a finding about this question" after a save (a current
