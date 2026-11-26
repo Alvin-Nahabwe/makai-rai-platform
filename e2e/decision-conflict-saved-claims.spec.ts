@@ -1413,6 +1413,57 @@ test.describe('a decider who has left, named by the page', () => {
     await expect(page.getByText(who.name)).toHaveCount(0);
   });
 
+  /**
+   * The same path for who entered the version the card line describes: version 3 is entered by a member from their own session and
+   * decided by an outside role, so their name is on the card line only as "Entered by". They delete their account; the person's Save
+   * on base 2 meets version 3, the version the page already holds, whose page data (held) still carries the earlier name.
+   */
+  test('a reply naming the version the page already holds, after the member who entered it deleted their account: the card line\'s "Entered by" reads "Deleted user"', async ({ page, browser, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Enters Version Three ${RUN}`, email: `claims-spec-enters-three-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const author = await joinedMember(baseURL!, who);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const at = `${projectId}/decisions`;
+    const outside = { kind: 'outside_role', role: 'supervisor' } as const;
+    expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: outside, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: outside, declaredDate: '2026-11-03' })).status).toBe(201);
+    const slow = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    await saveMeets(page, 2);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    const signIn = await browser.newContext({ baseURL });
+    try {
+      const own = await signIn.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      const v3 = await own.request.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${at}`, { data: { requestId: crypto.randomUUID(), ...answer, baseVersionNumber: 2, status: 'partly', reason: `${OWNER} 3`, decidedBy: outside, declaredDate: '2026-11-04' } });
+      expect(v3.status(), 'they save version 3 while a member').toBe(201);
+    } finally {
+      await signIn.close();
+    }
+    await expect.poll(() => slow.count()).toBeGreaterThan(0);
+    slow.release();
+    await expect(visible(page, QUESTION_COPY.reading.history(3)).first()).toBeVisible({ timeout: 15_000 });
+    const [enteredBy] = DECISION_FORM_COPY.card.enteredBy('\u0000').split('\u0000');
+    const line = page.locator('.decision-card__meta p').filter({ hasText: enteredBy });
+    await expect(line, 'the page data names them as they were').toContainText(`${enteredBy}${who.name}`);
+    await page.unroute('**/*');
+    await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    const stored = await deletesOwnAccount(browser, baseURL!, who, author);
+    const sent = await recordSaves(page, false);
+    await saveMeets(page, 3);
+    expect(sent.map((s) => s.baseVersionNumber), 'the Save went on base 2; the page holds version 3').toEqual([2]);
+    // The card line describes version 3, the page's own, and names who entered it as the reply did.
+    await expect(line).toContainText(`${enteredBy}${stored}`);
+    await expect(line).not.toContainText(who.name);
+    // The view's sentence names who saved version 3 the same way. (They were a member when the held page data was sent, so the
+    // Decided by list, hidden under the view, still offers them by that name: not a place this case reads.)
+    await expect(page.locator('[data-region="conflict"]')).not.toContainText(who.name);
+  });
+
   for (const width of [1280, 375]) {
     for (const variant of ['saved', 'withdrawn'] as const) {
       test(`at ${width} px, a newer ${variant === 'withdrawn' ? 'withdrawal' : 'version by someone else'}: after a browser reload while the conflict view is open, the view and, after "Edit my version", the form name them, and Save posts them`, async ({ page, baseURL }) => {

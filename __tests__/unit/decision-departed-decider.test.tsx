@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
@@ -296,5 +297,19 @@ describe('the decider the answer holds, named from the page', () => {
     expect(options.filter(([, , selected]) => selected)).toEqual([['member:u-chosen-then-left', WHO_WHEN_COPY.formerMember, true]]);
     const text = decode(textOf(markup({ ...PAGE, current: WITHDRAWN }, left, false, null)));
     expect(text).toContain(`Decided by ${WHO_WHEN_COPY.formerMember}, 26 Nov 2026`);
+  });
+});
+
+/**
+ * The card line "Decided by: … Entered by: … on <time>." (ruling P63): DecisionCard draws it on the server, its time in the
+ * platform zone; the client form gives only the names before the time (CardEntryNames), by the name the tab heard last. So the
+ * zone is formatted once, on the server, and a browser's own zone names cannot differ from the server's at hydration. The
+ * protected decision-card.test.tsx ("one zone constant for the card and the history") guards the card's side; this, the form's.
+ */
+describe('the card line, drawn by the server card with its names from the client form', () => {
+  it('the client form formats no zone, so the line\'s time is the server card\'s alone', () => {
+    const form = readFileSync('components/decision/DecisionForm.tsx', 'utf8');
+    expect(form).not.toContain('PLATFORM_ZONE');
+    expect(form).not.toContain("'Africa/Kampala'");
   });
 });

@@ -28,8 +28,7 @@ import { stageEndHref } from '@/lib/question/stageEndHref';
 import { TERM_ACCEPTED_RISK, TERM_FINDING, TERM_NOT_YET, TERM_PARTLY, TERM_VERSION_OF_A_DECISION } from '@/lib/vocabulary/terms';
 import { termPattern } from '@/lib/vocabulary/firstUse';
 import type { DefinedEntry } from '@/lib/vocabulary/types';
-import { formatDay, formatTime } from '@/lib/format/dates';
-import { PLATFORM_ZONE } from '@/components/decision/zone';
+import { formatTime } from '@/lib/format/dates';
 import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
 import { todayParts } from '@/lib/ui/dateParts';
 import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, fillToday, isDecision, isStamped, keptEvidenceLine, restoreDraft, stampDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
@@ -67,19 +66,17 @@ const fileList = (names: readonly string[]) => names.join(', ');
 const CardVersion = createContext<DecisionVersionView | null>(null);
 
 /**
- * The card foot's line "Decided by: …. Entered by: … on <time>." for the page's current decision. DecisionCard puts it in the foot,
- * which the form draws inside `CardVersion`, so each person is named by the name the server sent last, as in the conflict view
- * beside it (FR-EXP-03); outside the form it draws nothing.
+ * The words before the time in the card foot's line "Decided by: …. Entered by: … on <time>.": who decided the page's current
+ * decision and who entered it. DecisionCard draws the line and its time on the server and puts this in it; the form draws the foot
+ * inside `CardVersion`, so each person is named by the name the server sent last, as in the conflict view beside it (FR-EXP-03).
+ * Outside the form it draws nothing.
  */
-export function CardEntryLine(): ReactElement | null {
+export function CardEntryNames(): ReactElement | null {
   const v = useContext(CardVersion);
   if (v === null) return null;
   const C = QUESTION_COPY.current;
   const decider = v.decidedBy === null ? null : C.decidedBy(deciderLabel(v.decidedBy, '', 'record'), null);
-  return (
-    <p>{decider === null ? null : `${decider} `}{F.card.enteredBy(v.enteredBy.formerMember ? C.formerMember(v.enteredBy.name) : v.enteredBy.name)}
-      <time dateTime={v.receivedAt}>{`${formatDay(v.receivedAt, PLATFORM_ZONE)}, ${formatTime(v.receivedAt, PLATFORM_ZONE)}`}</time>.</p>
-  );
+  return <>{decider === null ? null : `${decider} `}{F.card.enteredBy(v.enteredBy.formerMember ? C.formerMember(v.enteredBy.name) : v.enteredBy.name)}</>;
 }
 
 /**
