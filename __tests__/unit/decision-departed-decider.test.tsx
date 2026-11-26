@@ -18,7 +18,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
-const { departedDeciders, departedLabel, memberDecider } = await import('@/lib/decision/form/departedDecider');
+const { departedDeciders, departedLabel, heardNames, memberDecider } = await import('@/lib/decision/form/departedDecider');
 const { panelWithNewest } = await import('@/lib/decision/form/newestVersion');
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
@@ -152,11 +152,54 @@ describe('the decider the answer holds, named from the page', () => {
   it('is named by a version the form has shown as the current one when the page has no name for them (a third version replaced it)', () => {
     const third = { ...V2, versionNumber: 3 };
     expect(departedDeciders({ ...PAGE, current: third }, null, holds(ALSO_GONE.userId), [ALSO_GONE])).toEqual([ALSO_GONE]);
-    // The page's name still wins.
-    const page = { ...PAGE, current: third, formerDeciders: [{ userId: ALSO_GONE.userId, name: 'Deleted user' }] };
-    expect(departedDeciders(page, null, holds(ALSO_GONE.userId), [ALSO_GONE])).toEqual([{ userId: ALSO_GONE.userId, name: 'Deleted user' }]);
     // A version shown earlier adds nobody the answer does not hold.
     expect(departedDeciders({ ...PAGE, current: third }, null, null, [ALSO_GONE])).toEqual([]);
+  });
+
+  /**
+   * FR-EXP-03 (SRS 2026-10-28): a deleted account reads "Deleted user". `names` holds the latest name the server sent for each account
+   * in this tab (DecisionForm `heardNames`), so once "Deleted user" has been shown, no name sent earlier comes back from any cell.
+   */
+  it('the latest name the server sent wins over the name the opened version carried and over an older page\'s', () => {
+    const deleted = [{ userId: GONE.userId, name: 'Deleted user' }];
+    // The security review's sequence: the opened version named them "Grace A."; a later version named them "Deleted user"; now a
+    // version by someone else is current and the page has no name for them.
+    expect(departedDeciders({ ...PAGE, current: V2 }, GONE, holds(GONE.userId), deleted)).toEqual(deleted);
+    expect(departedLabel(departedDeciders({ ...PAGE, current: V2 }, GONE, holds(GONE.userId), deleted)[0])).toBe(F.formerMember('Deleted user'));
+    // The page loaded before the deletion still says "Grace A.": the name heard later wins.
+    expect(departedDeciders(AFTER, GONE, holds(GONE.userId), deleted)).toEqual(deleted);
+    // The opened version's decider is renamed even when the answer now holds someone else.
+    expect(departedDeciders({ ...PAGE, current: V2 }, GONE, null, deleted)).toEqual(deleted);
+  });
+
+  it('the names the form has heard take the latest name for an account, add new accounts, and stay the same array when nothing is new', () => {
+    const before = [{ userId: GONE.userId, name: GONE.name }];
+    expect(heardNames(before, [{ userId: GONE.userId, name: 'Deleted user' }, null, ALSO_GONE])).toEqual([
+      { userId: GONE.userId, name: 'Deleted user' }, { userId: ALSO_GONE.userId, name: ALSO_GONE.name },
+    ]);
+    expect(heardNames(before, [{ userId: GONE.userId, name: GONE.name }, null])).toBe(before);
+    expect(before).toEqual([{ userId: GONE.userId, name: GONE.name }]);
+  });
+
+  /**
+   * A departed decider the form has shown as the chosen one stays offered until the answer is saved or discarded (ruling P58), so a
+   * pick of someone else (one arrow key on a closed select) can be undone. `held` is their account ids (DecisionForm `heldDeciders`).
+   */
+  it('a departed decider the form has held stays listed after the answer moves to someone else, named as before', () => {
+    expect(departedDeciders(AFTER, null, { kind: 'outside_role', role: 'supervisor' }, [], [GONE.userId])).toEqual([ON_PAGE]);
+    expect(departedDeciders({ ...PAGE, current: V2 }, null, holds(JOSEPH.userId), [], ['u-chosen-then-left'])).toEqual([{ userId: 'u-chosen-then-left', name: null }]);
+    // Held ids of people who are listed members, or the viewer, add nothing.
+    expect(departedDeciders(AFTER, null, null, [], [JOSEPH.userId, ME.userId])).toEqual([]);
+  });
+
+  it('the field keeps offering a held departed decider after another is picked, so they can be picked again', () => {
+    const other = { ...MINE, decidedBy: { kind: 'outside_role' as const, role: 'supervisor' as const } };
+    const html = renderToStaticMarkup(
+      <DecisionFields data={AFTER} value={other} errors={[]} disabled={false} onChange={() => {}} whoWhenOpen onOpenWhoWhen={() => {}} ownVersion heldDeciders={[GONE.userId]} />,
+    );
+    const options = deciderOptions(html);
+    expect(options.filter(([value]) => value === `member:${GONE.userId}`)).toEqual([[`member:${GONE.userId}`, F.formerMember(GONE.name), false]]);
+    expect(options.filter(([, , selected]) => selected)).toEqual([['role:supervisor', expect.any(String), true]]);
   });
 
   it('a decider the answer holds whom nothing names is listed without a name, and labelled "a former member"', () => {

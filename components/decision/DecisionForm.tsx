@@ -20,7 +20,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { departedDeciders, departedLabel, memberDecider, type NamedAccount } from '@/lib/decision/form/departedDecider';
+import { departedDeciders, departedLabel, heardNames, memberDecider, type NamedAccount } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -334,12 +334,24 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   // The member who decided the version the answer was last opened from, kept as the evidence it opened with is: after a conflict the
   // answer still names them, and if they have left the organisation no newer version or member list does (departedDecider.ts).
   const [openedDecider, setOpenedDecider] = useState(() => memberDecider(data.current));
-  // The member deciders of every version this form has shown as the current one, the page's and those a save's reply named: a name
-  // for an account id only, which names the decider the answer holds once a newer version has replaced the one that named them and
-  // no page this browser loaded holds it (departedDecider.ts). Kept in memory only; nothing about a name is stored on the device.
-  const [seenDeciders, setSeenDeciders] = useState<NamedAccount[]>([]);
-  const shownDecider = memberDecider(data.current);
-  if (shownDecider !== null && !seenDeciders.some((u) => u.userId === shownDecider.userId)) setSeenDeciders([...seenDeciders, shownDecider]);
+  // The latest name the server sent for each account the form can name, from every page data and every version a save's reply named
+  // that the form has shown (`heardNames`): a name for an account id only, so a version replaced by a newer one still names its
+  // decider, and an account shown once as "Deleted user" never takes an earlier name again in this tab (FR-EXP-03). Recorded during
+  // render, as `seenCurrentId` is, when the page's data or the current version the form shows is a new object. Kept in memory only;
+  // nothing about a name is stored on the device.
+  const [heard, setHeard] = useState<{ page: QuestionPanelData | null; current: DecisionVersionView | null; names: readonly NamedAccount[] }>(
+    { page: null, current: null, names: [] },
+  );
+  if (heard.page !== page || heard.current !== data.current) {
+    const fromPage = heard.page === page ? [] : [...(page.formerDeciders ?? []), memberDecider(page.current)];
+    setHeard({ page, current: data.current, names: heardNames(heard.names, [...fromPage, memberDecider(data.current)]) });
+  }
+  // The departed deciders the form has shown as the chosen one since it was last drawn from saved data, by account id: they stay on
+  // the Decided by list after a pick of someone else, until the answer is saved or discarded (ruling P58; departedDecider.ts).
+  const [heldDeciders, setHeldDeciders] = useState<readonly string[]>([]);
+  const holds = value.decidedBy;
+  if (holds?.kind === 'member' && holds.userId !== data.viewer.userId && !data.members.some((m) => m.userId === holds.userId)
+    && !heldDeciders.includes(holds.userId)) setHeldDeciders([...heldDeciders, holds.userId]);
   const [evidenceKey, setEvidenceKey] = useState(`${data.current?.id ?? 'none'}:open`);
   const [seenCurrentId, setSeenCurrentId] = useState(data.current?.id ?? null);
   // M-18: the files a restored draft says were still uploading when the page closed; shown once, as the block's prop.
@@ -403,6 +415,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     setRetry(NO_RETRY);
     setEvidenceInitial(evidence);
     setOpenedDecider(memberDecider(data.current));
+    setHeldDeciders([]);
     setEvidenceItems(evidence);
     setEvidenceKey(`${data.current?.id ?? 'none'}:open`);
     setExtraEvidenceIds([]);
@@ -645,6 +658,8 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
       latest.current = { ...latest.current, base: saved, retry: NO_RETRY };
       setLeftOut(omitted);
       setConflictOpen(false);
+      // Saved: a departed decider picked before is no longer held (one the saved or typed answer still names is held again).
+      setHeldDeciders([]);
       setStatus(next);
       const typedDuringSave = JSON.stringify(latest.current.value) !== JSON.stringify(d);
       if (typedDuringSave) {
@@ -815,7 +830,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     if (d === null) return '';
     if (d.kind === 'outside_role') return OUTSIDE_ROLE_LABELS[d.role];
     if (d.userId === data.viewer.userId) return F.you(data.viewer.name);
-    const departed = departedDeciders(data, openedDecider, d, seenDeciders).find((u) => u.userId === d.userId);
+    const departed = departedDeciders(data, openedDecider, d, heard.names, heldDeciders).find((u) => u.userId === d.userId);
     return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : departedLabel(departed));
   })();
 
@@ -894,7 +909,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
         <DecisionFields
           data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
           onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }} ownVersion={heldOwnVersion || behind}
-          openedDecider={openedDecider} seenDeciders={seenDeciders}
+          openedDecider={openedDecider} heardNames={heard.names} heldDeciders={heldDeciders}
         />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}

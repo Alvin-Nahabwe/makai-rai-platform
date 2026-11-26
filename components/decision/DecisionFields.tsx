@@ -52,8 +52,10 @@ export interface DecisionFieldsProps {
    * someone else decided (lib/decision/form/departedDecider.ts).
    */
   openedDecider?: NamedAccount | null;
-  /** The member deciders of the versions the form has shown as the current one (DecisionForm `seenDeciders`): names only. */
-  seenDeciders?: readonly NamedAccount[];
+  /** The latest name the server sent for each account the form can name (DecisionForm `heard`): names only. */
+  heardNames?: readonly NamedAccount[];
+  /** The departed deciders the form has shown as the chosen one, by account id: they stay offered (DecisionForm `heldDeciders`). */
+  heldDeciders?: readonly string[];
 }
 
 /** The field errors that point into Decided by or Decided on: they need those fields on the page (M-11's links). */
@@ -104,7 +106,7 @@ function deciderName(d: Decider | null, data: QuestionPanelData, departed: Depar
  * On a change of a decision someone else made (`keptDeciderIsOther`) there is no line: the two fields open, the date empty
  * (D-425; owner, 23 Nov 2026, "Open, date empty").
  */
-export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen, ownVersion = false, openedDecider = null, seenDeciders = [] }: DecisionFieldsProps): ReactElement {
+export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen, ownVersion = false, openedDecider = null, heardNames = [], heldDeciders = [] }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
   // A patch to who or when is recorded in the draft (lib/question/draft.ts `patchDraft`), so a restore keeps the person's own.
@@ -185,8 +187,9 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   const reasonHelp = [answerPrompt(data.runningQuestion, value.status), chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
 
   // A former member who decided the current version, or the version this answer was opened from, stays selectable, named as the
-  // record names them; so does a former member the answer holds, named by the page or, when nothing names them, "a former member".
-  const departed = departedDeciders(data, openedDecider, value.decidedBy, seenDeciders);
+  // record names them; so does a former member the answer holds or has held since the form was drawn, by the latest name the server
+  // sent or, when nothing names them, "a former member".
+  const departed = departedDeciders(data, openedDecider, value.decidedBy, heardNames, heldDeciders);
   // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot
   // state, and a change of a decision someone else made, whose date opens empty (D-425; owner, 23 Nov 2026, "Open, date empty").
   const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value) || keptDeciderIsOther(data);

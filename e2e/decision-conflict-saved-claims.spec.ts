@@ -1191,6 +1191,87 @@ test.describe('a decider who has left, named by the page', () => {
     await expect(page.locator('[data-region="conflict"]').getByRole('heading', { name: DECISION_FORM_COPY.conflict.saved(n), exact: true })).toBeVisible();
   }
 
+  /**
+   * The owner's "No name stored on the device": the draft this browser keeps for the question names the decider by account id only.
+   * Read from localStorage once the draft holds that id; the person's name appears nowhere in it.
+   */
+  async function storedDraftHoldsNoName(page: Page, userId: string, name: string): Promise<void> {
+    const read = () => page.evaluate(([prefix, id]) => Object.keys(localStorage)
+      .filter((k) => k.startsWith(prefix)).map((k) => localStorage.getItem(k) ?? '').find((v) => v.includes(id)) ?? '', ['makrai.draft.v1:', userId] as const);
+    await expect.poll(read, { message: 'a stored draft holds the decider' }).not.toBe('');
+    const stored = await read();
+    expect(stored, 'the stored draft holds no name for the decider').not.toContain(name);
+    expect((JSON.parse(stored) as { value: { decidedBy: unknown } }).value.decidedBy).toEqual({ kind: 'member', userId });
+  }
+
+  for (const width of [1280, 375]) {
+    test(`at ${width} px: after a reload, picking someone else and then the departed decider again keeps them offered, Save posts them, and the stored draft holds their id but not their name`, async ({ page, baseURL }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const label = DECISION_FORM_COPY.formerMember(FIRST.name);
+      const n = await conflictWithNewer(page, baseURL!, 'saved', false, FIRST.id);
+      n.refresh.release();
+      await page.reload(); await waitForQuestionPage(page);
+      await expect(conflictHeading(page)).toBeVisible();
+      await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+      await answerKept(page);
+      await fieldNames(page, FIRST.id, label);
+      // One step off them (an arrow key on a closed select does the same): they stay on the list.
+      await decidedBy(page).selectOption('role:supervisor');
+      await expect(decidedBy(page).locator('option', { hasText: label })).toHaveCount(1);
+      await decidedBy(page).selectOption(`member:${FIRST.id}`);
+      await fieldNames(page, FIRST.id, label);
+      await storedDraftHoldsNoName(page, FIRST.id, FIRST.name);
+      await savePosts(page, n.number, FIRST.id);
+    });
+  }
+
+  test('a decider who deletes their account while the tab is open: once the tab has shown "Deleted user", the earlier name does not come back when a third version arrives', async ({ page, browser, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // No draft kept, so the page's data is never reloaded: the tab learns the new name only from a save's reply.
+    await blockStorage(page);
+    const who = { name: `Deletes Mid Page ${RUN}`, email: `claims-spec-deleted-mid-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const gone = await joinedMember(baseURL!, who);
+    await removedByOwner(baseURL!, gone);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const at = `${projectId}/decisions`;
+    expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    // The tab holds the earlier name (the page's version 1). Then the person deletes their account through route 39.
+    await expect(decidedBy(page).locator('option', { hasText: DECISION_FORM_COPY.formerMember(who.name) })).toHaveCount(1);
+    const theirs = await browser.newContext({ baseURL });
+    try {
+      const own = await theirs.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      expect((await own.request.delete('/api/users/me', { data: { password: PASSWORD, phrase: DELETE_PHRASE } })).status(), 'the account is deleted').toBe(204);
+    } finally {
+      await theirs.close();
+    }
+    const stored = (await testDb.user.findUniqueOrThrow({ where: { id: gone }, select: { name: true } })).name;
+    expect(stored, 'the name the server holds after the deletion (FR-EXP-03)').toBe('Deleted user');
+    const label = DECISION_FORM_COPY.formerMember(stored);
+    // Version 2 names them: the conflict's reply carries the name the server holds now, and the view shows it.
+    expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-11-03' })).status).toBe(201);
+    await saveMeets(page, 2);
+    // Version 2 names them too, so the saved column and "Your version" both read the new name.
+    const columns = page.locator('[data-region="conflict"] .conflict-view__columns > div');
+    for (const column of [columns.nth(0), columns.nth(1)]) await expect(column.locator('dd').filter({ hasText: new RegExp(`^${escapeRe(label)}, `) })).toHaveCount(1);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    // Version 3 is a withdrawal: no version the form knows names them now, and the page still holds version 1's data.
+    const withdrawal = { stage: stageOf(Q), baseVersionNumber: 2, withdrawalCode: 'entered_in_error', reason: 'Entered on the wrong question.' };
+    expect((await post(baseURL!, 'owner', `${projectId}/questions/${Q}/withdrawal`, withdrawal)).status).toBe(201);
+    await saveMeets(page, 3);
+    await viewNames(page, label);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    // The who and when line, then the field behind Change.
+    await formNames(page, gone, label);
+    await expect(page.getByText(who.name)).toHaveCount(0);
+    await savePosts(page, 3, gone);
+  });
+
   for (const width of [1280, 375]) {
     for (const variant of ['saved', 'withdrawn'] as const) {
       test(`at ${width} px, a newer ${variant === 'withdrawn' ? 'withdrawal' : 'version by someone else'}: after a browser reload while the conflict view is open, the view and, after "Edit my version", the form name them, and Save posts them`, async ({ page, baseURL }) => {
@@ -1270,6 +1351,8 @@ test.describe('a decider who has left, named by the page', () => {
       // The draft's date was today's default, not typed: over a version someone else decided it opens empty (D-425), so it is given.
       await page.getByRole('button', { name: 'Today', exact: true }).click();
       await fieldNames(page, chosen, WHO_WHEN_COPY.formerMember);
+      // The draft was written while they were a member, listed by name: it still holds only their id.
+      await storedDraftHoldsNoName(page, chosen, who.name);
       await savePosts(page, 2, chosen);
     });
   }
