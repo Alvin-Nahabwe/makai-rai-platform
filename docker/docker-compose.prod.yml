@@ -136,7 +136,7 @@ services:
     # in .github/trivy/postgres.trivyignore.yaml still describes this image;
     # otherwise re-assess that entry, and delete it once the image scan stops
     # reporting the CVE.
-    image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+    image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
     # RL 2.3 / 7.12: no email address in any log. A unique-violation is logged with a
     # `DETAIL:` line, `Key (email)=(someone@example.org) already exists.`, and `terse`
     # drops DETAIL (and HINT, QUERY, CONTEXT) from every message. The first word is the
