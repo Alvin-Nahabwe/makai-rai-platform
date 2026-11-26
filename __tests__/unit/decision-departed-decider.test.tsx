@@ -5,6 +5,7 @@ import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import type { DecisionDraft } from '@/lib/question/draft';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { WHO_WHEN_COPY } from '@/lib/decision/copy';
 import { decode, textOf } from '@/__tests__/helpers/markup';
 
 /**
@@ -17,7 +18,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
-const { departedDeciders, memberDecider } = await import('@/lib/decision/form/departedDecider');
+const { departedDeciders, departedLabel, memberDecider } = await import('@/lib/decision/form/departedDecider');
 const { panelWithNewest } = await import('@/lib/decision/form/newestVersion');
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
@@ -117,5 +118,65 @@ describe('what the Decided by field and the who and when line are given', () => 
   it('the who and when line names them, with the label, when the newer version is a withdrawal and the fields are closed', () => {
     const text = decode(textOf(markup(panelWithNewest(PAGE, WITHDRAWN), MINE, false, GONE)));
     expect(text).toContain(`Decided by ${F.formerMember(GONE.name)}, 26 Nov 2026`);
+  });
+});
+
+/**
+ * The owner's "Names from the server": after a page load that restores a draft, no version the form knows may
+ * name the decider the answer holds. The page sends the names of the members who decided an earlier version of the question and have since
+ * left (`formerDeciders`); the form names the decider it holds from them, and calls one nothing names "a former member". The page's
+ * names add no other option: only the decider the answer holds is named from them.
+ */
+describe('the decider the answer holds, named from the page', () => {
+  const ON_PAGE = { userId: GONE.userId, name: GONE.name };
+  /** A page loaded after the newer version, which someone else decided: no version it holds names the person who left. */
+  const AFTER: QuestionPanelData = { ...PAGE, current: V2, historyCount: 2, formerDeciders: [ON_PAGE] };
+  const holds = (userId: string) => ({ kind: 'member' as const, userId });
+
+  it('is named from the page when no version the form knows names them', () => {
+    expect(departedDeciders(AFTER, null, holds(GONE.userId))).toEqual([ON_PAGE]);
+  });
+
+  it('the page\'s names add nobody the answer does not hold', () => {
+    expect(departedDeciders(AFTER, null, null)).toEqual([]);
+    expect(departedDeciders(AFTER, null, { kind: 'outside_role', role: 'supervisor' })).toEqual([]);
+    expect(departedDeciders(AFTER, null, holds(JOSEPH.userId))).toEqual([]);
+    expect(departedDeciders(AFTER, null, holds(ME.userId))).toEqual([]);
+  });
+
+  it('the page\'s name wins over the name the opened version gave, which may be from before the account was deleted', () => {
+    const deleted = { ...AFTER, formerDeciders: [{ userId: GONE.userId, name: 'Deleted user' }] };
+    expect(departedDeciders(deleted, GONE, holds(GONE.userId))).toEqual([{ userId: GONE.userId, name: 'Deleted user' }]);
+  });
+
+  it('is named by a version the form has shown as the current one when the page has no name for them (a third version replaced it)', () => {
+    const third = { ...V2, versionNumber: 3 };
+    expect(departedDeciders({ ...PAGE, current: third }, null, holds(ALSO_GONE.userId), [ALSO_GONE])).toEqual([ALSO_GONE]);
+    // The page's name still wins.
+    const page = { ...PAGE, current: third, formerDeciders: [{ userId: ALSO_GONE.userId, name: 'Deleted user' }] };
+    expect(departedDeciders(page, null, holds(ALSO_GONE.userId), [ALSO_GONE])).toEqual([{ userId: ALSO_GONE.userId, name: 'Deleted user' }]);
+    // A version shown earlier adds nobody the answer does not hold.
+    expect(departedDeciders({ ...PAGE, current: third }, null, null, [ALSO_GONE])).toEqual([]);
+  });
+
+  it('a decider the answer holds whom nothing names is listed without a name, and labelled "a former member"', () => {
+    const none = departedDeciders({ ...PAGE, current: V2 }, null, holds('u-chosen-then-left'));
+    expect(none).toEqual([{ userId: 'u-chosen-then-left', name: null }]);
+    expect(departedLabel(none[0])).toBe(WHO_WHEN_COPY.formerMember);
+    expect(departedLabel(ON_PAGE)).toBe(F.formerMember(GONE.name));
+  });
+
+  it('the field\'s chosen option names them, labelled a former member, with nothing else from the page', () => {
+    const options = deciderOptions(markup(AFTER, MINE, true, null));
+    expect(options.filter(([, , selected]) => selected)).toEqual([[`member:${GONE.userId}`, F.formerMember(GONE.name), true]]);
+    expect(options.filter(([value]) => value === `member:${GONE.userId}`)).toHaveLength(1);
+  });
+
+  it('with no name anywhere, the field\'s chosen option and the who and when line say "a former member"', () => {
+    const left = { ...MINE, decidedBy: holds('u-chosen-then-left') };
+    const options = deciderOptions(markup({ ...PAGE, current: V2 }, left, true, null));
+    expect(options.filter(([, , selected]) => selected)).toEqual([['member:u-chosen-then-left', WHO_WHEN_COPY.formerMember, true]]);
+    const text = decode(textOf(markup({ ...PAGE, current: WITHDRAWN }, left, false, null)));
+    expect(text).toContain(`Decided by ${WHO_WHEN_COPY.formerMember}, 26 Nov 2026`);
   });
 });

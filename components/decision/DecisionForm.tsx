@@ -20,7 +20,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { departedDeciders, memberDecider } from '@/lib/decision/form/departedDecider';
+import { departedDeciders, departedLabel, memberDecider, type NamedAccount } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -334,6 +334,12 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   // The member who decided the version the answer was last opened from, kept as the evidence it opened with is: after a conflict the
   // answer still names them, and if they have left the organisation no newer version or member list does (departedDecider.ts).
   const [openedDecider, setOpenedDecider] = useState(() => memberDecider(data.current));
+  // The member deciders of every version this form has shown as the current one, the page's and those a save's reply named: a name
+  // for an account id only, which names the decider the answer holds once a newer version has replaced the one that named them and
+  // no page this browser loaded holds it (departedDecider.ts). Kept in memory only; nothing about a name is stored on the device.
+  const [seenDeciders, setSeenDeciders] = useState<NamedAccount[]>([]);
+  const shownDecider = memberDecider(data.current);
+  if (shownDecider !== null && !seenDeciders.some((u) => u.userId === shownDecider.userId)) setSeenDeciders([...seenDeciders, shownDecider]);
   const [evidenceKey, setEvidenceKey] = useState(`${data.current?.id ?? 'none'}:open`);
   const [seenCurrentId, setSeenCurrentId] = useState(data.current?.id ?? null);
   // M-18: the files a restored draft says were still uploading when the page closed; shown once, as the block's prop.
@@ -809,8 +815,8 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     if (d === null) return '';
     if (d.kind === 'outside_role') return OUTSIDE_ROLE_LABELS[d.role];
     if (d.userId === data.viewer.userId) return F.you(data.viewer.name);
-    const departed = departedDeciders(data, openedDecider).find((u) => u.userId === d.userId);
-    return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : F.formerMember(departed.name));
+    const departed = departedDeciders(data, openedDecider, d, seenDeciders).find((u) => u.userId === d.userId);
+    return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : departedLabel(departed));
   })();
 
   const signInHref = signInAgainHref(value.href, '');
@@ -888,7 +894,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
         <DecisionFields
           data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
           onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }} ownVersion={heldOwnVersion || behind}
-          openedDecider={openedDecider}
+          openedDecider={openedDecider} seenDeciders={seenDeciders}
         />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}
