@@ -20,6 +20,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { departedDeciders, memberDecider } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -278,11 +279,16 @@ function pinnedBar(bar: HTMLElement): boolean {
 
 function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot, lead, ownOrigin = null }: DecisionFormProps): ReactElement {
   const router = useRouter();
-  // The newest saved version a reply has named to this form (a conflict's current version, the version a save made; the page's own when
-  // a draft is restored behind it), and the panel everything below reads: the page's, or that version's while the page is older
-  // (`behind`). The form has no other source for "the current decision", so no statement in it can be about a version it knows has
-  // been replaced; `page` itself is read only to see that the page's data changed. The reload that brings the page level is the
-  // conflict's (when this browser holds the draft), a save's, or "Discard my version"'s.
+  // The newest saved version a save's reply has named to this form (a conflict's current version, the version a save made; the page's
+  // own when a draft is restored behind it), and the panel everything below reads: the page's, or that version's while the page is
+  // older (`behind`). What runs proved, for a version a reply named: the panel's current version is never older than it (unit,
+  // decision-newest-version: "never holds an older current version"), and in the states e2e/decision-conflict-saved-claims.spec.ts
+  // runs (its grid, and "data older than the version a save's reply named") the form states nothing about the version it replaced.
+  // Not covered: a version the form knows only from the page. `newest` does not hold it, so page data older than it, arriving with
+  // nothing typed, would be drawn: the answer, the base and the card (the branch on `seenCurrentId` below). The next Save would
+  // meet the server's 409, so nothing wrong would be stored; no run has made such data arrive. `page` itself is read to build the
+  // panel, for `behind`, and to see that the page's data changed. The reload that brings the page level is the conflict's (when this
+  // browser holds the draft), a save's, or "Discard my version"'s.
   const [newest, setNewest] = useState<DecisionVersionView | null>(null);
   /** A reply named `v` as saved: it becomes the newest version the form knows, unless it already knows a later one. */
   const named = useCallback((v: DecisionVersionView): void => setNewest((n) => (n !== null && n.versionNumber > v.versionNumber ? n : v)), []);
@@ -325,6 +331,9 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   const [storageUnavailable, setStorageUnavailable] = useState(false);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItemView[]>(data.current?.evidence ?? []);
   const [evidenceInitial, setEvidenceInitial] = useState<EvidenceItemView[]>(data.current?.evidence ?? []);
+  // The member who decided the version the answer was last opened from, kept as the evidence it opened with is: after a conflict the
+  // answer still names them, and if they have left the organisation no newer version or member list does (departedDecider.ts).
+  const [openedDecider, setOpenedDecider] = useState(() => memberDecider(data.current));
   const [evidenceKey, setEvidenceKey] = useState(`${data.current?.id ?? 'none'}:open`);
   const [seenCurrentId, setSeenCurrentId] = useState(data.current?.id ?? null);
   // M-18: the files a restored draft says were still uploading when the page closed; shown once, as the block's prop.
@@ -387,6 +396,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     setBase(currentNumber);
     setRetry(NO_RETRY);
     setEvidenceInitial(evidence);
+    setOpenedDecider(memberDecider(data.current));
     setEvidenceItems(evidence);
     setEvidenceKey(`${data.current?.id ?? 'none'}:open`);
     setExtraEvidenceIds([]);
@@ -799,9 +809,8 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     if (d === null) return '';
     if (d.kind === 'outside_role') return OUTSIDE_ROLE_LABELS[d.role];
     if (d.userId === data.viewer.userId) return F.you(data.viewer.name);
-    const other = isDecision(data.current) && data.current.decidedBy?.kind === 'member' && data.current.decidedBy.user.userId === d.userId
-      ? F.formerMember(data.current.decidedBy.user.name) : '';
-    return data.members.find((m) => m.userId === d.userId)?.name ?? other;
+    const departed = departedDeciders(data, openedDecider).find((u) => u.userId === d.userId);
+    return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : F.formerMember(departed.name));
   })();
 
   const signInHref = signInAgainHref(value.href, '');
@@ -879,6 +888,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
         <DecisionFields
           data={data} value={value} errors={errors} disabled={false} onChange={edit} whoWhenOpen={whoWhenOpen}
           onOpenWhoWhen={() => { focusWhoWhen.current = true; setWhoWhenOpen(true); }} ownVersion={heldOwnVersion || behind}
+          openedDecider={openedDecider}
         />
 
         {/* Named once, by the block's own fieldset legend "Evidence". */}

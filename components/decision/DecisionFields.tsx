@@ -10,6 +10,7 @@ import { TextArea } from '@/components/ui/TextArea';
 import { OUTSIDE_ROLE_LABELS, REASON_OPTIONAL, SCOPE_OPTIONS, STATUS_OPTIONS, WHO_WHEN_COPY, countsAs, deciderLabel, reasonCount, whoWhenSummary } from '@/lib/decision/copy';
 import { answerLabel, answerPrompt } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
+import { departedDeciders, type NamedAccount } from '@/lib/decision/form/departedDecider';
 import { textErasedLine } from '@/lib/documents/copy';
 import { REASON_MAX, declaredDateFromParts } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
@@ -45,6 +46,12 @@ export interface DecisionFieldsProps {
    * comes with the page's data, as it did before, so it never appears over a version the page has not confirmed.
    */
   ownVersion?: boolean;
+  /**
+   * The member who decided the version the form's answer was last opened from (DecisionForm `openedDecider`). If they have since
+   * left the organisation, the field still offers them and the line still names them when `data.current` is a newer version that
+   * someone else decided (lib/decision/form/departedDecider.ts).
+   */
+  openedDecider?: NamedAccount | null;
 }
 
 /** The field errors that point into Decided by or Decided on: they need those fields on the page (M-11's links). */
@@ -74,12 +81,12 @@ function deciderFrom(v: string): Decider | null {
 }
 
 /** How the summary line names the decider: "you" for the viewer, a member by name, an outside role by its label (M-03's words). */
-function deciderName(d: Decider | null, data: QuestionPanelData, extra: { userId: string; name: string } | null): string {
+function deciderName(d: Decider | null, data: QuestionPanelData, departed: NamedAccount[]): string {
   if (d === null) return WHO_WHEN_COPY.noDecider;
   if (d.kind === 'outside_role') return deciderLabel({ kind: 'outside_role', role: d.role }, data.viewer.userId, 'confirmation');
-  const former = extra !== null && extra.userId === d.userId;
-  const known = d.userId === data.viewer.userId ? data.viewer : data.members.find((m) => m.userId === d.userId) ?? (former ? extra : null);
-  return known === null ? WHO_WHEN_COPY.formerMember : deciderLabel({ kind: 'member', user: { userId: known.userId, name: known.name, formerMember: former } }, data.viewer.userId, 'confirmation');
+  const former = departed.find((u) => u.userId === d.userId);
+  const known = d.userId === data.viewer.userId ? data.viewer : data.members.find((m) => m.userId === d.userId) ?? former;
+  return known === undefined ? WHO_WHEN_COPY.formerMember : deciderLabel({ kind: 'member', user: { userId: known.userId, name: known.name, formerMember: known === former } }, data.viewer.userId, 'confirmation');
 }
 
 /**
@@ -94,7 +101,7 @@ function deciderName(d: Decider | null, data: QuestionPanelData, extra: { userId
  * On a change of a decision someone else made (`keptDeciderIsOther`) there is no line: the two fields open, the date empty
  * (D-425; owner, 23 Nov 2026, "Open, date empty").
  */
-export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen, ownVersion = false }: DecisionFieldsProps): ReactElement {
+export function DecisionFields({ data, value, errors, disabled, onChange, whoWhenOpen, onOpenWhoWhen, ownVersion = false, openedDecider = null }: DecisionFieldsProps): ReactElement {
   const q = data.question;
   const err = (field: string) => errors.find((e) => e.field === field)?.message;
   // A patch to who or when is recorded in the draft (lib/question/draft.ts `patchDraft`), so a restore keeps the person's own.
@@ -174,9 +181,9 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
   const erased = current?.reasonErased?.erasedOn ?? null;
   const reasonHelp = [answerPrompt(data.runningQuestion, value.status), chosenCode?.reasonMustSay ?? ''].filter((t) => t !== '').join(' ');
 
-  // A former member who decided the current version stays selectable, named as the record names them.
-  const listed = new Set([data.viewer.userId, ...data.members.map((m) => m.userId)]);
-  const extraMember = current?.decidedBy?.kind === 'member' && !listed.has(current.decidedBy.user.userId) ? current.decidedBy.user : null;
+  // A former member who decided the current version, or the version this answer was opened from, stays selectable, named as the
+  // record names them.
+  const departed = departedDeciders(data, openedDecider);
   // A field error on who or when needs the fields on the page, whatever the form holds; so does a who or when the line cannot
   // state, and a change of a decision someone else made, whose date opens empty (D-425; owner, 23 Nov 2026, "Open, date empty").
   const open = whoWhenOpen || errors.some(isWhoWhenError) || whoWhenUnreadable(value) || keptDeciderIsOther(data);
@@ -188,7 +195,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
 
   // The one line: who and when as the form holds them ("you" for the viewer, as M-03 names them), and "today" while no date is set.
   const parsedDate = declaredDateFromParts(value.date);
-  const summary = whoWhenSummary(deciderName(value.decidedBy, data, extraMember), 'date' in parsedDate ? formatDeclaredDate(parsedDate.date) : null);
+  const summary = whoWhenSummary(deciderName(value.decidedBy, data, departed), 'date' in parsedDate ? formatDeclaredDate(parsedDate.date) : null);
 
   return (
     <div className="decision-fields">
@@ -223,7 +230,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange, whoWhe
         options={[
           { value: `member:${data.viewer.userId}`, label: F.you(data.viewer.name) },
           ...data.members.map((m) => ({ value: `member:${m.userId}`, label: m.name })),
-          ...(extraMember !== null ? [{ value: `member:${extraMember.userId}`, label: F.formerMember(extraMember.name) }] : []),
+          ...departed.map((u) => ({ value: `member:${u.userId}`, label: F.formerMember(u.name) })),
         ]}
         groups={[{ label: F.noAccountGroup, options: OUTSIDE_ROLES.map((r) => ({ value: `role:${r}`, label: OUTSIDE_ROLE_LABELS[r] })) }]}
         onChange={(e) => set({ decidedBy: deciderFrom(e.target.value) })}

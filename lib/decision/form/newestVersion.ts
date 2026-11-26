@@ -6,7 +6,12 @@ import type { DecisionVersionView } from '@/types/api';
  * current version, or the version the save itself made. `page` is the page's own panel and `newest` the newest version a
  * reply has named; the result is `page` itself (the same object) unless `newest` is the newer of the two, and then
  * `page` with that version as its current one. So its current version is never older than the page's or the named one,
- * whichever order they arrive in, and the form states nothing about a version it knows has been replaced.
+ * whichever order they arrive in (unit, decision-newest-version: "never holds an older current version").
+ *
+ * That is all this function settles, and only for versions a reply named. `newest` never holds a version the form knows
+ * from the page alone, so page data older than such a version, arriving with nothing typed, would be drawn by the form
+ * (DecisionForm, the branch on `seenCurrentId`); a Save from there meets the server's 409. No run has made such data
+ * arrive and no test covers it.
  *
  * With the version go the two facts the page worked out from its current version that the version itself gives
  * (lib/question/panel.ts): the question's wording (the running content's for a withdrawal or an answer under it; an

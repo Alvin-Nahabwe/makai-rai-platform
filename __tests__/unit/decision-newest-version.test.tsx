@@ -8,10 +8,15 @@ import { FINDING_NOTE } from '@/lib/decision/copy';
 import { decode, textOf } from '@/__tests__/helpers/markup';
 
 /**
- * The decision form never states an older version than the newest one it knows. A save's reply can name a version the
- * page does not hold yet (a conflict's current version, the version the save made); `panelWithNewest` gives the form the
- * page's panel with that version as its current one, and every statement in the form reads that panel. What the reply
- * cannot say (whether the question has an open finding now) is not stated while the page is behind.
+ * A save's reply can name a version the page does not hold yet (a conflict's current version, the version the save made);
+ * `panelWithNewest` gives the form the page's panel with that version as its current one. These cases prove two things:
+ * the function (its current version is never older than the page's or the named one), and what the fields and the
+ * consequence line state when they are handed that panel, in a static render. What the reply cannot say (whether the
+ * question has an open finding now) is not stated while the page is behind.
+ *
+ * They do not prove that every statement of the running form reads that panel: a static render of two readers cannot.
+ * e2e/decision-conflict-saved-claims.spec.ts runs the form in a browser, for the states it lists. Nothing here covers a
+ * version the form knows only from the page (the function is handed reply-named versions only).
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
