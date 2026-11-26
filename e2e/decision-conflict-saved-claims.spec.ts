@@ -2,12 +2,12 @@ import 'dotenv/config';
 import { expect, request as pwRequest, test, type Browser, type Page } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { closeOpenedContexts } from './helpers/contexts';
-import { fillValid, fixtureOrgSlug, historyPath, openQuestion, questionPath, saveViaApi, seatOf, seatRequest, signInWith, stageOf, waitForQuestionPage } from './helpers/session';
+import { expectMovedOn, fillValid, fixtureOrgSlug, historyPath, openQuestion, questionPath, saveStatus, saveViaApi, seatOf, seatRequest, signInWith, stageOf, waitForQuestionPage } from './helpers/session';
 import { testDb } from '../__tests__/helpers/db';
 import { escapeRe } from '../__tests__/helpers/escapeRe';
 import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { DECISION_FORM_COPY } from '../lib/decision/form/copy';
-import { FINDING_NOTE, REASON_OPTIONAL, WHO_WHEN_COPY, WITHDRAW_COPY, whoWhenSummary } from '../lib/decision/copy';
+import { FINDING_NOTE, REASON_OPTIONAL, WHO_WHEN_COPY, WITHDRAW_COPY, savedLine, whoWhenSummary } from '../lib/decision/copy';
 import { DELETE_PHRASE } from '../lib/export/messages';
 import { DECISION_OUTCOME_COPY } from '../lib/decision/outcome/copy';
 import { EVIDENCE_COPY } from '../lib/evidence/copy';
@@ -1460,7 +1460,7 @@ test.describe('a decider who has left, named by the page', () => {
     await expect(line).toContainText(`${enteredBy}${stored}`);
     await expect(line).not.toContainText(who.name);
     // The view's sentence names who saved version 3 the same way. (They were a member when the held page data was sent, so the
-    // Decided by list, hidden under the view, still offers them by that name: not a place this case reads.)
+    // Decided by list, hidden under the view, still offers them; what it calls them is read by the listed-member cases below.)
     await expect(page.locator('[data-region="conflict"]')).not.toContainText(who.name);
   });
 
@@ -1576,5 +1576,189 @@ test.describe('a decider who has left, named by the page', () => {
     await fieldNames(page, gone, DECISION_FORM_COPY.formerMember(stored));
     await expect(page.getByText(who.name)).toHaveCount(0);
     await savePosts(page, n.number, gone);
+  });
+
+  /**
+   * One name source. In every held-refresh case above the decider was removed before the page
+   * loaded, so the page never listed them. In the cases below the account is a listed member as the page loads, and the page's
+   * refresh is held from before they delete their account: the member list the tab holds still carries the earlier name, and the
+   * only thing that names them anew is a save's reply. Every place that names them then reads the reply's name. The held member
+   * list still counts them a member, so the form's own places give the name alone, while a version's places follow the mark the
+   * server sent with that version; which of the two a deleted account should carry is the owner's wording question, not pinned
+   * as a rule here.
+   */
+  const fieldOptions = (page: Page) => decidedBy(page).locator('option')
+    .evaluateAll((all) => all.map((o) => [(o as HTMLOptionElement).value, o.textContent ?? ''] as [string, string]));
+
+  /**
+   * The Decided by field holds the account and shows it as chosen under exactly `label`; the account has one option; no option
+   * and nothing the field gives assistive technology carries `earlier`. Each is read on its own, so one run names every place.
+   */
+  async function fieldNamesOnly(page: Page, userId: string, label: string, earlier: string): Promise<void> {
+    await expect(decidedBy(page)).toHaveValue(`member:${userId}`);
+    await expect.soft(decidedBy(page).locator('option:checked'), 'the field\'s closed text').toHaveText(label);
+    const all = await fieldOptions(page);
+    expect.soft(all.filter(([value]) => value === `member:${userId}`), 'the account\'s option in the picker').toEqual([[`member:${userId}`, label]]);
+    expect.soft(all.filter(([, text]) => text.includes(earlier)), 'options under the earlier name').toEqual([]);
+    expect.soft(await decidedBy(page).ariaSnapshot(), 'the field in the accessibility tree').not.toContain(earlier);
+  }
+
+  /** The request a Save sends and the server's own answer to it: nothing is stubbed. */
+  async function savedForReal(page: Page): Promise<{ sent: Record<string, unknown>; status: number; body: { versionNumber: number; decidedBy: unknown } }> {
+    const answered = page.waitForResponse((r) => isSavePost(r.request().method(), r.url()), { timeout: 15_000 });
+    await page.getByRole('button', { name: DECISION_FORM_COPY.save }).click();
+    const res = await answered;
+    return { sent: res.request().postDataJSON() as Record<string, unknown>, status: res.status(), body: await res.json() };
+  }
+
+  for (const width of [1280, 375]) {
+    test(`at ${width} px, a listed member who is the chosen decider deletes their account while the page's refresh is held: the view, the field, its options and the card line name them as the reply did, and a Save is stored with them as the decider`, async ({ page, browser, baseURL }) => {
+      test.setTimeout(90_000);
+      await page.setViewportSize({ width, height: 900 });
+      const who = { name: `Listed Then Deletes ${width} ${RUN}`, email: `claims-spec-listed-${width}-${RUN}@fixture.test` };
+      emails.push(who.email);
+      const listed = await joinedMember(baseURL!, who);
+      const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+      const at = `${projectId}/decisions`;
+      const byThem = { kind: 'member', userId: listed } as const;
+      expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: byThem, declaredDate: '2026-10-12' })).status).toBe(201);
+      await page.reload(); await waitForQuestionPage(page);
+      await fillValid(page, { reason: MINE });
+      // A listed member as the page loads: the field names them as the member list does.
+      await fieldNames(page, listed, who.name);
+      expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: byThem, declaredDate: '2026-11-03' })).status).toBe(201);
+      const slow = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+      await saveMeets(page, 2);
+      await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+      await answerKept(page);
+      expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 2, status: 'partly', reason: `${OWNER} 3`, decidedBy: byThem, declaredDate: '2026-11-04' })).status).toBe(201);
+      await expect.poll(() => slow.count()).toBeGreaterThan(0);
+      slow.release();
+      await expect(visible(page, QUESTION_COPY.reading.history(3)).first()).toBeVisible({ timeout: 15_000 });
+      // From here the page's refresh is held for good: the page holds version 3 and a member list that names them as they were.
+      await page.unroute('**/*');
+      const held = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+      const stored = await deletesOwnAccount(browser, baseURL!, who, listed);
+      await saveMeets(page, 3);
+      const columns = page.locator('[data-region="conflict"] .conflict-view__columns > div');
+      const decidedByRow = (column: number, label: string) => columns.nth(column).locator('dd').filter({ hasText: new RegExp(`^${escapeRe(label)}, `) });
+      await expect.soft(decidedByRow(0, DECISION_FORM_COPY.formerMember(stored)), 'the saved column').toHaveCount(1);
+      await expect.soft(decidedByRow(1, stored), '"Your version"').toHaveCount(1);
+      await expect.soft(page.locator('.decision-card__meta p').filter({ hasText: DECISION_FORM_COPY.card.enteredBy('\u0000').split('\u0000')[0] }), 'the card line')
+        .toContainText(QUESTION_COPY.current.decidedBy(stored, null).replace(/\.$/, ''));
+      await expect.soft(page.getByText(who.name), 'the earlier name, anywhere while the view is open').toHaveCount(0);
+      await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+      await answerKept(page);
+      await fieldNamesOnly(page, listed, stored, who.name);
+      await expect.soft(page.getByText(who.name), 'the earlier name, anywhere on the form').toHaveCount(0);
+      // What a Save posts and what the server answers when the chosen decider has deleted their account: it posts the account the
+      // field shows, and the server stores the version (a deleted account is a former member of the organisation, FR-DEC-01).
+      const save = await savedForReal(page);
+      expect(save.sent).toMatchObject({ baseVersionNumber: 3, reason: MINE, decidedBy: byThem });
+      expect(save.status, 'the server stores it').toBe(201);
+      expect(save.body.decidedBy, 'the stored version names them').toEqual({ kind: 'member', user: { userId: listed, name: stored, formerMember: true } });
+      // What the person sees: the "Saved" line names the decider as the stored version does. The move to the next question waits
+      // behind the conflict's refresh, which this case still holds; once that is answered the page moves on and says the same.
+      await expect(saveStatus(page)).toContainText(savedLine('\u0000', 4, DECISION_FORM_COPY.formerMember(stored)).split('\u0000')[1]);
+      held.release();
+      await expectMovedOn(page, Q, DECISION_FORM_COPY.formerMember(stored));
+    });
+  }
+
+  test('a listed member who is the chosen decider withdraws the current version and deletes their account while the page\'s refresh is held: the sentence, "Your version", the who and when line and the field name them as the reply did', async ({ page, browser, baseURL }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Withdraws Then Deletes ${RUN}`, email: `claims-spec-withdraws-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const listed = await joinedMember(baseURL!, who);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const api = `/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}`;
+    // Version 1 is theirs, entered from their own session and decided by them, so they may withdraw it; the withdrawal is the
+    // newer version, and the only place the reply names them is as the person who saved it.
+    const theirs = await browser.newContext({ baseURL });
+    try {
+      const own = await theirs.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      const v1 = await own.request.post(`${api}/decisions`, { data: { requestId: crypto.randomUUID(), ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: { kind: 'member', userId: listed }, declaredDate: '2026-10-12' } });
+      expect(v1.status(), 'they save version 1').toBe(201);
+      await page.reload(); await waitForQuestionPage(page);
+      await fillValid(page, { reason: MINE });
+      await fieldNames(page, listed, who.name);
+      const v2 = await own.request.post(`${api}/questions/${Q}/withdrawal`, { data: { requestId: crypto.randomUUID(), stage: stageOf(Q), baseVersionNumber: 1, withdrawalCode: 'entered_in_error', reason: 'Entered on the wrong question.' } });
+      expect(v2.status(), 'they withdraw it').toBe(201);
+    } finally {
+      await theirs.close();
+    }
+    await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    const stored = await deletesOwnAccount(browser, baseURL!, who, listed);
+    await saveMeets(page, 2);
+    const view = page.locator('[data-region="conflict"]');
+    await expect.soft(view.locator('> p').first(), 'the sentence').toHaveText(new RegExp(`^${escapeRe(DECISION_OUTCOME_COPY.conflict.other(stored, '\u0000').split('\u0000')[0])}`));
+    await expect.soft(view.locator('.conflict-view__columns > div').nth(1).locator('dd').filter({ hasText: new RegExp(`^${escapeRe(stored)}, `) }), '"Your version"').toHaveCount(1);
+    await expect.soft(page.getByText(who.name), 'the earlier name, anywhere while the view is open').toHaveCount(0);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    // Over a withdrawal the fields are closed: the who and when line names the decider the answer holds.
+    await expect.soft(page.locator('#decision-who-when-summary'), 'the who and when line').toHaveText(new RegExp(`^${escapeRe(whoWhenSummary(stored, ''))}`));
+    await page.getByRole('button', { name: WHO_WHEN_COPY.change, exact: true }).click();
+    await fieldNamesOnly(page, listed, stored, who.name);
+    await expect.soft(page.getByText(who.name), 'the earlier name, anywhere on the form').toHaveCount(0);
+  });
+
+  test('a Save that stays on the question names the decider in its "Saved" line: when they then delete their account and the page\'s refresh brings "Deleted user", the line names them so, as the card line under it does', async ({ page, browser, baseURL }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Decides Then Deletes ${RUN}`, email: `claims-spec-saved-line-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const listed = await joinedMember(baseURL!, who);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    await fillValid(page, { reason: MINE, decidedBy: who.name });
+    // The save's request is kept until the person has typed more, so the save stays on the question (its "Saved" line is read
+    // here, with the text typed past it kept), and its own refresh of the page is held.
+    let answerNow!: () => void;
+    const kept = new Promise<void>((r) => { answerNow = r; });
+    await page.route('**/decisions', async (route) => {
+      if (isSavePost(route.request().method(), route.request().url())) await kept;
+      await route.fallback();
+    });
+    const slow = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    await page.getByRole('button', { name: DECISION_FORM_COPY.save }).click();
+    await reasonBox(page).fill(`${MINE}, and more`);
+    answerNow();
+    const decidedByOf = (name: string) => savedLine('\u0000', 1, name).split('\u0000')[1].replace(/\.$/, '');
+    await expect(saveStatus(page)).toContainText(decidedByOf(who.name), { timeout: 15_000 });
+    const stored = await deletesOwnAccount(browser, baseURL!, who, listed);
+    await expect.poll(() => slow.count()).toBeGreaterThan(0);
+    slow.release();
+    // The refresh lands: the card line describes version 1 and names its decider as the server holds them now.
+    await expect(page.locator('.decision-card__meta p').filter({ hasText: DECISION_FORM_COPY.card.enteredBy('\u0000').split('\u0000')[0] }))
+      .toContainText(QUESTION_COPY.current.decidedBy(DECISION_FORM_COPY.formerMember(stored), null), { timeout: 15_000 });
+    await expect.soft(saveStatus(page), 'the "Saved" line').toContainText(decidedByOf(stored));
+    await expect.soft(saveStatus(page), 'the "Saved" line').not.toContainText(who.name);
+    await expect.soft(page.getByText(who.name), 'the earlier name, anywhere on the form').toHaveCount(0);
+    await expect(reasonBox(page)).toHaveValue(`${MINE}, and more`);
+  });
+
+  test('the chosen decider deleted their account and nothing has told the tab: Save posts them, the server stores the version, and the page it moves to names them "Deleted user (former member)"', async ({ page, browser, baseURL }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Deletes Before Save ${RUN}`, email: `claims-spec-before-save-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const listed = await joinedMember(baseURL!, who);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const byThem = { kind: 'member', userId: listed } as const;
+    expect((await post(baseURL!, 'admin', `${projectId}/decisions`, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: byThem, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    await fieldNames(page, listed, who.name);
+    const stored = await deletesOwnAccount(browser, baseURL!, who, listed);
+    // No reply and no page data has reached the tab since: the field still names them as the page did, and that is all it can know.
+    const save = await savedForReal(page);
+    expect(save.sent).toMatchObject({ baseVersionNumber: 1, reason: MINE, decidedBy: byThem });
+    expect(save.status, 'the server stores it: a deleted account is a former member').toBe(201);
+    expect(save.body).toMatchObject({ versionNumber: 2, decidedBy: { kind: 'member', user: { userId: listed, name: stored, formerMember: true } } });
+    await expectMovedOn(page, Q, DECISION_FORM_COPY.formerMember(stored));
+    await expect(page.getByText(who.name)).toHaveCount(0);
   });
 });

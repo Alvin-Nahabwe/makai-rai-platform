@@ -30,6 +30,11 @@ const F = DECISION_FORM_COPY;
 const STATUS_TERMS: Readonly<Record<DecisionStatus, { id: string }>> = { done: TERM_DONE, partly: TERM_PARTLY, not_yet: TERM_NOT_YET, not_applicable: TERM_NOT_APPLICABLE };
 
 export interface DecisionFieldsProps {
+  /**
+   * The panel the form reads. The viewer, the listed members and the current version carry the names the fields show as they are:
+   * the form hands them over already under the latest name the tab has heard (DecisionForm, `panelWithLatestNames`), so no field
+   * looks a name up for itself.
+   */
   data: QuestionPanelData; value: DecisionDraft; errors: FieldError[]; disabled: boolean;
   onChange: (v: DecisionDraft) => void;
   /**
@@ -52,7 +57,7 @@ export interface DecisionFieldsProps {
    * someone else decided (lib/decision/form/departedDecider.ts).
    */
   openedDecider?: NamedAccount | null;
-  /** The latest name the server sent for each account the form can name (DecisionForm `heard`): names only. */
+  /** The latest name the server sent for each account the form can name (DecisionForm `heard`): names only, here for a departed decider `data` does not name. */
   heardNames?: readonly NamedAccount[];
   /** The departed deciders the form has shown as the chosen one, by account id: they stay offered (DecisionForm `heldDeciders`). */
   heldDeciders?: readonly string[];

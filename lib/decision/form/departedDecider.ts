@@ -37,20 +37,32 @@ export function heardNames(names: readonly NamedAccount[], accounts: ReadonlyArr
 export type Heard = { page: QuestionPanelData | null; newest: DecisionVersionView | null; names: readonly NamedAccount[] };
 
 /**
- * `prev` once the form holds `page` and `newest`, each heard when it is a new object, as it arrives (ruling P61: for each account,
- * the name shown is the one the server sent last, by arrival). A new page gives its `formerDeciders` and its current version's
- * decider and author (who entered it); a new `newest` (a version a save's reply named, even one the page already holds) gives its
- * decider and author. One source never re-hears the other: page data arriving after a reply wins over the reply's names, and a
- * reply arriving after the page wins over the page's. If both are new in the same render the reply is heard last. `prev` itself
- * when nothing changed, so the form can record this during render and settle.
+ * The one name source of the decision form. `prev` once the form holds `page` and `newest`, each heard when it is a
+ * new object, as it arrives (ruling P61: for each account, the name shown is the one the server sent last, by arrival). A new page
+ * gives every name it carries: its viewer, its listed members, its `formerDeciders` and its current version's decider and author
+ * (who entered it); a new `newest` (a version a save's reply named, even one the page already holds) gives its decider and author.
+ * One source never re-hears the other: page data arriving after a reply wins over the reply's names, and a reply arriving after
+ * the page wins over the page's. If both are new in the same render the reply is heard last. `prev` itself when nothing changed,
+ * so the form can record this during render and settle.
+ *
+ * Every place that names an account reads `names` through one of three readers, never the object a name first came in:
+ * `panelWithLatestNames` (the panel the form reads: the field, its options, the who and when line, "Your version"),
+ * `withLatestNames` (a version shown as it is: the conflict view's newer version and its sentence, a save's status line, the
+ * card line) and `departedDeciders` (an account id no panel names: a decider a draft holds).
  */
 export function hear(prev: Heard, page: QuestionPanelData, newest: DecisionVersionView | null): Heard {
   if (prev.page === page && prev.newest === newest) return prev;
   const accounts: Array<NamedAccount | null> = [];
-  if (prev.page !== page) accounts.push(...(page.formerDeciders ?? []), memberDecider(page.current), page.current?.enteredBy ?? null);
+  if (prev.page !== page) accounts.push(page.viewer, ...page.members, ...(page.formerDeciders ?? []), memberDecider(page.current), page.current?.enteredBy ?? null);
   if (prev.newest !== newest) accounts.push(memberDecider(newest), newest?.enteredBy ?? null);
   return { page, newest, names: heardNames(prev.names, accounts) };
 }
+
+/** `u` under the latest name heard for its account; `u` itself when that is already its name, or when nothing heard names it. */
+const latestOf = <U extends NamedAccount>(u: U, names: readonly NamedAccount[]): U => {
+  const heard = names.find((n) => n.userId === u.userId);
+  return heard === undefined || heard.name === u.name ? u : { ...u, name: heard.name };
+};
 
 /**
  * `v` with its member decider and its author (who entered it) named by the latest name heard for each account: the conflict view's
@@ -58,16 +70,28 @@ export function hear(prev: Heard, page: QuestionPanelData, newest: DecisionVersi
  * since been sent anew. `v` itself when both names are already its own.
  */
 export const withLatestNames = (v: DecisionVersionView, names: readonly NamedAccount[]): DecisionVersionView => {
-  const latest = <U extends NamedAccount>(u: U): U => {
-    const heard = names.find((n) => n.userId === u.userId);
-    return heard === undefined || heard.name === u.name ? u : { ...u, name: heard.name };
-  };
   const d = v.decidedBy;
-  const user = d?.kind === 'member' ? latest(d.user) : null;
-  const enteredBy = latest(v.enteredBy);
+  const user = d?.kind === 'member' ? latestOf(d.user, names) : null;
+  const enteredBy = latestOf(v.enteredBy, names);
   if (enteredBy === v.enteredBy && (d?.kind !== 'member' || user === d.user)) return v;
   return { ...v, enteredBy, decidedBy: d?.kind === 'member' && user !== null ? { ...d, user } : d };
 };
+
+/**
+ * `panel` with every account the form names from it under the latest name heard: the viewer, each listed member, and the current
+ * version's decider and author (`withLatestNames`). The form reads this panel and nothing else for those names, so the Decided by
+ * field, its options, the who and when line and "Your version" take a name a reply or a refresh brought with no lookup of their
+ * own; a member the page listed who has since deleted their account reads "Deleted user" in all of them (FR-EXP-03). Names only:
+ * who the page lists as a member, and the former-member mark each version carries, stay as the server sent them. `panel` itself
+ * when every name is already the latest, so what the form derives from it settles.
+ */
+export function panelWithLatestNames(panel: QuestionPanelData, names: readonly NamedAccount[]): QuestionPanelData {
+  const viewer = latestOf(panel.viewer, names);
+  const members = panel.members.map((m) => latestOf(m, names));
+  const current = panel.current === null ? null : withLatestNames(panel.current, names);
+  if (viewer === panel.viewer && current === panel.current && members.every((m, i) => m === panel.members[i])) return panel;
+  return { ...panel, viewer, members, current };
+}
 
 /**
  * The deciders the form can name who are on no member list (they have left the organisation), so the Decided by field can

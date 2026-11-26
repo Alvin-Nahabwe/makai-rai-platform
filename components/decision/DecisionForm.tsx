@@ -17,10 +17,10 @@ import { decisionFormNote } from '@/lib/authz/permissionNotes';
 import { signInAgainHref } from '@/lib/auth/idle';
 import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, deciderLabel, problemSummary } from '@/lib/decision/copy';
+import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, deciderLabel, problemSummary, savedMessage } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { departedDeciders, departedLabel, hear, memberDecider, withLatestNames, type Heard } from '@/lib/decision/form/departedDecider';
+import { departedDeciders, departedLabel, hear, memberDecider, panelWithLatestNames, withLatestNames, type Heard } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -309,8 +309,20 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   const [newest, setNewest] = useState<DecisionVersionView | null>(null);
   /** A reply named `v` as saved: it becomes the newest version the form knows, unless it already knows a later one. */
   const named = useCallback((v: DecisionVersionView): void => setNewest((n) => (n !== null && n.versionNumber > v.versionNumber ? n : v)), []);
-  const data = useMemo(() => panelWithNewest(page, newest), [page, newest]);
-  const behind = data !== page;
+  // The one name source: the latest name the server sent for each account the form can name, by arrival, from each page data (its
+  // viewer, its listed members, its former deciders, its current version) and each version a save's reply named (`hear`,
+  // departedDecider.ts). A name for an account id only, so a version replaced by a newer one still names its decider, and an account
+  // shown once as "Deleted user" never takes an earlier name again in this tab (FR-EXP-03). Recorded during render, as
+  // `seenCurrentId` is, when the page's data or the newest version is a new object. Kept in memory only; nothing about a name is
+  // stored on the device.
+  const [heard, setHeard] = useState<Heard>({ page: null, newest: null, names: [] });
+  const nowHeard = hear(heard, page, newest);
+  if (nowHeard !== heard) setHeard(nowHeard);
+  const panel = useMemo(() => panelWithNewest(page, newest), [page, newest]);
+  const behind = panel !== page;
+  // The panel everything below reads, its accounts under those names (`panelWithLatestNames`): no place of the form names an account
+  // from the page's or a reply's own object. It is `panel` itself until a name has changed.
+  const data = useMemo(() => panelWithLatestNames(panel, heard.names), [panel, heard.names]);
   const key = draftKeyFor(data);
   const currentNumber = data.current?.versionNumber ?? null;
 
@@ -351,14 +363,6 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   // The member who decided the version the answer was last opened from, kept as the evidence it opened with is: after a conflict the
   // answer still names them, and if they have left the organisation no newer version or member list does (departedDecider.ts).
   const [openedDecider, setOpenedDecider] = useState(() => memberDecider(data.current));
-  // The latest name the server sent for each account the form can name, by arrival: from each page data and each version a save's
-  // reply named (`hear`, departedDecider.ts). A name for an account id only, so a version replaced by a newer one still names its
-  // decider, and an account shown once as "Deleted user" never takes an earlier name again in this tab (FR-EXP-03). Recorded during
-  // render, as `seenCurrentId` is, when the page's data or the newest version is a new object. Kept in memory only; nothing about a
-  // name is stored on the device.
-  const [heard, setHeard] = useState<Heard>({ page: null, newest: null, names: [] });
-  const nowHeard = hear(heard, page, newest);
-  if (nowHeard !== heard) setHeard(nowHeard);
   // The departed deciders the form has shown as the chosen one since it was last drawn from saved data, by account id: they stay on
   // the Decided by list after a pick of someone else, until the answer is saved or discarded (ruling P58; departedDecider.ts).
   const [heldDeciders, setHeldDeciders] = useState<readonly string[]>([]);
@@ -847,10 +851,16 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     return data.members.find((m) => m.userId === d.userId)?.name ?? (departed === undefined ? '' : departedLabel(departed));
   })();
 
-  // The newer version the conflict view shows, its decider and author named by the latest name heard (FR-EXP-03); its status message
-  // repeats the view's sentence, so it names the author the same way while the view is open.
-  const conflictShown = conflict === null ? null : withLatestNames(conflict, heard.names);
-  const shownStatus = status?.id === 'M-10' && conflictShown !== null ? { ...status, text: conflictText(conflictShown, data.viewer.userId, formatTime) } : status;
+  // The newest version a reply named, its decider and author under the latest name heard (FR-EXP-03). The conflict view shows it, and
+  // the two status lines that name someone from it name them the same way: the conflict's (the view's sentence, while the view is
+  // open) and a save's "Saved … Decided by: …", which stays on a save that does not move on. While that line shows, `newest` is the
+  // version that save made: a 201 makes a version above every one a reply named before, and nothing names another until the next send.
+  const newestShown = newest === null ? null : withLatestNames(newest, heard.names);
+  const conflictShown = conflict === null ? null : newestShown;
+  const shownStatus = status === null || newestShown === null ? status
+    : status.id === 'M-10' && conflict !== null ? { ...status, text: conflictText(newestShown, data.viewer.userId, formatTime) }
+    : status.id === 'M-03' ? { ...status, text: savedMessage(newestShown, formatTime(newestShown.receivedAt), data.viewer.userId) }
+    : status;
 
   const signInHref = signInAgainHref(value.href, '');
   const waitingFiles = [...uploads.uploading, ...uploads.failed];

@@ -20,7 +20,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
-const { departedDeciders, departedLabel, hear, heardNames, memberDecider, withLatestNames } = await import('@/lib/decision/form/departedDecider');
+const { departedDeciders, departedLabel, hear, heardNames, memberDecider, panelWithLatestNames, withLatestNames } = await import('@/lib/decision/form/departedDecider');
 const { panelWithNewest } = await import('@/lib/decision/form/newestVersion');
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
@@ -297,6 +297,81 @@ describe('the decider the answer holds, named from the page', () => {
     expect(options.filter(([, , selected]) => selected)).toEqual([['member:u-chosen-then-left', WHO_WHEN_COPY.formerMember, true]]);
     const text = decode(textOf(markup({ ...PAGE, current: WITHDRAWN }, left, false, null)));
     expect(text).toContain(`Decided by ${WHO_WHEN_COPY.formerMember}, 26 Nov 2026`);
+  });
+});
+
+/**
+ * One name source: the form reads a panel whose accounts are already named by the latest name the tab has heard
+ * (`panelWithLatestNames`), so the Decided by field, its options, the who and when line and "Your version" need no lookup of their
+ * own. A page's listed members and its viewer are heard as its former deciders and its current version are (`hear`). These cases
+ * prove the two functions and, in a static render, what the field and the line show when given that panel. That the form hands
+ * that panel on, and what a browser shows, is e2e/decision-conflict-saved-claims.spec.ts ("a listed member who is the chosen decider").
+ */
+describe('one name source: the panel the form reads, named by the latest name heard', () => {
+  const EMPTY: Heard = { page: null, newest: null, names: [] };
+  const DELETED = 'Deleted user';
+  const heardName = (h: Heard, userId: string) => h.names.find((u) => u.userId === userId)?.name;
+  /** Joseph, a listed member as the page loaded, decided the person's own version: he is the decider the answer holds. */
+  const LISTED: QuestionPanelData = { ...PAGE, current: { ...V1, decidedBy: { kind: 'member', user: JOSEPH } } };
+  /** A version a save's reply names after Joseph deleted his account. */
+  const afterDeletion: DecisionVersionView = { ...V2, decidedBy: { kind: 'member', user: { ...JOSEPH, name: DELETED, formerMember: true } }, enteredBy: { userId: 'u-owner', name: 'Olive O.', formerMember: false } };
+  const MINE_BY_JOSEPH: DecisionDraft = { ...draftFromCurrent(LISTED, null), date: { day: '26', month: '11', year: '2026' } };
+
+  it('a page\'s listed members and its viewer are heard as the page arrives', () => {
+    const onPage = hear(EMPTY, PAGE, null);
+    expect(heardName(onPage, JOSEPH.userId)).toBe(JOSEPH.name);
+    expect(heardName(onPage, ME.userId)).toBe(ME.name);
+  });
+
+  it('a member list arriving after a reply is heard last: the reply\'s earlier name for a listed member does not come back over it', () => {
+    const reply: DecisionVersionView = { ...V2, decidedBy: { kind: 'member', user: JOSEPH } };
+    const heardReply = hear(hear(EMPTY, PAGE, null), PAGE, reply);
+    const renamed = { ...PAGE, members: [{ userId: JOSEPH.userId, name: 'Joseph Kato' }] };
+    const after = hear(heardReply, renamed, reply);
+    expect(heardName(after, JOSEPH.userId)).toBe('Joseph Kato');
+    expect(panelWithLatestNames(renamed, after.names).members).toEqual([{ userId: JOSEPH.userId, name: 'Joseph Kato' }]);
+  });
+
+  it('a listed member the tab then hears of as "Deleted user" is named so in the member list and as the current version\'s decider, and nothing else changes', () => {
+    const after = hear(hear(EMPTY, LISTED, null), LISTED, afterDeletion);
+    const named = panelWithLatestNames(LISTED, after.names);
+    expect(named.members).toEqual([{ userId: JOSEPH.userId, name: DELETED }]);
+    expect(memberDecider(named.current)).toEqual({ ...JOSEPH, name: DELETED });
+    expect({ ...named, members: LISTED.members, current: LISTED.current }).toEqual(LISTED);
+  });
+
+  it('the viewer is named by the latest name heard, and keeps their role', () => {
+    const reply: DecisionVersionView = { ...V2, enteredBy: { userId: ME.userId, name: 'Amina Nakato', formerMember: false } };
+    const named = panelWithLatestNames(PAGE, hear(hear(EMPTY, PAGE, null), PAGE, reply).names);
+    expect(named.viewer).toEqual({ ...ME, name: 'Amina Nakato' });
+  });
+
+  it('is the same panel when every name it holds is already the latest', () => {
+    expect(panelWithLatestNames(PAGE, hear(EMPTY, PAGE, null).names)).toBe(PAGE);
+    expect(panelWithLatestNames(PAGE, [])).toBe(PAGE);
+    expect(panelWithLatestNames({ ...PAGE, current: null }, [GONE])).toEqual({ ...PAGE, current: null });
+  });
+
+  it('the Decided by field names a listed member who is the chosen decider by the latest name heard, once, and no option keeps the earlier name', () => {
+    const named = panelWithLatestNames(LISTED, hear(hear(EMPTY, LISTED, null), LISTED, afterDeletion).names);
+    const options = deciderOptions(markup(named, MINE_BY_JOSEPH, true, JOSEPH));
+    expect(options.filter(([value]) => value === `member:${JOSEPH.userId}`)).toEqual([[`member:${JOSEPH.userId}`, DELETED, true]]);
+    expect(options.map(([, text]) => text).filter((text) => text.includes(JOSEPH.name))).toEqual([]);
+  });
+
+  it('the who and when line names that listed member by the latest name heard when the fields are closed', () => {
+    const withdrawal: DecisionVersionView = { ...WITHDRAWN, enteredBy: { ...JOSEPH, name: DELETED, formerMember: true } };
+    const page = panelWithNewest(LISTED, withdrawal);
+    const named = panelWithLatestNames(page, hear(hear(EMPTY, LISTED, null), LISTED, withdrawal).names);
+    const text = decode(textOf(markup(named, MINE_BY_JOSEPH, false, JOSEPH)));
+    expect(text).toContain(`Decided by ${DELETED}, 26 Nov 2026`);
+    expect(text).not.toContain(JOSEPH.name);
+  });
+
+  it('the form\'s own "You (name)" option carries the viewer\'s latest name', () => {
+    const named = panelWithLatestNames(PAGE, [{ userId: ME.userId, name: 'Amina Nakato' }]);
+    const options = deciderOptions(markup(named, MINE, true, null));
+    expect(options.filter(([value]) => value === `member:${ME.userId}`)).toEqual([[`member:${ME.userId}`, F.you('Amina Nakato'), false]]);
   });
 });
 
