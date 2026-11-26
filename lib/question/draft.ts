@@ -24,10 +24,19 @@ export interface DecisionDraft {
    * (`restoreDraft`).
    */
   whoWhenChanged: boolean;
+  /**
+   * Whether the date is the person's own, so a restore keeps it, rather than the default of the day the draft was written,
+   * which a restore on a later day replaces with that day's (design 2026-11-22 section 8). Set by a change to "Decided on"
+   * (`patchDraft`); a change to "Decided by" alone leaves it.
+   */
+  dateChanged: boolean;
 }
 
-/** A draft as the store may hold it: one saved by v0.9.0 lacks `whoWhenChanged`, which `restoreDraft` reads from the typed date. */
-export type StoredDecisionDraft = Omit<DecisionDraft, 'whoWhenChanged'> & { whoWhenChanged?: boolean };
+/**
+ * A draft as the store may hold it. One saved by v0.9.0 lacks `whoWhenChanged`, which `restoreDraft` reads from the typed date;
+ * one saved by v0.9.0 to v0.11.0 lacks `dateChanged`, which `restoreDraft` then reads as those builds did.
+ */
+export type StoredDecisionDraft = Omit<DecisionDraft, 'whoWhenChanged' | 'dateChanged'> & { whoWhenChanged?: boolean; dateChanged?: boolean };
 
 export const EMPTY_DATE: DateParts = Object.freeze({ day: '', month: '', year: '' }) as DateParts;
 
@@ -67,7 +76,7 @@ export function keptDeciderIsOther(data: Pick<QuestionPanelData, 'current' | 'vi
  * `today`, the device's date as three boxes, or empty when `today` is null (the server render, which does not know the
  * reader's day). On a change of a decision someone else made (`keptDeciderIsOther`) the date opens empty, as in v0.9.0,
  * so one press of Save cannot record that person deciding today (D-425; owner, 23 Nov 2026, "Open, date empty").
- * `whoWhenChanged` starts false: the person has not yet touched either.
+ * `whoWhenChanged` and `dateChanged` start false: the person has not yet touched either.
  */
 export function draftFromCurrent(data: QuestionPanelData, today: DateParts | null): DecisionDraft {
   const href = questionHref(data, data.question.id);
@@ -76,22 +85,23 @@ export function draftFromCurrent(data: QuestionPanelData, today: DateParts | nul
   const c = data.current;
   if (!isDecision(c)) {
     return { status: null, scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: '', decidedBy: viewer,
-      date, evidenceIds: [], notUploaded: [], href, whoWhenChanged: false };
+      date, evidenceIds: [], notUploaded: [], href, whoWhenChanged: false, dateChanged: false };
   }
   return {
     status: c.status as DecisionStatus | null, scopeAnswer: c.scopeAnswer, optionsInPlace: [...c.optionsInPlace], reasonCode: c.reasonCode,
     reason: c.reason ?? '', decidedBy: deciderOf(c.decidedBy) ?? viewer,
-    date, evidenceIds: c.evidence.map((e) => e.id), notUploaded: [], href, whoWhenChanged: false,
+    date, evidenceIds: c.evidence.map((e) => e.id), notUploaded: [], href, whoWhenChanged: false, dateChanged: false,
   };
 }
 
 /**
  * The form's fill of the device's today once it is known, after hydration: only while the date is still the default
- * (`whoWhenChanged` false), and never on a change of a decision someone else made, whose date stays empty (D-425). Pure.
+ * (`dateChanged` false, whatever happened to "Decided by"), and never on a change of a decision someone else made, whose
+ * date stays empty (D-425). Pure.
  */
 export function fillToday(v: DecisionDraft, data: QuestionPanelData, today: DateParts): DecisionDraft {
   // The default date is `draftFromCurrent`'s, so the rule has one source.
-  return v.whoWhenChanged ? v : { ...v, date: draftFromCurrent(data, today).date };
+  return v.dateChanged ? v : { ...v, date: draftFromCurrent(data, today).date };
 }
 
 /** The three date fields of a declared date at its precision (the form's two date shortcuts). */
@@ -170,38 +180,79 @@ export function isDraftValue(v: unknown): v is StoredDecisionDraft {
     && (d.status === null || (STATUSES as readonly unknown[]).includes(d.status))
     && (d.scopeAnswer === null || (SCOPES as readonly unknown[]).includes(d.scopeAnswer))
     && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || isDraftDecider(d.decidedBy))
-    && (d.whoWhenChanged === undefined || typeof d.whoWhenChanged === 'boolean');
+    && (d.whoWhenChanged === undefined || typeof d.whoWhenChanged === 'boolean')
+    && (d.dateChanged === undefined || typeof d.dateChanged === 'boolean');
+}
+
+/**
+ * The stored record as this build writes it: marked as written by a build that keeps `dateChanged` current. Every write
+ * of a decision draft goes through it (DecisionForm's `keep`, `draftHeldForGate`). Builds up to v0.11.0 write the outer
+ * record anew with its five fields, so a write by one of them drops the mark, while the value, spread, keeps a
+ * `dateChanged` it does not update.
+ */
+export function stampDraft<V>(d: StoredDraft<V>): StampedDraft<V> {
+  return { ...d, dateChangedCurrent: true };
+}
+
+/**
+ * A stored record with `stampDraft`'s mark. The store keeps it as written (lib/client/drafts.ts writes the record as JSON and
+ * returns it as parsed), so the mark needs no change to the store; a record without it reads as unstamped.
+ */
+export type StampedDraft<V> = StoredDraft<V> & { dateChangedCurrent?: true };
+
+/** Whether a record the store returned carries `stampDraft`'s mark: anything but `true` there reads as no mark. */
+export function isStamped(found: StoredDraft<unknown>): boolean {
+  return (found as StampedDraft<unknown>).dateChangedCurrent === true;
+}
+
+/**
+ * Whether a restore keeps the stored date. `stamped`: the record carries `stampDraft`'s mark, so this build wrote it last.
+ * - No `dateChanged`: a draft from v0.9.0 to v0.11.0, read as those builds did: kept when who or when was changed (`changed`).
+ * - A stamped record: its `dateChanged` is current, so the date is kept only when the person changed it.
+ * - An unstamped record with `dateChanged`: an older build wrote over this build's draft, and may have typed the date
+ *   (even the value it showed) without updating `dateChanged`. A typed date is never replaced, so it is kept.
+ */
+function keepsStoredDate(found: StoredDecisionDraft, stamped: boolean, changed: boolean): boolean {
+  if (found.dateChanged === undefined) return changed;
+  return stamped ? found.dateChanged : true;
 }
 
 /**
  * The draft a stored value restores to on open, or null when it is not a draft (`isDraftValue`). Everything the person
- * typed comes back, and `href` is this page's. Who and when come back only when the draft says the person changed them
- * (`whoWhenChanged`); otherwise they take today's defaults, so a decider or a date from an older day is never trusted
- * unseen (design 2026-11-22 section 4 and section 8).
+ * typed comes back, and `href` is this page's. The decider comes back only when the draft says the person changed who or
+ * when (`whoWhenChanged`); the date only when it is the person's own (`keepsStoredDate`). Otherwise they take today's
+ * defaults, so a decider or a date from an older day is never trusted unseen (design 2026-11-22 section 4 and section 8).
  *
- * A draft with no such field was saved by v0.9.0, where the date always opened empty: a date in it was typed by the
+ * A draft with no `whoWhenChanged` was saved by v0.9.0, where the date always opened empty: a date in it was typed by the
  * person, so it is kept with its decider (the default one when the draft has none), and the draft counts as changed.
  * A flagless draft with an empty date takes the defaults.
  */
-export function restoreDraft(found: unknown, data: QuestionPanelData, today: DateParts | null): DecisionDraft | null {
+export function restoreDraft(found: unknown, data: QuestionPanelData, today: DateParts | null, stamped: boolean): DecisionDraft | null {
   if (!isDraftValue(found)) return null;
   const defaults = draftFromCurrent(data, today);
   const typedDate = found.date.day !== '' || found.date.month !== '' || found.date.year !== '';
   const changed = found.whoWhenChanged === undefined ? typedDate : found.whoWhenChanged;
+  const dateKept = keepsStoredDate(found, stamped, changed);
   return {
     ...found, href: defaults.href,
     decidedBy: changed ? (found.decidedBy ?? defaults.decidedBy) : defaults.decidedBy,
-    date: changed ? found.date : defaults.date,
+    date: dateKept ? found.date : defaults.date,
     whoWhenChanged: changed,
+    dateChanged: dateKept,
   };
 }
 
 /**
  * A change to the draft's fields. A patch that carries "Decided by" or "Decided on" records that the person changed who
- * or when, so a restore keeps them (`restoreDraft`); any other patch leaves the record as it was. Pure.
+ * or when, so a restore keeps the decider; one that carries "Decided on" also records that the date is the person's own
+ * (`dateChanged`). Any other patch leaves the record as it was. Pure.
  */
 export function patchDraft(value: DecisionDraft, patch: Partial<DecisionDraft>): DecisionDraft {
-  return { ...value, ...patch, ...('decidedBy' in patch || 'date' in patch ? { whoWhenChanged: true } : {}) };
+  return {
+    ...value, ...patch,
+    ...('decidedBy' in patch || 'date' in patch ? { whoWhenChanged: true } : {}),
+    ...('date' in patch ? { dateChanged: true } : {}),
+  };
 }
 
 /** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your version"). */
@@ -216,7 +267,7 @@ export function keptEvidenceLine(n: number): string {
  * when there is no store, the write is refused, or the read does not return that answer.
  */
 export function draftHeldForGate<V>(store: DraftStore | null, key: DraftKey, d: StoredDraft<V>, now: Date): boolean {
-  if (store === null || !store.write(key, d)) return false;
+  if (store === null || !store.write(key, stampDraft(d))) return false;
   const back = store.read<V>(key, now);
   return back !== null && JSON.stringify(back.value) === JSON.stringify(d.value);
 }

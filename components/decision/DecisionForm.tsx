@@ -31,7 +31,7 @@ import type { DefinedEntry } from '@/lib/vocabulary/types';
 import { formatTime } from '@/lib/format/dates';
 import { declaredDateFromParts, type DateParts } from '@/lib/decision/rules';
 import { todayParts } from '@/lib/ui/dateParts';
-import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, fillToday, isDecision, keptEvidenceLine, restoreDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, fillToday, isDecision, isStamped, keptEvidenceLine, restoreDraft, stampDraft, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
@@ -432,7 +432,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     s.purgeExpired(now);
     const found = s.read<DecisionDraft>(key, now);
     if (found === null) return;
-    const restored = restoreDraft(found.value, data, t);
+    const restored = restoreDraft(found.value, data, t, isStamped(found));
     if (restored === null) return;
     setValue(restored);
     setTypedSinceCurrent(true);
@@ -574,7 +574,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   const keep = useCallback((d: StoredDraft<DecisionDraft>): boolean => {
     const s = store.current;
     if (s === null) return false;
-    if (s.write(key, d)) { setDraftSavedAt(d.savedAt); setStorageUnavailable(false); return true; }
+    if (s.write(key, stampDraft(d))) { setDraftSavedAt(d.savedAt); setStorageUnavailable(false); return true; }
     setStorageUnavailable(true);
     return false;
   }, [key]);

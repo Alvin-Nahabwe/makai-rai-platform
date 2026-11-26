@@ -369,7 +369,7 @@ test('UX-30: Save while a file is uploading waits; Save without it names the fil
 test('NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes', async ({ page, baseURL }) => {
   await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
   const v = JSON.parse((await draftValues(page))[0]) as { value: Record<string, unknown> };
-  expect(Object.keys(v.value).sort()).toEqual(['date', 'decidedBy', 'evidenceIds', 'href', 'notUploaded', 'optionsInPlace', 'reason', 'reasonCode', 'scopeAnswer', 'status', 'whoWhenChanged']);
+  expect(Object.keys(v.value).sort()).toEqual(['date', 'dateChanged', 'decidedBy', 'evidenceIds', 'href', 'notUploaded', 'optionsInPlace', 'reason', 'reasonCode', 'scopeAnswer', 'status', 'whoWhenChanged']);
 });
 
 test('UX-26 B2: the draft key holds the session\'s account, organisation, project and question', async ({ page, baseURL }) => {

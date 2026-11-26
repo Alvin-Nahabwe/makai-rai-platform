@@ -3459,8 +3459,8 @@
     "kind": "rule",
     "changed": "e2e/decision-save.spec.ts::NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes",
     "replacedBy": "e2e/decision-save.spec.ts::NFR-PRIV-06 B3: the stored draft holds the form fields only, no file bytes",
-    "property": "The stored draft holds the form fields only and no file bytes. The key list gains whoWhenChanged, the flag that records whether the person changed who or when (answer cost, design section 8).",
-    "proof": "Only the expected key list changes: 'whoWhenChanged' joins it, the flag that records whether the person changed who or when (answer cost, design section 8; lib/question/draft.ts). The case still pins that the draft holds exactly these form fields and no file bytes; no other line of it changes.",
+    "property": "The stored draft holds the form fields only and no file bytes. The key list gains whoWhenChanged, the flag that records whether the person changed who or when, and dateChanged, the flag that records whether the date is the person's own (answer cost, design section 8).",
+    "proof": "Only the expected key list changes: 'whoWhenChanged' joins it, the flag that records whether the person changed who or when, and 'dateChanged', the flag that records whether the person changed the date, so a default date from an earlier day becomes today on restore (answer cost, design section 8; lib/question/draft.ts). The case still pins that the draft holds exactly these form fields and no file bytes; no other line of it changes.",
     "task": "answer-cost 7"
   },
   {
