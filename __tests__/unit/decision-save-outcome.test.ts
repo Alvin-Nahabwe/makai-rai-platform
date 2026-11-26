@@ -211,6 +211,13 @@ describe('CR-2 rr2: whether a 403 gate may navigate is decided when the reply ar
     expect(store.read<{ reason: string }>(KEY, NOW)?.value.reason).toBe('Typed while saving');
   });
 
+  it('the record a gate leaves on the device carries this build\'s mark, so its restore trusts the draft\'s own date record', () => {
+    const store = openDraftStore(quotaStorage())!;
+    expect(draftHeldForGate(store, KEY, at('Held for the gate', false), NOW)).toBe(true);
+    // lib/question/draft.ts `stampDraft`'s mark, read as `isStamped` reads it (the import lines of this protected file stay as they were)
+    expect(store.read(KEY, NOW)).toMatchObject({ dateChangedCurrent: true });
+  });
+
   it('with no store, the form stays', () => {
     expect(draftHeldForGate(null, KEY, at('Only in the field', true), NOW)).toBe(false);
   });

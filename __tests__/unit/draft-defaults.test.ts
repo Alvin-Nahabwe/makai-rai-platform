@@ -279,6 +279,12 @@ describe('answer cost 3: a defaulted date never outlives its day, and a typed on
   const v090Restore = (found: unknown) => (v090.isDraftValue(found) ? { ...found, href: 'h' } : null);
   const v090Set = <V extends object>(value: V, patch: object): V => ({ ...value, ...patch });
   const stores = () => { const m = memoryStorage(); return { m, next: openDraftStore(m)!, old: openOldStore(m)! }; };
+  /** The new build restores on T, writes the draft back (stamped), and restores again on T2: what a typed date must survive. */
+  const twoNewRestores = (s: DraftStore) => {
+    const first = newRestore(s, T);
+    newKeep(s, first);
+    return [first, newRestore(s, T2)] as const;
+  };
 
   describe('the new build alone', () => {
     it('F1: a draft whose person changed only "Decided by" on an earlier day restores with today\'s date and that decider', () => {
@@ -333,7 +339,7 @@ describe('answer cost 3: a defaulted date never outlives its day, and a typed on
       newKeep(next, draftFromCurrent(PANEL, DAY1));
       const shown = v090Restore(old.read<unknown>(KEY, NOW)!.value) as DecisionDraft;
       oldKeep(old, v090Set(shown, { date: { ...shown.date, day: '20' } }));
-      expect(newRestore(next, T).date).toEqual(DAY1);
+      for (const r of twoNewRestores(next)) expect(r.date).toEqual(DAY1);
     });
 
     it('P2: after a new "Decided by" change, a v0.11.0 tab re-enters the same date, or presses Today that day; the new build keeps it', () => {
@@ -342,7 +348,7 @@ describe('answer cost 3: a defaulted date never outlives its day, and a typed on
         newKeep(next, patchDraft(draftFromCurrent(PANEL, DAY1), { decidedBy: PI }));
         const shown = v011.restoreDraft(old.read<unknown>(KEY, NOW)!.value, PANEL, DAY1)!;
         oldKeep(old, v011.patchDraft(shown, { date }));
-        expect(newRestore(next, T)).toMatchObject({ decidedBy: PI, date: DAY1 });
+        for (const r of twoNewRestores(next)) expect(r).toMatchObject({ decidedBy: PI, date: DAY1 });
       }
     });
 
@@ -351,7 +357,7 @@ describe('answer cost 3: a defaulted date never outlives its day, and a typed on
       newKeep(next, draftFromCurrent(PANEL, DAY1));
       const shown = v090Restore(old.read<unknown>(KEY, NOW)!.value) as DecisionDraft;
       oldKeep(old, v090Set(shown, { date: { day: '3', month: '11', year: '2026' } }));
-      expect(newRestore(next, T).date).toEqual({ day: '3', month: '11', year: '2026' });
+      for (const r of twoNewRestores(next)) expect(r.date).toEqual({ day: '3', month: '11', year: '2026' });
     });
 
     it('an old tab that only reads leaves the record stamped, so the new build still takes today', () => {
@@ -367,7 +373,7 @@ describe('answer cost 3: a defaulted date never outlives its day, and a typed on
       newKeep(next, patchDraft(draftFromCurrent(PANEL, DAY1), { decidedBy: PI }));
       const shown = v011.restoreDraft(old.read<unknown>(KEY, NOW)!.value, PANEL, DAY2)!;
       oldKeep(old, v011.patchDraft(shown, { reason: 'From the old tab.' }));
-      expect(newRestore(next, T)).toMatchObject({ decidedBy: PI, date: shown.date, reason: 'From the old tab.' });
+      for (const r of twoNewRestores(next)) expect(r).toMatchObject({ decidedBy: PI, date: shown.date, reason: 'From the old tab.' });
     });
 
     it('drafts stored by v0.9.0 to v0.11.0 (no stamp, no record of a date change) restore exactly as at a100eb63', () => {
