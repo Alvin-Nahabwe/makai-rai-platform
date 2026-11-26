@@ -4,6 +4,7 @@ import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 import type { DecisionDraft } from '@/lib/question/draft';
+import type { Heard } from '@/lib/decision/form/departedDecider';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { WHO_WHEN_COPY } from '@/lib/decision/copy';
 import { decode, textOf } from '@/__tests__/helpers/markup';
@@ -18,7 +19,7 @@ import { decode, textOf } from '@/__tests__/helpers/markup';
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }), usePathname: () => '/x' }));
 
-const { departedDeciders, departedLabel, heardNames, memberDecider } = await import('@/lib/decision/form/departedDecider');
+const { departedDeciders, departedLabel, hear, heardNames, memberDecider, withLatestDecider } = await import('@/lib/decision/form/departedDecider');
 const { panelWithNewest } = await import('@/lib/decision/form/newestVersion');
 const { DecisionFields } = await import('@/components/decision/DecisionFields');
 const { draftFromCurrent } = await import('@/lib/question/draft');
@@ -179,6 +180,55 @@ describe('the decider the answer holds, named from the page', () => {
     ]);
     expect(heardNames(before, [{ userId: GONE.userId, name: GONE.name }, null])).toBe(before);
     expect(before).toEqual([{ userId: GONE.userId, name: GONE.name }]);
+  });
+
+  /**
+   * Ruling P61: for each account, the name shown is the one the server sent last, by arrival, from the page data or a save's reply.
+   * `hear` is what the form records (DecisionForm `heard`); `withLatestDecider` names the conflict view's saved column by it.
+   */
+  describe('what the form hears, by arrival', () => {
+    const EMPTY: Heard = { page: null, newest: null, names: [] };
+    const named = (version: DecisionVersionView, versionNumber: number, name: string): DecisionVersionView => (
+      { ...version, versionNumber, decidedBy: { kind: 'member', user: { ...GONE, name } } }
+    );
+    const nameOf = (h: Heard) => h.names.find((u) => u.userId === GONE.userId)?.name;
+
+    it('a reply naming the version the page already holds is heard: its newer name wins (security re-review N1)', () => {
+      const onPage = hear(EMPTY, PAGE, null);
+      expect(nameOf(onPage)).toBe(GONE.name);
+      const reply = named(V1, 1, 'Deleted user');
+      const after = hear(onPage, PAGE, reply);
+      expect(nameOf(after)).toBe('Deleted user');
+      const shown = departedDeciders(panelWithNewest(PAGE, reply), null, holds(GONE.userId), after.names);
+      expect(shown.map(departedLabel)).toEqual([F.formerMember('Deleted user')]);
+    });
+
+    it('page data arriving after a reply is heard last: the reply\'s earlier name is not heard again over it (main re-review M-A)', () => {
+      const p1 = { ...PAGE, current: { ...V2, versionNumber: 2 } };
+      const reply = named(V2, 3, GONE.name);
+      const heardReply = hear(hear(EMPTY, p1, null), p1, reply);
+      expect(nameOf(heardReply)).toBe(GONE.name);
+      const p2 = { ...p1, formerDeciders: [{ userId: GONE.userId, name: 'Deleted user' }] };
+      expect(nameOf(hear(heardReply, p2, reply))).toBe('Deleted user');
+    });
+
+    it('a page reload after a reply that carried the earlier name brings "Deleted user", and it wins (main re-review M-B)', () => {
+      const reply = named(V2, 2, GONE.name);
+      const heardReply = hear(hear(EMPTY, PAGE, null), PAGE, reply);
+      const reloaded = { ...PAGE, current: named(V2, 2, 'Deleted user'), historyCount: 2 };
+      const after = hear(heardReply, reloaded, reply);
+      expect(nameOf(after)).toBe('Deleted user');
+      expect(hear(after, reloaded, reply)).toBe(after);
+    });
+
+    it('the saved column names the decider by the latest name heard, and is the same version otherwise (main re-review OOS-1)', () => {
+      const deleted = [{ userId: GONE.userId, name: 'Deleted user' }];
+      const renamed = withLatestDecider(V1, deleted);
+      expect(renamed.decidedBy).toEqual({ kind: 'member', user: { ...GONE, name: 'Deleted user' } });
+      expect({ ...renamed, decidedBy: V1.decidedBy }).toEqual(V1);
+      expect(withLatestDecider(V1, [{ userId: GONE.userId, name: GONE.name }])).toBe(V1);
+      expect(withLatestDecider(V2, deleted)).toBe(V2);
+    });
   });
 
   /**

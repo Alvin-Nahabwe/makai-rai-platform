@@ -1272,6 +1272,50 @@ test.describe('a decider who has left, named by the page', () => {
     await savePosts(page, 3, gone);
   });
 
+  test('a decider who deletes their account after a conflict named them: the page\'s reload brings "Deleted user", and the view\'s two columns and the form take it over the name the reply carried', async ({ page, browser, baseURL }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const who = { name: `Deletes After Reply ${RUN}`, email: `claims-spec-deleted-after-reply-${RUN}@fixture.test` };
+    emails.push(who.email);
+    const gone = await joinedMember(baseURL!, who);
+    await removedByOwner(baseURL!, gone);
+    const projectId = await openQuestion(page, 'admin', Q, baseURL!);
+    const at = `${projectId}/decisions`;
+    expect((await post(baseURL!, 'admin', at, { ...answer, baseVersionNumber: null, status: 'done', reason: 'Version 1', decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-10-12' })).status).toBe(201);
+    await page.reload(); await waitForQuestionPage(page);
+    await fillValid(page, { reason: MINE });
+    // Version 2 names them too, before the deletion: the conflict's reply carries their earlier name.
+    expect((await post(baseURL!, 'owner', at, { ...answer, baseVersionNumber: 1, status: 'partly', reason: OWNER, decidedBy: { kind: 'member', userId: gone }, declaredDate: '2026-11-03' })).status).toBe(201);
+    const reloads = await routeRefresh(page, questionPath(projectId, Q), 'hold');
+    await saveMeets(page, 2);
+    const columns = page.locator('[data-region="conflict"] .conflict-view__columns > div');
+    const named = (column: ReturnType<Page['locator']>, label: string) => column.locator('dd').filter({ hasText: new RegExp(`^${escapeRe(label)}, `) });
+    for (const column of [columns.nth(0), columns.nth(1)]) await expect(named(column, DECISION_FORM_COPY.formerMember(who.name))).toHaveCount(1);
+    // The person deletes their account through route 39; then the page's own reload of its data lands, naming them as the server
+    // holds them now.
+    const theirs = await browser.newContext({ baseURL });
+    try {
+      const own = await theirs.newPage();
+      await own.goto('/login');
+      await signInWith(own, who.email, PASSWORD);
+      expect((await own.request.delete('/api/users/me', { data: { password: PASSWORD, phrase: DELETE_PHRASE } })).status(), 'the account is deleted').toBe(204);
+    } finally {
+      await theirs.close();
+    }
+    const stored = (await testDb.user.findUniqueOrThrow({ where: { id: gone }, select: { name: true } })).name;
+    expect(stored, 'the name the server holds after the deletion (FR-EXP-03)').toBe('Deleted user');
+    const label = DECISION_FORM_COPY.formerMember(stored);
+    await expect.poll(() => reloads.count()).toBeGreaterThan(0);
+    reloads.release();
+    await expect(visible(page, QUESTION_COPY.reading.history(2)).first()).toBeVisible({ timeout: 15_000 });
+    // The reload arrived last: both columns of the open view name them as it does.
+    for (const column of [columns.nth(0), columns.nth(1)]) await expect(named(column, label)).toHaveCount(1);
+    await expect(page.getByText(who.name)).toHaveCount(0);
+    await page.getByRole('button', { name: DECISION_FORM_COPY.conflict.editMine }).click();
+    await answerKept(page);
+    await fieldNames(page, gone, label);
+    await savePosts(page, 2, gone);
+  });
+
   for (const width of [1280, 375]) {
     for (const variant of ['saved', 'withdrawn'] as const) {
       test(`at ${width} px, a newer ${variant === 'withdrawn' ? 'withdrawal' : 'version by someone else'}: after a browser reload while the conflict view is open, the view and, after "Edit my version", the form name them, and Save posts them`, async ({ page, baseURL }) => {

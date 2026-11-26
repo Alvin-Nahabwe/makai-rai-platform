@@ -20,7 +20,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import { FINDING_NOTE, OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { answerLabel } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
-import { departedDeciders, departedLabel, heardNames, memberDecider, type NamedAccount } from '@/lib/decision/form/departedDecider';
+import { departedDeciders, departedLabel, hear, memberDecider, withLatestDecider, type Heard } from '@/lib/decision/form/departedDecider';
 import { panelWithNewest } from '@/lib/decision/form/newestVersion';
 import { EVIDENCE_COPY } from '@/lib/evidence/copy';
 import { QUESTION_COPY } from '@/lib/question/copy';
@@ -334,18 +334,14 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
   // The member who decided the version the answer was last opened from, kept as the evidence it opened with is: after a conflict the
   // answer still names them, and if they have left the organisation no newer version or member list does (departedDecider.ts).
   const [openedDecider, setOpenedDecider] = useState(() => memberDecider(data.current));
-  // The latest name the server sent for each account the form can name, from every page data and every version a save's reply named
-  // that the form has shown (`heardNames`): a name for an account id only, so a version replaced by a newer one still names its
+  // The latest name the server sent for each account the form can name, by arrival: from each page data and each version a save's
+  // reply named (`hear`, departedDecider.ts). A name for an account id only, so a version replaced by a newer one still names its
   // decider, and an account shown once as "Deleted user" never takes an earlier name again in this tab (FR-EXP-03). Recorded during
-  // render, as `seenCurrentId` is, when the page's data or the current version the form shows is a new object. Kept in memory only;
-  // nothing about a name is stored on the device.
-  const [heard, setHeard] = useState<{ page: QuestionPanelData | null; current: DecisionVersionView | null; names: readonly NamedAccount[] }>(
-    { page: null, current: null, names: [] },
-  );
-  if (heard.page !== page || heard.current !== data.current) {
-    const fromPage = heard.page === page ? [] : [...(page.formerDeciders ?? []), memberDecider(page.current)];
-    setHeard({ page, current: data.current, names: heardNames(heard.names, [...fromPage, memberDecider(data.current)]) });
-  }
+  // render, as `seenCurrentId` is, when the page's data or the newest version is a new object. Kept in memory only; nothing about a
+  // name is stored on the device.
+  const [heard, setHeard] = useState<Heard>({ page: null, newest: null, names: [] });
+  const nowHeard = hear(heard, page, newest);
+  if (nowHeard !== heard) setHeard(nowHeard);
   // The departed deciders the form has shown as the chosen one since it was last drawn from saved data, by account id: they stay on
   // the Decided by list after a pick of someone else, until the answer is saved or discarded (ruling P58; departedDecider.ts).
   const [heldDeciders, setHeldDeciders] = useState<readonly string[]>([]);
@@ -867,7 +863,7 @@ function WritableDecisionForm({ data: page, nextQuestion = null, stageHref, foot
     <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { const t: Element = e.target; reveal(t === summary.current ? t.parentElement ?? t : t); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} data-conflict={conflict !== null ? 'true' : undefined} data-card-behind={cardBehind ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
-          current={conflict} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
+          current={withLatestDecider(conflict, heard.names)} mine={value} question={data.runningQuestion} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? F.evidenceFallback)}
           mineKeptEvidence={extraEvidenceIds.length}
           onSaveMine={() => { const b = conflict.versionNumber; setConflictOpen(false); setBase(b); save(false, uploads, b); }}
