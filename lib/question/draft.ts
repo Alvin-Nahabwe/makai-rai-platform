@@ -181,7 +181,7 @@ export function isDraftValue(v: unknown): v is StoredDecisionDraft {
  *
  * A draft with no such field was saved by v0.9.0, where the date always opened empty: a date in it was typed by the
  * person, so it is kept with its decider (the default one when the draft has none), and the draft counts as changed.
- * A flagless draft with an empty date takes the defaults (controller ruling, answer cost 3 fix round 1).
+ * A flagless draft with an empty date takes the defaults.
  */
 export function restoreDraft(found: unknown, data: QuestionPanelData, today: DateParts | null): DecisionDraft | null {
   if (!isDraftValue(found)) return null;
