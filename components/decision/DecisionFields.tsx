@@ -11,7 +11,7 @@ import { OUTSIDE_ROLE_LABELS, REASON_OPTIONAL, SCOPE_OPTIONS, STATUS_OPTIONS, WH
 import { answerLabel, answerPrompt } from '@/lib/question/answerWords';
 import { DECISION_FORM_COPY } from '@/lib/decision/form/copy';
 import { departedDeciders, departedLabel, type DepartedDecider, type NamedAccount } from '@/lib/decision/form/departedDecider';
-import { textErasedLine } from '@/lib/documents/copy';
+import { textErasedLine } from '@/lib/erasure/copy';
 import { REASON_MAX, declaredDateFromParts } from '@/lib/decision/rules';
 import { formatDeclaredDate } from '@/lib/format/dates';
 import { dateParts, isDecision, keptDeciderIsOther, patchDraft, type DecisionDraft } from '@/lib/question/draft';

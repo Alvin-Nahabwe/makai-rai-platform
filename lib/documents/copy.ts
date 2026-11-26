@@ -92,19 +92,9 @@ export const METADATA_KEYS = [
 /** What a `project` source of a field map may name: the project's name and description, or a metadata column. */
 export const PROJECT_FIELDS: readonly string[] = ['name', 'description', ...METADATA_KEYS];
 
-// SRS 7.5.6, "Erased text field" and "Erased evidence file": the lines that stand in place of erased text.
-export const FILE_NAME_ERASED = 'File name erased';
-// Lane 6 rows A1, A2 (B 189, B 277, C 281, C 282): "at the organisation's request". Documents are read by outsiders, so "the", not "your".
-/** Who asked for an erasure, as a document says it: the end of both erasure lines. */
-export const AT_ORGANISATION_REQUEST = "at the organisation's request.";
-/** The same, as a screen says it to a member: the vocabulary term `erased` ("erased at your organisation's request"). */
-export const AT_YOUR_ORGANISATION_REQUEST = "at your organisation's request.";
-/** The erased-text line on a SCREEN (components/decision/** shows it; coordinator's ruling, 15 Nov 2026). */
-export const textErasedLine = (date: string): string => `Text erased on ${formatDay(date)} ${AT_YOUR_ORGANISATION_REQUEST}`;
-/** The erased-text line in a DOCUMENT, read by outsiders: "the organisation's request". */
-export const docTextErasedLine = (date: string): string => `Text erased on ${formatDay(date)} ${AT_ORGANISATION_REQUEST}`;
-export const fileErasedLine = (name: string, date: string): string =>
-  `${name}: file erased on ${formatDay(date)} ${AT_ORGANISATION_REQUEST} Its fingerprint is kept, so seals that include it still check.`;
+// The lines that stand in place of erased text (SRS 7.5.6), screen and document forms together: they live in the erasure copy
+// module, so a client component can show the screen line without loading this module; named here too for documents and tests.
+export { AT_ORGANISATION_REQUEST, AT_YOUR_ORGANISATION_REQUEST, FILE_NAME_ERASED, docTextErasedLine, fileErasedLine, textErasedLine } from '@/lib/erasure/copy';
 /** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04), as ruled in G-c3 (a). */
 export const GATE_DERIVED_NA = 'Does not apply: the team answered No to the personal data question';
 
